@@ -1,0 +1,80 @@
+import { Module } from '@nestjs/common';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
+import { CoreModule } from './core/core.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { TenantsModule } from './modules/tenants/tenants.module';
+import { UsersModule } from './modules/users/users.module';
+import { RolesModule } from './modules/roles/roles.module';
+import { PermissionsModule } from './modules/permissions/permissions.module';
+import { RbacModule } from './modules/rbac/rbac.module';
+import { DynamicModulesModule } from './modules/dynamic-modules/dynamic-modules.module';
+import { ProductsModule } from './modules/products/products.module';
+import { CategoriesModule } from './modules/categories/categories.module';
+import { SuppliersModule } from './modules/suppliers/suppliers.module';
+import { InventoryModule } from './modules/inventory/inventory.module';
+import { TransactionsModule } from './modules/transactions/transactions.module';
+import { FinanceModule } from './modules/finance/finance.module';
+import { SettingsModule } from './modules/settings/settings.module';
+import { TransportationModule } from './modules/transportation/transportation.module';
+import { SeederModule } from './database/seeders/seeder.module';
+import { WarehouseModule } from './modules/warehouse/warehouse.module';
+import { PaymentsModule } from './modules/payments/payments.module';
+import { RedisModule } from './infrastructure/redis/redis.module';
+import { KafkaModule } from './infrastructure/kafka/kafka.module';
+import { MinioModule } from './infrastructure/minio/minio.module';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { APP_INTERCEPTOR } from '@nestjs/core';
+import { TenantInterceptor } from './common/interceptors/tenant.interceptor';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+
+    TypeOrmModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        type: 'postgres',
+        host: config.get('DB_HOST'),
+        port: config.get<number>('DB_PORT'),
+        username: config.get('POSTGRES_USER'),
+        password: config.get('POSTGRES_PASSWORD'),
+        database: config.get('POSTGRES_DB'),
+        autoLoadEntities: true,
+        synchronize: true,
+      }),
+    }),
+    CoreModule,
+    AuthModule,
+    TenantsModule,
+    UsersModule,
+    RolesModule,
+    PermissionsModule,
+    RbacModule,
+    DynamicModulesModule,
+    ProductsModule,
+    CategoriesModule,
+    SuppliersModule,
+    InventoryModule,
+    TransactionsModule,
+    FinanceModule,
+    SettingsModule,
+    TransportationModule,
+    SeederModule,
+    WarehouseModule,
+    PaymentsModule,
+    RedisModule,
+    KafkaModule,
+    MinioModule,
+  ],
+  controllers: [AppController],
+  providers: [
+    AppService,
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: TenantInterceptor,
+    },
+  ],
+})
+export class AppModule {}

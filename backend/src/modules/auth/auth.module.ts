@@ -1,0 +1,41 @@
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { JwtModule } from '@nestjs/jwt';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+
+import { AuthService } from './services/auth.service';
+import { AuthController } from './controllers/auth.controller';
+import { TestAuthController } from './controllers/test-auth.controller';
+
+import { Tenant } from '../tenants/tenant.entity';
+import { User } from '../users/user.entity';
+import { Role } from '../roles/role.entity';
+import { UserRole } from '../roles/user-role.entity';
+import { PassportModule } from '@nestjs/passport';
+import { JwtStrategy } from './strategies/jwt.strategy';
+import { SeedersModule } from '../../database/seeders/seeders.module';
+
+@Module({
+  imports: [
+    TypeOrmModule.forFeature([Tenant, User, Role, UserRole]),
+    PassportModule,
+    ConfigModule,
+    SeedersModule,
+
+    JwtModule.registerAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => {
+        const expiresIn = config.getOrThrow<string>('JWT_ACCESS_EXPIRES_IN');
+        return {
+          secret: config.getOrThrow<string>('JWT_ACCESS_SECRET'),
+          signOptions: {
+            expiresIn: expiresIn as any, // '1h', '7d', etc.
+          },
+        };
+      },
+    }),
+  ],
+  controllers: [AuthController, TestAuthController],
+  providers: [AuthService, JwtStrategy],
+})
+export class AuthModule {}

@@ -1,0 +1,10 @@
+import { Module } from '@nestjs/common';
+import { DatabaseModule } from './database/database.module';
+import { ConfigModule } from './config/config.module';
+import { GuardsModule } from './guards/guards.module';
+import { MiddlewareModule } from './middleware/middleware.module';
+
+@Module({
+  imports: [DatabaseModule, ConfigModule, GuardsModule, MiddlewareModule]
+})
+export class CoreModule {}
