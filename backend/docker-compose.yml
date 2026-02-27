@@ -117,7 +117,7 @@ services:
 
   frontend:
     build:
-      context: ../ERP_SYSTEM_FRONT
+      context: ../frontend
       dockerfile: Dockerfile
     container_name: erp_frontend
     restart: always
