@@ -19,7 +19,19 @@ import { SettingsModule } from './modules/settings/settings.module';
 import { TransportationModule } from './modules/transportation/transportation.module';
 import { SeederModule } from './database/seeders/seeder.module';
 import { WarehouseModule } from './modules/warehouse/warehouse.module';
+import { HrModule } from './modules/hr/hr.module';
+import { CrmModule } from './modules/crm/crm.module';
+import { ProcurementModule } from './modules/procurement/procurement.module';
+import { AccountingModule } from './modules/accounting/accounting.module';
 import { PaymentsModule } from './modules/payments/payments.module';
+import { ProjectManagementModule } from './modules/project-management/project-management.module';
+import { ServiceManagementModule } from './modules/service-management/service-management.module';
+import { AssetManagementModule } from './modules/asset-management/asset-management.module';
+import { BiReportingModule } from './modules/bi-reporting/bi-reporting.module';
+import { ManufacturingModule } from './modules/manufacturing/manufacturing.module';
+import { WorkflowAutomationModule } from './modules/workflow-automation/workflow-automation.module';
+import { ComplianceAuditModule } from './modules/compliance-audit/compliance-audit.module';
+import { CommunicationModule } from './modules/communication/communication.module';
 import { RedisModule } from './infrastructure/redis/redis.module';
 import { KafkaModule } from './infrastructure/kafka/kafka.module';
 import { MinioModule } from './infrastructure/minio/minio.module';
@@ -64,6 +76,18 @@ import { TenantInterceptor } from './common/interceptors/tenant.interceptor';
     SeederModule,
     WarehouseModule,
     PaymentsModule,
+    HrModule,
+    CrmModule,
+    ProcurementModule,
+    AccountingModule,
+    ProjectManagementModule,
+    ServiceManagementModule,
+    AssetManagementModule,
+    BiReportingModule,
+    ManufacturingModule,
+    WorkflowAutomationModule,
+    ComplianceAuditModule,
+    CommunicationModule,
     RedisModule,
     KafkaModule,
     MinioModule,
