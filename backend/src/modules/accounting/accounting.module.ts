@@ -1,0 +1,39 @@
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { AccountingController } from './accounting.controller';
+import { AccountingService } from './accounting.service';
+import { ChartOfAccountEntity } from './entities/chart-of-account.entity';
+import { JournalEntryEntity } from './entities/journal-entry.entity';
+import { JournalEntryLineEntity } from './entities/journal-entry-line.entity';
+import { AccountReceivableEntity } from './entities/account-receivable.entity';
+import { AccountPayableEntity } from './entities/account-payable.entity';
+import { PaymentEntity } from './entities/payment.entity';
+import { BankAccountEntity } from './entities/bank-account.entity';
+import { BankTransactionEntity } from './entities/bank-transaction.entity';
+import { BankReconciliationEntity } from './entities/bank-reconciliation.entity';
+import { TaxCodeEntity } from './entities/tax-code.entity';
+import { FiscalYearEntity } from './entities/fiscal-year.entity';
+import { FiscalPeriodEntity } from './entities/fiscal-period.entity';
+
+@Module({
+  imports: [
+    TypeOrmModule.forFeature([
+      ChartOfAccountEntity,
+      JournalEntryEntity,
+      JournalEntryLineEntity,
+      AccountReceivableEntity,
+      AccountPayableEntity,
+      PaymentEntity,
+      BankAccountEntity,
+      BankTransactionEntity,
+      BankReconciliationEntity,
+      TaxCodeEntity,
+      FiscalYearEntity,
+      FiscalPeriodEntity,
+    ]),
+  ],
+  controllers: [AccountingController],
+  providers: [AccountingService],
+  exports: [AccountingService],
+})
+export class AccountingModule {}
