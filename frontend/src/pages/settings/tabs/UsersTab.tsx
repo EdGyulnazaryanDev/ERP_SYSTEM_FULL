@@ -9,9 +9,9 @@ import type { TransferProps } from 'antd';
 interface User {
   id: string;
   email: string;
-  first_name: string;
-  last_name: string;
-  is_active: boolean;
+  first_name?: string;
+  last_name?: string;
+  is_active?: boolean;
 }
 
 export default function UsersTab() {
@@ -32,7 +32,7 @@ export default function UsersTab() {
     queryKey: ['roles'],
     queryFn: async () => {
       const response = await roleService.getAll();
-      return response.data.data;
+      return response.data; // roleService returns an array of Roles not data.data
     },
   });
 

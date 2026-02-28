@@ -5,7 +5,6 @@ import { useNavigate, Link } from 'react-router-dom';
 import { authApi } from '@/api/auth';
 import { useAuthStore } from '@/store/authStore';
 import { jwtDecode } from 'jwt-decode';
-
 interface JwtPayload {
   sub: string;
   tenantId: string;
@@ -22,7 +21,7 @@ export default function LoginPage() {
       try {
         // Decode JWT to get user info
         const decoded = jwtDecode<JwtPayload>(response.data.accessToken);
-        
+
         const user = {
           id: decoded.sub,
           email: decoded.email,
@@ -30,7 +29,7 @@ export default function LoginPage() {
           tenantId: decoded.tenantId,
           role: 'user', // Default role, should be fetched from backend
         };
-        
+
         setAuth(user, response.data.accessToken);
         message.success('Login successful!');
         navigate('/');
@@ -65,7 +64,7 @@ export default function LoginPage() {
         message.error('Failed to process login response');
       }
     },
-    onError: (error: any) => {
+    onError: () => {
       message.error('Quick login failed. Please ensure the backend is running.');
     },
   });

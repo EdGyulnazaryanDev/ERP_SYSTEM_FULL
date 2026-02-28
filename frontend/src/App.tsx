@@ -24,6 +24,18 @@ import ShipmentFormPage from '@/pages/transportation/ShipmentFormPage';
 import CouriersPage from '@/pages/transportation/CouriersPage';
 import ShipmentTrackingPage from '@/pages/transportation/ShipmentTrackingPage';
 import TransportationPage from '@/pages/transportation/TransportationPage';
+import AccountingPage from '@/pages/accounting/AccountingPage';
+import HRPage from '@/pages/hr/HRPage';
+import CRMPage from '@/pages/crm/CRMPage';
+import ProcurementPage from '@/pages/procurement/ProcurementPage';
+import WarehousePage from '@/pages/warehouse/WarehousePage';
+import ProjectsPage from '@/pages/projects/ProjectsPage';
+import ManufacturingPage from '@/pages/manufacturing/ManufacturingPage';
+import AssetsPage from '@/pages/assets/AssetsPage';
+import PaymentsPage from '@/pages/payments/PaymentsPage';
+import CommunicationPage from '@/pages/communication/CommunicationPage';
+import CompliancePage from '@/pages/compliance/CompliancePage';
+import ServicesPage from '@/pages/services/ServicesPage';
 
 function App() {
   const { isAuthenticated } = useAuthStore();
@@ -74,6 +86,42 @@ function App() {
         <Route path="transportation/shipments/create" element={<ShipmentFormPage />} />
         <Route path="transportation/shipments/:id" element={<ShipmentTrackingPage />} />
         <Route path="transportation/couriers" element={<CouriersPage />} />
+        
+        {/* Accounting */}
+        <Route path="accounting" element={<AccountingPage />} />
+        
+        {/* HR */}
+        <Route path="hr" element={<HRPage />} />
+        
+        {/* CRM */}
+        <Route path="crm" element={<CRMPage />} />
+        
+        {/* Procurement */}
+        <Route path="procurement" element={<ProcurementPage />} />
+        
+        {/* Warehouse */}
+        <Route path="warehouse" element={<WarehousePage />} />
+        
+        {/* Projects */}
+        <Route path="projects" element={<ProjectsPage />} />
+        
+        {/* Manufacturing */}
+        <Route path="manufacturing" element={<ManufacturingPage />} />
+        
+        {/* Assets */}
+        <Route path="assets" element={<AssetsPage />} />
+        
+        {/* Payments */}
+        <Route path="payments" element={<PaymentsPage />} />
+        
+        {/* Communication */}
+        <Route path="communication" element={<CommunicationPage />} />
+        
+        {/* Compliance */}
+        <Route path="compliance" element={<CompliancePage />} />
+        
+        {/* Services */}
+        <Route path="services" element={<ServicesPage />} />
       </Route>
       
       {/* Public tracking page */}

@@ -19,8 +19,6 @@ import {
   RiseOutlined,
 } from '@ant-design/icons';
 import {
-  LineChart,
-  Line,
   BarChart,
   Bar,
   PieChart,
@@ -147,7 +145,7 @@ export default function TransactionAnalyticsPage() {
                 precision={2}
                 prefix={<RiseOutlined />}
                 suffix={`(${profitMargin}%)`}
-                valueStyle={{ color: analytics?.totalProfit >= 0 ? '#3f8600' : '#cf1322' }}
+                valueStyle={{ color: (analytics?.totalProfit || 0) >= 0 ? '#3f8600' : '#cf1322' }}
               />
             </Card>
           </Col>
@@ -249,7 +247,7 @@ export default function TransactionAnalyticsPage() {
                     cx="50%"
                     cy="50%"
                     labelLine={false}
-                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                    label={({ name, percent }) => `${name}: ${((percent || 0) * 100).toFixed(0)}%`}
                     outerRadius={80}
                     fill="#8884d8"
                     dataKey="value"
@@ -277,7 +275,7 @@ export default function TransactionAnalyticsPage() {
                     cx="50%"
                     cy="50%"
                     labelLine={false}
-                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                    label={({ name, percent }) => `${name}: ${((percent || 0) * 100).toFixed(0)}%`}
                     outerRadius={80}
                     fill="#82ca9d"
                     dataKey="value"

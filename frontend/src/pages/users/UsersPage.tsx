@@ -62,13 +62,13 @@ export default function UsersPage() {
 
   const createUserMutation = useMutation({
     mutationFn: (payload: any) => {
-      const { userData, roleId } = payload;
+      const { userData } = payload;
       return userService.create(userData);
     },
     onSuccess: async (res: any, vars: any) => {
       try {
         message.success('User created successfully');
-        
+
         // if role was selected, assign it
         const created = res.data;
         const { roleId } = vars;
@@ -76,20 +76,20 @@ export default function UsersPage() {
           await roleService.assignRoleToUser(roleId, created.id);
           message.success('Role assigned successfully');
         }
-        
+
         // Close modal and reset form
         setIsModalOpen(false);
-        form.resetFields();
-        
+        setTimeout(() => form.resetFields(), 0);
+
         // Invalidate queries to refresh the list
         await queryClient.invalidateQueries({ queryKey: ['users'] });
       } catch (e: any) {
         console.error('Error in user creation success handler:', e);
         message.error(e?.response?.data?.message || 'Error during post-creation steps');
-        
+
         // Still close the modal even if role assignment fails
         setIsModalOpen(false);
-        form.resetFields();
+        setTimeout(() => form.resetFields(), 0);
         await queryClient.invalidateQueries({ queryKey: ['users'] });
       }
     },
@@ -105,7 +105,7 @@ export default function UsersPage() {
       message.success('User updated');
       setIsModalOpen(false);
       setEditingUser(null);
-      form.resetFields();
+      setTimeout(() => form.resetFields(), 0);
       try {
         if (vars?.data?.role_id) {
           await roleService.assignRoleToUser(vars.data.role_id, vars.id);
@@ -133,8 +133,8 @@ export default function UsersPage() {
 
   const openCreate = () => {
     setEditingUser(null);
-    form.resetFields();
     setIsModalOpen(true);
+    setTimeout(() => form.resetFields(), 0);
   };
 
   const openEdit = async (u: User) => {
@@ -224,7 +224,7 @@ export default function UsersPage() {
         )}
       </Card>
 
-      <Modal title={editingUser ? 'Edit User' : 'Create User'} open={isModalOpen} onCancel={() => setIsModalOpen(false)} footer={null}>
+      <Modal title={editingUser ? 'Edit User' : 'Create User'} open={isModalOpen} onCancel={() => setIsModalOpen(false)} footer={null} forceRender>
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Row gutter={16}>
             <Col span={12}>

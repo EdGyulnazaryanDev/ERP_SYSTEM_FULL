@@ -18,7 +18,7 @@ import {
   ClockCircleOutlined,
   CheckCircleOutlined,
 } from '@ant-design/icons';
-import { transportationApi, ShipmentStatus, type Shipment } from '@/api/transportation';
+import { transportationApi, ShipmentStatus } from '@/api/transportation';
 import dayjs from 'dayjs';
 
 const { Search } = Input;

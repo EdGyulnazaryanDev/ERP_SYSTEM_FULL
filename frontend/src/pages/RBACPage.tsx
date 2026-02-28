@@ -425,7 +425,9 @@ export default function RBACPage() {
           }))}
           titles={['Available', 'Assigned']}
           targetKeys={selectedPermIds}
-          onChange={setSelectedPermIds}
+          onChange={(nextTargetKeys) => {
+            setSelectedPermIds(nextTargetKeys as string[]);
+          }}
           render={(item) => item.title || ''}
           listStyle={{ width: 350, height: 400 }}
         />

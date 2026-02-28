@@ -15,6 +15,17 @@ import {
   TransactionOutlined,
   InboxOutlined,
   CarOutlined,
+  DollarOutlined,
+  TeamOutlined,
+  CustomerServiceOutlined,
+  ShoppingOutlined,
+  HomeOutlined,
+  ProjectOutlined,
+  ToolOutlined,
+  FileProtectOutlined,
+  MessageOutlined,
+  AuditOutlined,
+  CreditCardOutlined,
 } from '@ant-design/icons';
 import { useAuthStore } from '@/store/authStore';
 
@@ -65,6 +76,42 @@ export default function MainLayout() {
       ],
     },
     {
+      key: '/accounting',
+      icon: <DollarOutlined />,
+      label: 'Accounting',
+    },
+    {
+      key: '/payments',
+      icon: <CreditCardOutlined />,
+      label: 'Payments',
+    },
+    {
+      key: '/crm',
+      icon: <CustomerServiceOutlined />,
+      label: 'CRM',
+    },
+    {
+      key: '/hr',
+      icon: <TeamOutlined />,
+      label: 'Human Resources',
+    },
+    {
+      key: 'procurement-menu',
+      icon: <ShoppingOutlined />,
+      label: 'Procurement',
+      children: [
+        {
+          key: '/procurement',
+          label: 'Overview',
+        },
+      ],
+    },
+    {
+      key: '/warehouse',
+      icon: <HomeOutlined />,
+      label: 'Warehouse',
+    },
+    {
       key: 'transportation-menu',
       icon: <CarOutlined />,
       label: 'Transportation',
@@ -82,6 +129,36 @@ export default function MainLayout() {
           label: 'Couriers',
         },
       ],
+    },
+    {
+      key: '/projects',
+      icon: <ProjectOutlined />,
+      label: 'Projects',
+    },
+    {
+      key: '/manufacturing',
+      icon: <ToolOutlined />,
+      label: 'Manufacturing',
+    },
+    {
+      key: '/assets',
+      icon: <FileProtectOutlined />,
+      label: 'Assets',
+    },
+    {
+      key: '/services',
+      icon: <CustomerServiceOutlined />,
+      label: 'Services',
+    },
+    {
+      key: '/communication',
+      icon: <MessageOutlined />,
+      label: 'Communication',
+    },
+    {
+      key: '/compliance',
+      icon: <AuditOutlined />,
+      label: 'Compliance',
     },
     {
       key: '/users',

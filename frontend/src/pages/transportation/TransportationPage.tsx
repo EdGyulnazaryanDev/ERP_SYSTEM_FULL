@@ -45,13 +45,6 @@ interface Shipment {
   updated_at: string;
 }
 
-interface Courier {
-  id: string;
-  name: string;
-  contact_email: string;
-  contact_phone: string;
-  is_active: boolean;
-}
 
 const statusColors: Record<string, string> = {
   pending: 'orange',
@@ -72,8 +65,7 @@ export default function TransportationPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState<'shipment' | 'courier'>('shipment');
   const [form] = Form.useForm();
-  const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null);
-  const [selectedCourier, setSelectedCourier] = useState<Courier | null>(null);
+  // const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null);
 
   // Fetch Shipments
   const { data: shipments = [], isLoading: shipmentsLoading } = useQuery({
@@ -183,17 +175,16 @@ export default function TransportationPage() {
       title: 'Actions',
       key: 'actions',
       width: 150,
-      render: (_: any, record: Shipment) => (
+      render: () => (
         <Space>
           <Button
             type="link"
             icon={<EyeOutlined />}
             onClick={() => {
-              setSelectedShipment(record);
               setModalType('shipment');
             }}
           />
-          <Popconfirm title="Delete shipment?" onConfirm={() => {}}>
+          <Popconfirm title="Delete shipment?" onConfirm={() => { }}>
             <Button type="link" danger icon={<DeleteOutlined />} />
           </Popconfirm>
         </Space>
@@ -230,10 +221,10 @@ export default function TransportationPage() {
       title: 'Actions',
       key: 'actions',
       width: 150,
-      render: (_: any, record: Courier) => (
+      render: () => (
         <Space>
           <Button type="link" icon={<EditOutlined />} />
-          <Popconfirm title="Delete courier?" onConfirm={() => {}}>
+          <Popconfirm title="Delete courier?" onConfirm={() => { }}>
             <Button type="link" danger icon={<DeleteOutlined />} />
           </Popconfirm>
         </Space>
@@ -244,8 +235,6 @@ export default function TransportationPage() {
   const openModal = (type: 'shipment' | 'courier') => {
     setModalType(type);
     form.resetFields();
-    setSelectedShipment(null);
-    setSelectedCourier(null);
     setIsModalOpen(true);
   };
 

@@ -137,7 +137,7 @@ export default function ProductsPage() {
       const created = res.data as Product;
       message.success('Product created successfully');
       setIsModalVisible(false);
-      form.resetFields();
+      setTimeout(() => form.resetFields(), 0);
       queryClient.invalidateQueries({ queryKey: ['products'] });
       queryClient.invalidateQueries({ queryKey: ['product-categories'] });
       queryClient.invalidateQueries({ queryKey: ['product-suppliers'] });
@@ -171,7 +171,7 @@ export default function ProductsPage() {
       message.success('Product updated successfully');
       setIsModalVisible(false);
       setEditingProduct(null);
-      form.resetFields();
+      setTimeout(() => form.resetFields(), 0);
       queryClient.invalidateQueries({ queryKey: ['products'] });
       queryClient.invalidateQueries({ queryKey: ['product-stats'] });
     },
@@ -212,7 +212,7 @@ export default function ProductsPage() {
       form.setFieldsValue(product);
     } else {
       setEditingProduct(null);
-      form.resetFields();
+      setTimeout(() => form.resetFields(), 0);
     }
     setIsModalVisible(true);
   };
@@ -220,7 +220,7 @@ export default function ProductsPage() {
   const handleCloseModal = () => {
     setIsModalVisible(false);
     setEditingProduct(null);
-    form.resetFields();
+    setTimeout(() => form.resetFields(), 0);
   };
 
   const handleSubmit = async (values: any) => {
@@ -600,6 +600,7 @@ export default function ProductsPage() {
         onCancel={handleCloseModal}
         footer={null}
         width={600}
+        forceRender
       >
         <Form
           form={form}

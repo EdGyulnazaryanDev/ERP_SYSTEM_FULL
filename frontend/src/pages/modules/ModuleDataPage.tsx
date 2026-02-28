@@ -38,7 +38,7 @@ export default function ModuleDataPage() {
       message.success('Record created successfully');
       queryClient.invalidateQueries({ queryKey: ['moduleData', moduleId] });
       setIsModalOpen(false);
-      form.resetFields();
+      setTimeout(() => form.resetFields(), 0);
     },
   });
 
@@ -50,7 +50,7 @@ export default function ModuleDataPage() {
       queryClient.invalidateQueries({ queryKey: ['moduleData', moduleId] });
       setIsModalOpen(false);
       setEditingRecord(null);
-      form.resetFields();
+      setTimeout(() => form.resetFields(), 0);
     },
   });
 
@@ -74,6 +74,8 @@ export default function ModuleDataPage() {
     if (record) {
       setEditingRecord(record);
       form.setFieldsValue(record.data);
+    } else {
+      setTimeout(() => form.resetFields(), 0);
     }
     setIsModalOpen(true);
   };
@@ -81,7 +83,7 @@ export default function ModuleDataPage() {
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingRecord(null);
-    form.resetFields();
+    setTimeout(() => form.resetFields(), 0);
   };
 
   const columns = [
@@ -143,6 +145,7 @@ export default function ModuleDataPage() {
         open={isModalOpen}
         onCancel={closeModal}
         footer={null}
+        forceRender
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           {module?.fields.map((field) => (

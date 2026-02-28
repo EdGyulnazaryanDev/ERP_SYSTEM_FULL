@@ -81,7 +81,7 @@ export default function CouriersPage() {
       form.setFieldsValue(courier);
     } else {
       setEditingCourier(null);
-      form.resetFields();
+      setTimeout(() => form.resetFields(), 0);
     }
     setIsModalOpen(true);
   };
@@ -89,7 +89,7 @@ export default function CouriersPage() {
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditingCourier(null);
-    form.resetFields();
+    setTimeout(() => form.resetFields(), 0);
   };
 
   const handleSubmit = (values: Partial<Courier>) => {
@@ -249,6 +249,7 @@ export default function CouriersPage() {
         onOk={() => form.submit()}
         confirmLoading={createMutation.isPending || updateMutation.isPending}
         width={700}
+        forceRender
       >
         <Form
           form={form}

@@ -49,7 +49,7 @@ export default function ModuleDataPageEnhanced() {
       message.success('Record created successfully');
       queryClient.invalidateQueries({ queryKey: ['module-data', moduleName] });
       setIsModalOpen(false);
-      form.resetFields();
+      setTimeout(() => form.resetFields(), 0);
     },
     onError: (error: any) => {
       message.error(error.response?.data?.message || 'Failed to create record');
@@ -64,7 +64,7 @@ export default function ModuleDataPageEnhanced() {
       queryClient.invalidateQueries({ queryKey: ['module-data', moduleName] });
       setIsModalOpen(false);
       setEditingRecord(null);
-      form.resetFields();
+      setTimeout(() => form.resetFields(), 0);
     },
     onError: (error: any) => {
       message.error(error.response?.data?.message || 'Failed to update record');
@@ -131,7 +131,7 @@ export default function ModuleDataPageEnhanced() {
       form.setFieldsValue(record);
     } else {
       setEditingRecord(null);
-      form.resetFields();
+      setTimeout(() => form.resetFields(), 0);
     }
     setIsModalOpen(true);
   };
@@ -139,7 +139,7 @@ export default function ModuleDataPageEnhanced() {
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingRecord(null);
-    form.resetFields();
+    setTimeout(() => form.resetFields(), 0);
   };
 
   const renderFieldInput = (field: ModuleField) => {
@@ -175,7 +175,7 @@ export default function ModuleDataPageEnhanced() {
 
   const renderFieldValue = (value: any, field: ModuleField) => {
     if (value === null || value === undefined) return '-';
-    
+
     switch (field.type) {
       case 'boolean':
         return <Tag color={value ? 'green' : 'red'}>{value ? 'Yes' : 'No'}</Tag>;
@@ -289,6 +289,7 @@ export default function ModuleDataPageEnhanced() {
         onCancel={closeModal}
         footer={null}
         width={600}
+        forceRender
       >
         <Form
           form={form}
