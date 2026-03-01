@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Table, Button, Space, Modal, Form, Input, message, Tag, Switch } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
+import { PlusOutlined, EditOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { accountingApi } from '@/api/accounting';
 
