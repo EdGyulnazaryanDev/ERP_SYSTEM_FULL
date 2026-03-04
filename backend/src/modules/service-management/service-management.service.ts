@@ -28,7 +28,7 @@ export class ServiceManagementService {
     private serviceContractRepository: Repository<ServiceContractEntity>,
     @InjectRepository(KnowledgeBaseArticleEntity)
     private knowledgeBaseRepository: Repository<KnowledgeBaseArticleEntity>,
-  ) {}
+  ) { }
 
   // Ticket Management
   async findAllTickets(tenantId: string, status?: TicketStatus): Promise<ServiceTicketEntity[]> {
@@ -67,8 +67,8 @@ export class ServiceManagementService {
       where: { id: data.category_id, tenant_id: tenantId },
     });
 
-    let slaPolicyId = null;
-    let dueDate = null;
+    let slaPolicyId: string | undefined = undefined;
+    let dueDate: Date | undefined = undefined;
 
     if (category?.default_sla_policy_id) {
       slaPolicyId = category.default_sla_policy_id;
@@ -86,12 +86,13 @@ export class ServiceManagementService {
     const ticket = this.ticketRepository.create({
       ...data,
       ticket_number: ticketNumber,
-      sla_policy_id: slaPolicyId,
-      due_date: dueDate,
+      // Pass conditionally to avoid saving a literal undefined
+      ...(slaPolicyId ? { sla_policy_id: slaPolicyId } : {}),
+      ...(dueDate ? { due_date: dueDate } : {}),
       tenant_id: tenantId,
     });
 
-    return this.ticketRepository.save(ticket);
+    return await this.ticketRepository.save(ticket);
   }
 
   async updateTicket(id: string, data: UpdateTicketDto, tenantId: string): Promise<ServiceTicketEntity> {
@@ -194,7 +195,7 @@ export class ServiceManagementService {
     const ticket = await this.findOneTicket(id, tenantId);
 
     ticket.satisfaction_rating = data.satisfaction_rating;
-    ticket.satisfaction_feedback = data.satisfaction_feedback;
+    ticket.satisfaction_feedback = data.satisfaction_feedback || '';
 
     return this.ticketRepository.save(ticket);
   }
