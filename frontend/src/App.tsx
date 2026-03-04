@@ -68,62 +68,62 @@ function App() {
         <Route path="modules/:moduleName/data" element={<ModuleDataPageEnhanced />} />
         <Route path="rbac" element={<RBACPage />} />
         <Route path="settings" element={<SettingsPage />} />
-        
+
         {/* Transactions */}
         <Route path="transactions" element={<TransactionsPage />} />
         <Route path="transactions/create" element={<TransactionFormPage />} />
         <Route path="transactions/:id/edit" element={<TransactionFormPage />} />
         <Route path="transactions/analytics" element={<TransactionAnalyticsPage />} />
-        
+
         {/* Inventory */}
         <Route path="inventory" element={<InventoryPage />} />
         <Route path="inventory/create" element={<InventoryFormPage />} />
         <Route path="inventory/:id/edit" element={<InventoryFormPage />} />
-        
+
         {/* Transportation */}
         <Route path="transportation" element={<TransportationPage />} />
         <Route path="transportation/shipments" element={<ShipmentsPage />} />
         <Route path="transportation/shipments/create" element={<ShipmentFormPage />} />
         <Route path="transportation/shipments/:id" element={<ShipmentTrackingPage />} />
         <Route path="transportation/couriers" element={<CouriersPage />} />
-        
+
         {/* Accounting */}
         <Route path="accounting" element={<AccountingPage />} />
-        
+
         {/* HR */}
         <Route path="hr" element={<HRPage />} />
-        
+
         {/* CRM */}
         <Route path="crm" element={<CRMPage />} />
-        
+
         {/* Procurement */}
         <Route path="procurement" element={<ProcurementPage />} />
-        
+
         {/* Warehouse */}
         <Route path="warehouse" element={<WarehousePage />} />
-        
+
         {/* Projects */}
         <Route path="projects" element={<ProjectsPage />} />
-        
+
         {/* Manufacturing */}
         <Route path="manufacturing" element={<ManufacturingPage />} />
-        
-        {/* Assets */}
-        <Route path="assets" element={<AssetsPage />} />
-        
+
+        {/* Equipment/Assets */}
+        <Route path="equipment" element={<AssetsPage />} />
+
         {/* Payments */}
         <Route path="payments" element={<PaymentsPage />} />
-        
+
         {/* Communication */}
         <Route path="communication" element={<CommunicationPage />} />
-        
+
         {/* Compliance */}
         <Route path="compliance" element={<CompliancePage />} />
-        
+
         {/* Services */}
         <Route path="services" element={<ServicesPage />} />
       </Route>
-      
+
       {/* Public tracking page */}
       <Route path="/track/:trackingNumber" element={<ShipmentTrackingPage />} />
     </Routes>

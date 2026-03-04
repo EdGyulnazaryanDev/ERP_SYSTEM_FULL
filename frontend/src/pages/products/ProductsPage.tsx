@@ -19,6 +19,7 @@ import {
   Statistic,
   Alert,
   List,
+  AutoComplete,
 } from 'antd';
 import {
   PlusOutlined,
@@ -32,6 +33,7 @@ import {
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { productsApi, type Product } from '@/api/products';
+import { categoriesApi } from '@/api/categories';
 import { ProductService } from '@/services/ProductService';
 
 export default function ProductsPage() {
@@ -79,10 +81,29 @@ export default function ProductsPage() {
   });
 
   const { data: categories } = useQuery({
-    queryKey: ['product-categories'],
-    queryFn: () => productsApi.getCategories(),
-    select: (data) => (Array.isArray(data.data) ? data.data : []),
+    queryKey: ['system-categories'],
+    queryFn: () => categoriesApi.getAll(),
+    select: (response) => (Array.isArray(response?.data) ? response.data : []),
   });
+
+  const loadLocalCategories = () => {
+    try {
+      const raw = sessionStorage.getItem('custom_categories') || localStorage.getItem('custom_categories');
+      return raw ? (JSON.parse(raw) as string[]) : [];
+    } catch (e) {
+      return [] as string[];
+    }
+  };
+
+  const [localCategories, setLocalCategories] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return [];
+    return loadLocalCategories();
+  });
+
+  const mergedCategories = Array.from(new Set([
+    ...(categories || []).map((c: any) => c.name),
+    ...localCategories
+  ]));
 
   const { data: suppliers } = useQuery({
     queryKey: ['product-suppliers'],
@@ -142,8 +163,17 @@ export default function ProductsPage() {
       queryClient.invalidateQueries({ queryKey: ['product-categories'] });
       queryClient.invalidateQueries({ queryKey: ['product-suppliers'] });
       queryClient.invalidateQueries({ queryKey: ['product-stats'] });
-      // merge supplier into local suppliers if not present
+      // merge category and supplier into local storage if not present
       try {
+        const category = created.category;
+        if (category) {
+          const locals = loadLocalCategories();
+          if (!locals.includes(category)) {
+            const next = [...locals, category];
+            localStorage.setItem('custom_categories', JSON.stringify(next));
+            setLocalCategories(next);
+          }
+        }
         const supplier = created.supplier;
         if (supplier) {
           const locals = loadLocalSuppliers();
@@ -167,13 +197,33 @@ export default function ProductsPage() {
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: any }) =>
       productsApi.updateProduct(id, data),
-    onSuccess: () => {
+    onSuccess: (res: any) => {
       message.success('Product updated successfully');
       setIsModalVisible(false);
       setEditingProduct(null);
       setTimeout(() => form.resetFields(), 0);
       queryClient.invalidateQueries({ queryKey: ['products'] });
       queryClient.invalidateQueries({ queryKey: ['product-stats'] });
+
+      try {
+        const product = res.data as Product;
+        if (product.category) {
+          const locals = loadLocalCategories();
+          if (!locals.includes(product.category)) {
+            const next = [...locals, product.category];
+            localStorage.setItem('custom_categories', JSON.stringify(next));
+            setLocalCategories(next);
+          }
+        }
+        if (product.supplier) {
+          const locals = loadLocalSuppliers();
+          if (!locals.includes(product.supplier)) {
+            const next = [...locals, product.supplier];
+            localStorage.setItem('custom_suppliers', JSON.stringify(next));
+            setLocalSuppliers(next);
+          }
+        }
+      } catch (e) { }
     },
     onError: (error: any) => {
       message.error(error.response?.data?.message || 'Failed to update product');
@@ -224,10 +274,12 @@ export default function ProductsPage() {
   };
 
   const handleSubmit = async (values: any) => {
+    const payload = { ...values };
+
     if (editingProduct) {
-      updateMutation.mutate({ id: editingProduct.id, data: values });
+      updateMutation.mutate({ id: editingProduct.id, data: payload });
     } else {
-      createMutation.mutate(values);
+      createMutation.mutate(payload);
     }
   };
 
@@ -485,18 +537,16 @@ export default function ProductsPage() {
             />
             <Select
               placeholder="Filter by category"
-              style={{ width: 150 }}
+              style={{ minWidth: 200 }}
               value={filters.category}
               onChange={(value) =>
                 setFilters({ ...filters, category: value, page: 1 })
               }
               allowClear
-              options={
-                (categories || []).map((cat) => ({
-                  label: cat,
-                  value: cat,
-                })) || []
-              }
+              options={(mergedCategories || []).map((cat: any) => ({
+                label: cat,
+                value: cat,
+              }))}
             />
             <Select
               placeholder="Filter by supplier"
@@ -637,28 +687,32 @@ export default function ProductsPage() {
           <Form.Item
             name="category"
             label="Category"
+            rules={[{ required: true, message: 'Please select or enter a category' }]}
           >
-            <Select
+            <AutoComplete
               placeholder="Select or enter category"
-              mode="tags"
-              options={(categories || []).map((cat) => ({
-                label: cat,
+              options={(mergedCategories || []).map((cat: string) => ({
                 value: cat,
               }))}
+              filterOption={(inputValue, option) =>
+                option!.value.toUpperCase().indexOf(inputValue.toUpperCase()) !== -1
+              }
             />
           </Form.Item>
 
           <Form.Item
             name="supplier"
             label="Supplier"
+            rules={[{ required: true, message: 'Please select or enter a supplier' }]}
           >
-            <Select
+            <AutoComplete
               placeholder="Select or enter supplier"
-              mode="tags"
               options={(mergedSuppliers || []).map((sup) => ({
-                label: sup,
                 value: sup,
               }))}
+              filterOption={(inputValue, option) =>
+                option!.value.toUpperCase().indexOf(inputValue.toUpperCase()) !== -1
+              }
             />
           </Form.Item>
 

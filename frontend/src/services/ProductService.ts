@@ -72,11 +72,38 @@ export class ProductService {
   }
 
   /**
+   * Normalize an array or object-like string back to a plain string
+   * E.g. "[\"Category-1\"]" -> "Category-1"
+   * E.g. "{\"Category-1\"}" -> "Category-1"
+   */
+  static normalizeString(value: any): string | undefined {
+    if (!value) return undefined;
+    if (typeof value !== 'string') return String(value);
+
+    // Some older records saved Category arrays/objects as stringified JSON directly to the DB
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return String(parsed[parsed.length - 1]);
+      }
+      if (typeof parsed === 'object' && parsed !== null) {
+        return String(Object.keys(parsed)[0]);
+      }
+      return String(parsed);
+    } catch {
+      // It's a normal string
+      return value.replace(/^[\{\[\"]+|[\}\]\"']+$/g, '').trim();
+    }
+  }
+
+  /**
    * Normalize product data from API (convert string prices to numbers)
    */
   static normalizeProduct(product: Product): Product {
     return {
       ...product,
+      category: ProductService.normalizeString(product.category),
+      supplier: ProductService.normalizeString(product.supplier),
       cost_price: ProductService.toNumber(product.cost_price),
       selling_price: ProductService.toNumber(product.selling_price),
       tax_rate: product.tax_rate ? ProductService.toNumber(product.tax_rate) : undefined,
