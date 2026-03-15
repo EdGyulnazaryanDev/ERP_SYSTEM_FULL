@@ -115,7 +115,9 @@ export default function ProductsPage() {
     return loadLocalSuppliers();
   });
 
-  const mergedSuppliers = Array.from(new Set([...(suppliers || []), ...localSuppliers]));
+  const mergedSuppliers = Array.from(
+    new Set([...(suppliers || []), ...localSuppliers].filter((s): s is string => typeof s === 'string' && s.trim() !== ''))
+  );
 
   const { data: lowStockProducts } = useQuery({
     queryKey: ['low-stock-products'],
@@ -683,7 +685,8 @@ export default function ProductsPage() {
                 value: sup,
               }))}
               filterOption={(inputValue, option) =>
-                option!.value.toUpperCase().indexOf(inputValue.toUpperCase()) !== -1
+                typeof option?.value === 'string' &&
+                option.value.toUpperCase().indexOf(inputValue.toUpperCase()) !== -1
               }
             />
           </Form.Item>
