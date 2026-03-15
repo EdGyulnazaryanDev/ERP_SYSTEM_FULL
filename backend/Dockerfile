@@ -1,16 +1,36 @@
+# Stage 1: Build
+FROM node:20-alpine AS builder
+
+WORKDIR /usr/src/app
+
+# Copy package files
+COPY package*.json ./
+
+# Install all dependencies (including dev)
+RUN npm ci
+
+# Copy source code
+COPY . .
+
+# Build the NestJS application
+RUN npm run build
+
+# Stage 2: Production
 FROM node:20-alpine
 
 # Install wget for healthcheck
 RUN apk add --no-cache wget
 
-WORKDIR /app
+WORKDIR /usr/src/app
 
+# Copy package files
 COPY package*.json ./
 
-RUN npm install   # БЕЗ --omit=dev
+# Install only production dependencies
+RUN npm ci --omit=dev
 
-COPY . .
+# Copy built artifacts from builder stage
+COPY --from=builder /usr/src/app/dist ./dist
 
-EXPOSE 3000
-
-CMD ["npm", "run", "start:dev"]
+# Start the application
+CMD ["node", "dist/main"]

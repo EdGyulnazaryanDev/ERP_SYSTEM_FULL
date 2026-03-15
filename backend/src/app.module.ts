@@ -42,7 +42,10 @@ import { TenantInterceptor } from './common/interceptors/tenant.interceptor';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: ['.env.local', '.env'],
+    }),
 
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
@@ -101,4 +104,4 @@ import { TenantInterceptor } from './common/interceptors/tenant.interceptor';
     },
   ],
 })
-export class AppModule {}
+export class AppModule { }

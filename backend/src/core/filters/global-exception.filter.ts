@@ -42,6 +42,13 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       }
     }
 
+    if (status === HttpStatus.INTERNAL_SERVER_ERROR) {
+      console.error(
+        `[GlobalExceptionFilter] Unhandled Exception at ${request.method} ${request.url}:`,
+        exception
+      );
+    }
+
     response.status(status).json({
       success: false,
       statusCode: status,

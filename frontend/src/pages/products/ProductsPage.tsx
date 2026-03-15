@@ -83,27 +83,16 @@ export default function ProductsPage() {
   const { data: categories } = useQuery({
     queryKey: ['system-categories'],
     queryFn: () => categoriesApi.getAll(),
-    select: (response) => (Array.isArray(response?.data) ? response.data : []),
+    select: (response) => {
+      if (Array.isArray(response?.data)) {
+        return response.data.map((cat: any) => cat.name);
+      }
+      return [];
+    },
   });
 
-  const loadLocalCategories = () => {
-    try {
-      const raw = sessionStorage.getItem('custom_categories') || localStorage.getItem('custom_categories');
-      return raw ? (JSON.parse(raw) as string[]) : [];
-    } catch (e) {
-      return [] as string[];
-    }
-  };
-
-  const [localCategories, setLocalCategories] = useState<string[]>(() => {
-    if (typeof window === 'undefined') return [];
-    return loadLocalCategories();
-  });
-
-  const mergedCategories = Array.from(new Set([
-    ...(categories || []).map((c: any) => c.name),
-    ...localCategories
-  ]));
+  // Deduplicate and fallback
+  const mergedCategories = Array.from(new Set(categories || []));
 
   const { data: suppliers } = useQuery({
     queryKey: ['product-suppliers'],
@@ -163,17 +152,8 @@ export default function ProductsPage() {
       queryClient.invalidateQueries({ queryKey: ['product-categories'] });
       queryClient.invalidateQueries({ queryKey: ['product-suppliers'] });
       queryClient.invalidateQueries({ queryKey: ['product-stats'] });
-      // merge category and supplier into local storage if not present
+      // merge supplier into local storage if not present
       try {
-        const category = created.category;
-        if (category) {
-          const locals = loadLocalCategories();
-          if (!locals.includes(category)) {
-            const next = [...locals, category];
-            localStorage.setItem('custom_categories', JSON.stringify(next));
-            setLocalCategories(next);
-          }
-        }
         const supplier = created.supplier;
         if (supplier) {
           const locals = loadLocalSuppliers();
@@ -207,14 +187,6 @@ export default function ProductsPage() {
 
       try {
         const product = res.data as Product;
-        if (product.category) {
-          const locals = loadLocalCategories();
-          if (!locals.includes(product.category)) {
-            const next = [...locals, product.category];
-            localStorage.setItem('custom_categories', JSON.stringify(next));
-            setLocalCategories(next);
-          }
-        }
         if (product.supplier) {
           const locals = loadLocalSuppliers();
           if (!locals.includes(product.supplier)) {
