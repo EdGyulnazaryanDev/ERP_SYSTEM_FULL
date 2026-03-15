@@ -12,22 +12,24 @@ export default function DepartmentsTab() {
     queryFn: () => hrApi.getEmployees().then(res => res.data),
   });
 
+  const employeeList = Array.isArray(employees) ? employees : (employees?.data || []);
+
   const departments = Array.from(
-    new Set(employees?.data?.map((emp: any) => emp.department).filter(Boolean))
+    new Set(employeeList.map((emp: any) => emp.department).filter(Boolean))
   );
 
   const getDepartmentStats = (dept: string) => {
-    const deptEmployees = employees?.data?.filter((emp: any) => emp.department === dept) || [];
+    const deptEmployees = employeeList.filter((emp: any) => emp.department === dept);
     return {
       total: deptEmployees.length,
-      active: deptEmployees.filter((emp: any) => emp.employment_status === 'ACTIVE').length,
-      inactive: deptEmployees.filter((emp: any) => emp.employment_status !== 'ACTIVE').length,
+      active: deptEmployees.filter((emp: any) => emp.status === 'active').length,
+      inactive: deptEmployees.filter((emp: any) => emp.status !== 'active').length,
     };
   };
 
   const filteredEmployees = selectedDepartment
-    ? employees?.data?.filter((emp: any) => emp.department === selectedDepartment)
-    : employees?.data;
+    ? employeeList.filter((emp: any) => emp.department === selectedDepartment)
+    : employeeList;
 
   const columns = [
     {
@@ -61,21 +63,21 @@ export default function DepartmentsTab() {
       dataIndex: 'employment_type',
       key: 'employment_type',
       render: (type: string) => {
-        const colors: any = {
-          FULL_TIME: 'blue',
-          PART_TIME: 'cyan',
-          CONTRACT: 'purple',
-          INTERN: 'orange',
+        const colors: Record<string, string> = {
+          full_time: 'blue',
+          part_time: 'cyan',
+          contract: 'purple',
+          intern: 'orange',
         };
         return <Tag color={colors[type] || 'default'}>{type?.replace('_', ' ')}</Tag>;
       },
     },
     {
       title: 'Status',
-      dataIndex: 'employment_status',
-      key: 'employment_status',
+      dataIndex: 'status',
+      key: 'status',
       render: (status: string) => (
-        <Tag color={status === 'ACTIVE' ? 'green' : 'red'}>{status}</Tag>
+        <Tag color={status === 'active' ? 'green' : 'red'}>{status}</Tag>
       ),
     },
   ];

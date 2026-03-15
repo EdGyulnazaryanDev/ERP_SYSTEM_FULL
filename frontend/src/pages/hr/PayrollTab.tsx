@@ -1,16 +1,24 @@
 import { useState } from 'react';
-import { Table, Button, Tag, Modal, Form, Select, Space, message, Card, Row, Col } from 'antd';
-import { PlusOutlined, DollarOutlined, FileTextOutlined } from '@ant-design/icons';
+import { Table, Button, Tag, Modal, Form, Select, Space, message, Card, Row, Col, InputNumber, Alert } from 'antd';
+import { PlusOutlined, DollarOutlined, FileTextOutlined, SettingOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { hrApi } from '@/api/hr';
 import dayjs from 'dayjs';
 
 export default function PayrollTab() {
   const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
+  const [isSalaryModalOpen, setIsSalaryModalOpen] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState<number>(dayjs().month() + 1);
   const [selectedYear, setSelectedYear] = useState<number>(dayjs().year());
   const [form] = Form.useForm();
+  const [salaryForm] = Form.useForm();
   const queryClient = useQueryClient();
+
+  const { data: employees } = useQuery({
+    queryKey: ['employees'],
+    queryFn: () => hrApi.getEmployees().then(res => res.data),
+  });
+  const employeeList = Array.isArray(employees) ? employees : (employees?.data || []);
 
   const { data: payslips, isLoading } = useQuery({
     queryKey: ['payslips', selectedMonth, selectedYear],
@@ -26,7 +34,21 @@ export default function PayrollTab() {
       form.resetFields();
     },
     onError: (error: any) => {
-      message.error(error.response?.data?.message || 'Failed to generate payslips');
+      const msg = error.response?.data?.message || 'Failed to generate payslips';
+      message.error(typeof msg === 'string' ? msg : msg.join(', '));
+    },
+  });
+
+  const createSalaryStructureMutation = useMutation({
+    mutationFn: (data: any) => hrApi.createSalaryStructure(data),
+    onSuccess: () => {
+      message.success('Salary structure saved');
+      setIsSalaryModalOpen(false);
+      salaryForm.resetFields();
+    },
+    onError: (error: any) => {
+      const msg = error.response?.data?.message || 'Failed to save salary structure';
+      message.error(typeof msg === 'string' ? msg : msg.join(', '));
     },
   });
 
@@ -144,10 +166,12 @@ export default function PayrollTab() {
     },
   ];
 
-  const totalGross = payslips?.data?.reduce((sum: number, p: any) => sum + (Number(p.gross_salary) || 0), 0) || 0;
-  const totalDeductions = payslips?.data?.reduce((sum: number, p: any) => sum + (Number(p.total_deductions) || 0), 0) || 0;
-  const totalNet = payslips?.data?.reduce((sum: number, p: any) => sum + (Number(p.net_salary) || 0), 0) || 0;
-  const paidCount = payslips?.data?.filter((p: any) => p.status === 'paid').length || 0;
+  const payslipList = Array.isArray(payslips) ? payslips : (payslips?.data || []);
+
+  const totalGross = payslipList.reduce((sum: number, p: any) => sum + (Number(p.gross_salary) || 0), 0);
+  const totalDeductions = payslipList.reduce((sum: number, p: any) => sum + (Number(p.total_deductions) || 0), 0);
+  const totalNet = payslipList.reduce((sum: number, p: any) => sum + (Number(p.net_salary) || 0), 0);
+  const paidCount = payslipList.filter((p: any) => p.status === 'paid').length;
 
   const months = [
     { value: 1, label: 'January' },
@@ -229,18 +253,26 @@ export default function PayrollTab() {
             ))}
           </Select>
         </Space>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={() => setIsGenerateModalOpen(true)}
-        >
-          Generate Payslips
-        </Button>
+        <Space>
+          <Button
+            icon={<SettingOutlined />}
+            onClick={() => setIsSalaryModalOpen(true)}
+          >
+            Setup Salary
+          </Button>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => setIsGenerateModalOpen(true)}
+          >
+            Generate Payslips
+          </Button>
+        </Space>
       </div>
 
       <Table
         columns={columns}
-        dataSource={payslips?.data || []}
+        dataSource={payslipList}
         loading={isLoading}
         rowKey="id"
         pagination={{ pageSize: 10 }}
@@ -251,39 +283,59 @@ export default function PayrollTab() {
         title="Generate Payslips"
         open={isGenerateModalOpen}
         onOk={handleGeneratePayslips}
-        onCancel={() => {
-          setIsGenerateModalOpen(false);
-          form.resetFields();
-        }}
+        onCancel={() => { setIsGenerateModalOpen(false); form.resetFields(); }}
         confirmLoading={generatePayslipsMutation.isPending}
       >
         <Form form={form} layout="vertical" initialValues={{ month: dayjs().month() + 1, year: dayjs().year() }}>
-          <Form.Item
-            name="month"
-            label="Month"
-            rules={[{ required: true, message: 'Please select month' }]}
-          >
+          <Form.Item name="month" label="Month" rules={[{ required: true }]}>
             <Select options={months} />
           </Form.Item>
-
-          <Form.Item
-            name="year"
-            label="Year"
-            rules={[{ required: true, message: 'Please select year' }]}
-          >
+          <Form.Item name="year" label="Year" rules={[{ required: true }]}>
             <Select>
               {years.map(year => (
                 <Select.Option key={year} value={year}>{year}</Select.Option>
               ))}
             </Select>
           </Form.Item>
+          <Alert
+            type="info"
+            showIcon
+            message="Employees must have a salary structure set up before payslips can be generated. Use the 'Setup Salary' button to configure."
+          />
+        </Form>
+      </Modal>
 
-          <div className="bg-blue-50 p-4 rounded">
-            <p className="text-sm text-gray-700">
-              This will generate payslips for all active employees for the selected period.
-              Existing payslips for this period will not be regenerated.
-            </p>
-          </div>
+      <Modal
+        title="Setup Employee Salary Structure"
+        open={isSalaryModalOpen}
+        onOk={async () => {
+          const values = await salaryForm.validateFields();
+          createSalaryStructureMutation.mutate({
+            employee_id: values.employee_id,
+            basic_salary: values.basic_salary,
+            effective_from: dayjs().format('YYYY-MM-DD'),
+          });
+        }}
+        onCancel={() => { setIsSalaryModalOpen(false); salaryForm.resetFields(); }}
+        confirmLoading={createSalaryStructureMutation.isPending}
+      >
+        <Form form={salaryForm} layout="vertical">
+          <Form.Item name="employee_id" label="Employee" rules={[{ required: true }]}>
+            <Select
+              showSearch
+              placeholder="Select employee"
+              filterOption={(input, option) =>
+                String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+              }
+              options={employeeList.map((e: any) => ({
+                value: e.id,
+                label: `${e.first_name} ${e.last_name} (${e.employee_code})`,
+              }))}
+            />
+          </Form.Item>
+          <Form.Item name="basic_salary" label="Basic Salary" rules={[{ required: true }]}>
+            <InputNumber className="w-full" min={0} precision={2} prefix="$" />
+          </Form.Item>
         </Form>
       </Modal>
     </div>

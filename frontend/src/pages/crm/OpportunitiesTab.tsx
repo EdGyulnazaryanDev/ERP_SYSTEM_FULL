@@ -1,4 +1,4 @@
-import { Table, Button, Tag, Space, Modal, Form, Input, Select, message, Popconfirm, DatePicker } from 'antd';
+import { Table, Button, Tag, Space, Modal, Form, Input, InputNumber, Select, message, Popconfirm, DatePicker } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { crmApi } from '@/api/crm';
@@ -21,8 +21,8 @@ export default function OpportunitiesTab() {
     queryFn: () => crmApi.getCustomers().then(res => res.data),
   });
 
-  const customers = customersRes?.data || [];
-  const data = opportunitiesRes?.data || [];
+  const customers = Array.isArray(customersRes) ? customersRes : (customersRes?.data || []);
+  const data = Array.isArray(opportunitiesRes) ? opportunitiesRes : (opportunitiesRes?.data || []);
 
   const createMutation = useMutation({
     mutationFn: (data: any) => crmApi.createOpportunity(data),
@@ -169,10 +169,10 @@ export default function OpportunitiesTab() {
             ]} />
           </Form.Item>
           <Form.Item name="amount" label="Amount">
-            <Input type="number" />
+            <InputNumber className="w-full" min={0} precision={2} />
           </Form.Item>
           <Form.Item name="probability" label="Probability (%)">
-            <Input type="number" max={100} min={0} />
+            <InputNumber className="w-full" min={0} max={100} />
           </Form.Item>
           <Form.Item name="expected_close_date" label="Expected Close Date">
             <DatePicker className="w-full" />

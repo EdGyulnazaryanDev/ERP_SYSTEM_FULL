@@ -39,7 +39,8 @@ export default function LeavesTab() {
       handleCloseModal();
     },
     onError: (error: any) => {
-      message.error(error.response?.data?.message || 'Failed to submit leave request');
+      const msg = error.response?.data?.message || 'Failed to submit leave request';
+      message.error(typeof msg === 'string' ? msg : msg.join(', '));
     },
   });
 
@@ -73,6 +74,15 @@ export default function LeavesTab() {
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields();
+      const employeeId = values.employee_id;
+
+      // Auto-initialize leave balance for current year before requesting
+      try {
+        await hrApi.initializeLeaveBalance(employeeId, new Date().getFullYear());
+      } catch (_) {
+        // ignore if already initialized
+      }
+
       const formattedValues = {
         leave_type_id: values.leave_type_id,
         start_date: values.dates[0].format('YYYY-MM-DD'),
@@ -80,7 +90,7 @@ export default function LeavesTab() {
         days_count: values.dates[1].diff(values.dates[0], 'day') + 1,
         reason: values.reason,
       };
-      requestLeaveMutation.mutate({ data: formattedValues, employeeId: values.employee_id });
+      requestLeaveMutation.mutate({ data: formattedValues, employeeId });
     } catch (error) {
       console.error('Validation failed:', error);
     }
@@ -149,11 +159,11 @@ export default function LeavesTab() {
       dataIndex: 'status',
       key: 'status',
       render: (status: string) => {
-        const colors: any = {
-          PENDING: 'orange',
-          APPROVED: 'green',
-          REJECTED: 'red',
-          CANCELLED: 'gray',
+        const colors: Record<string, string> = {
+          pending: 'orange',
+          approved: 'green',
+          rejected: 'red',
+          cancelled: 'gray',
         };
         return <Tag color={colors[status] || 'default'}>{status}</Tag>;
       },
@@ -169,7 +179,7 @@ export default function LeavesTab() {
       key: 'actions',
       width: 120,
       render: (_: any, record: any) => {
-        if (record.status === 'PENDING') {
+        if (record.status === 'pending') {
           return (
             <Space>
               <Button
@@ -195,9 +205,13 @@ export default function LeavesTab() {
     },
   ];
 
-  const pendingCount = leaveRequests?.data?.filter((l: any) => l.status === 'PENDING').length || 0;
-  const approvedCount = leaveRequests?.data?.filter((l: any) => l.status === 'APPROVED').length || 0;
-  const rejectedCount = leaveRequests?.data?.filter((l: any) => l.status === 'REJECTED').length || 0;
+  const employeeList = Array.isArray(employees) ? employees : (employees?.data || []);
+  const leaveTypeList = Array.isArray(leaveTypes) ? leaveTypes : (leaveTypes?.data || []);
+  const leaveRequestList = Array.isArray(leaveRequests) ? leaveRequests : (leaveRequests?.data || []);
+
+  const pendingCount = leaveRequestList.filter((l: any) => l.status === 'pending').length;
+  const approvedCount = leaveRequestList.filter((l: any) => l.status === 'approved').length;
+  const rejectedCount = leaveRequestList.filter((l: any) => l.status === 'rejected').length;
 
   return (
     <div>
@@ -232,7 +246,7 @@ export default function LeavesTab() {
           <Col span={6}>
             <Card>
               <div className="text-center">
-                <h3 className="text-2xl font-bold text-blue-500">{leaveTypes?.data?.length || 0}</h3>
+                <h3 className="text-2xl font-bold text-blue-500">{leaveTypeList.length}</h3>
                 <p className="text-gray-600">Leave Types</p>
               </div>
             </Card>
@@ -249,10 +263,10 @@ export default function LeavesTab() {
             onChange={setStatusFilter}
             value={statusFilter || undefined}
           >
-            <Select.Option value="PENDING">Pending</Select.Option>
-            <Select.Option value="APPROVED">Approved</Select.Option>
-            <Select.Option value="REJECTED">Rejected</Select.Option>
-            <Select.Option value="CANCELLED">Cancelled</Select.Option>
+            <Select.Option value="pending">Pending</Select.Option>
+            <Select.Option value="approved">Approved</Select.Option>
+            <Select.Option value="rejected">Rejected</Select.Option>
+            <Select.Option value="cancelled">Cancelled</Select.Option>
           </Select>
         </Space>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => setIsModalOpen(true)}>
@@ -260,9 +274,9 @@ export default function LeavesTab() {
         </Button>
       </div>
 
-      <Table
+        <Table
         columns={columns}
-        dataSource={leaveRequests?.data || []}
+        dataSource={leaveRequestList}
         loading={isLoading}
         rowKey="id"
         pagination={{ pageSize: 10 }}
@@ -287,7 +301,7 @@ export default function LeavesTab() {
               filterOption={(input, option) =>
                 String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())
               }
-              options={employees?.data?.map((emp: any) => ({
+              options={employeeList.map((emp: any) => ({
                 value: emp.id,
                 label: `${emp.first_name} ${emp.last_name} (${emp.employee_code})`,
               }))}
@@ -300,7 +314,7 @@ export default function LeavesTab() {
             rules={[{ required: true, message: 'Please select leave type' }]}
           >
             <Select placeholder="Select Leave Type">
-              {leaveTypes?.data?.map((type: any) => (
+              {leaveTypeList.map((type: any) => (
                 <Select.Option key={type.id} value={type.id}>
                   {type.name} ({type.days_allowed} days)
                 </Select.Option>
@@ -348,7 +362,7 @@ export default function LeavesTab() {
               filterOption={(input, option) =>
                 String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())
               }
-              options={employees?.data?.map((emp: any) => ({
+              options={employeeList.map((emp: any) => ({
                 value: emp.id,
                 label: `${emp.first_name} ${emp.last_name}`,
               }))}
@@ -379,7 +393,7 @@ export default function LeavesTab() {
               filterOption={(input, option) =>
                 String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())
               }
-              options={employees?.data?.map((emp: any) => ({
+              options={employeeList.map((emp: any) => ({
                 value: emp.id,
                 label: `${emp.first_name} ${emp.last_name}`,
               }))}

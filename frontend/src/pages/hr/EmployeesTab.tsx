@@ -24,7 +24,7 @@ export default function EmployeesTab() {
       queryClient.invalidateQueries({ queryKey: ['employees'] });
       handleCloseModal();
     },
-    onError: () => message.error('Failed to create employee'),
+    onError: (error: any) => message.error(error.response?.data?.message || 'Failed to create employee'),
   });
 
   const updateMutation = useMutation({
@@ -34,7 +34,7 @@ export default function EmployeesTab() {
       queryClient.invalidateQueries({ queryKey: ['employees'] });
       handleCloseModal();
     },
-    onError: () => message.error('Failed to update employee'),
+    onError: (error: any) => message.error(error.response?.data?.message || 'Failed to update employee'),
   });
 
   const deleteMutation = useMutation({
@@ -43,7 +43,7 @@ export default function EmployeesTab() {
       message.success('Employee deleted successfully');
       queryClient.invalidateQueries({ queryKey: ['employees'] });
     },
-    onError: () => message.error('Failed to delete employee'),
+    onError: (error: any) => message.error(error.response?.data?.message || 'Failed to delete employee'),
   });
 
   const handleOpenModal = (employee?: any) => {
@@ -95,13 +95,15 @@ export default function EmployeesTab() {
     setSearchQuery(value);
   };
 
+  const employees = Array.isArray(data) ? data : (data?.data || []);
+
   const filteredData = searchQuery
-    ? data?.data?.filter((emp: any) =>
-      `${emp.first_name} ${emp.last_name} ${emp.email} ${emp.employee_code}`
-        .toLowerCase()
-        .includes(searchQuery.toLowerCase())
-    )
-    : data?.data;
+    ? employees.filter((emp: any) =>
+        `${emp.first_name} ${emp.last_name} ${emp.email} ${emp.employee_code}`
+          .toLowerCase()
+          .includes(searchQuery.toLowerCase())
+      )
+    : employees;
 
   const columns = [
     { title: 'Code', dataIndex: 'employee_code', key: 'employee_code', width: 100 },

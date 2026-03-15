@@ -23,15 +23,17 @@ export default function AttendanceTab() {
   const { data: attendance, isLoading } = useQuery({
     queryKey: ['attendance', selectedEmployee, dateRange[0]?.format('YYYY-MM-DD'), dateRange[1]?.format('YYYY-MM-DD')],
     queryFn: () => {
-      if (!selectedEmployee) return Promise.resolve({ data: [] });
-      return hrApi.getEmployeeAttendance(
-        selectedEmployee,
-        dateRange[0].format('YYYY-MM-DD'),
-        dateRange[1].format('YYYY-MM-DD')
-      ).then(res => res.data);
+      if (!selectedEmployee) return Promise.resolve([]);
+      const start = dateRange[0]?.format('YYYY-MM-DD');
+      const end = dateRange[1]?.format('YYYY-MM-DD');
+      if (!start || !end || start.includes('NaN')) return Promise.resolve([]);
+      return hrApi.getEmployeeAttendance(selectedEmployee, start, end).then(res => res.data);
     },
-    enabled: !!selectedEmployee,
+    enabled: !!selectedEmployee && !!dateRange[0] && !!dateRange[1],
   });
+
+  const employeeList = Array.isArray(employees) ? employees : (employees?.data || []);
+  const attendanceList = Array.isArray(attendance) ? attendance : (attendance?.data || []);
 
   const clockInMutation = useMutation({
     mutationFn: (employeeId: string) => hrApi.clockIn({ employee_id: employeeId }),
@@ -158,7 +160,7 @@ export default function AttendanceTab() {
                   filterOption={(input, option) =>
                     String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())
                   }
-                  options={employees?.data?.map((emp: any) => ({
+                  options={employeeList.map((emp: any) => ({
                     value: emp.id,
                     label: `${emp.first_name} ${emp.last_name} (${emp.employee_code})`,
                   }))}
@@ -182,7 +184,7 @@ export default function AttendanceTab() {
                   filterOption={(input, option) =>
                     String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())
                   }
-                  options={employees?.data?.map((emp: any) => ({
+                  options={employeeList.map((emp: any) => ({
                     value: emp.id,
                     label: `${emp.first_name} ${emp.last_name} (${emp.employee_code})`,
                   }))}
@@ -220,7 +222,7 @@ export default function AttendanceTab() {
             filterOption={(input, option) =>
               String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())
             }
-            options={employees?.data?.map((emp: any) => ({
+            options={employeeList.map((emp: any) => ({
               value: emp.id,
               label: `${emp.first_name} ${emp.last_name} (${emp.employee_code})`,
             }))}
@@ -234,7 +236,7 @@ export default function AttendanceTab() {
 
       <Table
         columns={columns}
-        dataSource={attendance?.data || []}
+        dataSource={attendanceList}
         loading={isLoading}
         rowKey="id"
         pagination={{ pageSize: 10 }}
@@ -259,7 +261,7 @@ export default function AttendanceTab() {
               filterOption={(input, option) =>
                 String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())
               }
-              options={employees?.data?.map((emp: any) => ({
+              options={employeeList.map((emp: any) => ({
                 value: emp.id,
                 label: `${emp.first_name} ${emp.last_name} (${emp.employee_code})`,
               }))}

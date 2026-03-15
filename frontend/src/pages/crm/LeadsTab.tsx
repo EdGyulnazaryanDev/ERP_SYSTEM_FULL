@@ -1,4 +1,4 @@
-import { Table, Button, Tag, Space, Modal, Form, Input, Select, message, Popconfirm, DatePicker } from 'antd';
+import { Table, Button, Tag, Space, Modal, Form, Input, InputNumber, Select, message, Popconfirm, DatePicker } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, SwapOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { crmApi } from '@/api/crm';
@@ -97,6 +97,9 @@ export default function LeadsTab() {
     form.validateFields().then(values => {
       const payload = {
         ...values,
+        score: values.score ? Number(values.score) : undefined,
+        expected_revenue: values.expected_revenue ? Number(values.expected_revenue) : undefined,
+        probability: values.probability ? Number(values.probability) : undefined,
         next_follow_up: values.next_follow_up ? values.next_follow_up.toISOString() : undefined,
       };
 
@@ -210,13 +213,13 @@ export default function LeadsTab() {
             ]} />
           </Form.Item>
           <Form.Item name="score" label="Score">
-            <Input type="number" />
+            <InputNumber className="w-full" min={0} max={100} />
           </Form.Item>
           <Form.Item name="expected_revenue" label="Expected Revenue">
-            <Input type="number" />
+            <InputNumber className="w-full" min={0} precision={2} />
           </Form.Item>
           <Form.Item name="probability" label="Probability (%)">
-            <Input type="number" max={100} min={0} />
+            <InputNumber className="w-full" min={0} max={100} />
           </Form.Item>
           <Form.Item name="next_follow_up" label="Next Follow Up">
             <DatePicker className="w-full" />
