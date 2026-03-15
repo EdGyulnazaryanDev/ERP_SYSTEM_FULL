@@ -119,9 +119,11 @@ export default function LeadsTab() {
       title: 'Status', dataIndex: 'status', key: 'status', render: (status: string) => {
         if (!status) return null;
         let color = 'blue';
-        if (status === 'WON') color = 'green';
-        if (status === 'LOST') color = 'red';
-        if (status === 'QUALIFIED') color = 'cyan';
+        if (status === 'won') color = 'green';
+        if (status === 'lost') color = 'red';
+        if (status === 'qualified') color = 'cyan';
+        if (status === 'proposal') color = 'orange';
+        if (status === 'negotiation') color = 'purple';
         return <Tag color={color}>{status}</Tag>;
       }
     },
@@ -131,7 +133,7 @@ export default function LeadsTab() {
       render: (_: any, record: any) => (
         <Space>
           <Button icon={<EditOutlined />} size="small" onClick={() => handleEdit(record)} />
-          {record.status !== 'WON' && (
+          {record.status !== 'won' && (
             <Popconfirm title="Convert to customer?" onConfirm={() => handleConvert(record.id)}>
               <Button icon={<SwapOutlined />} size="small" title="Convert to Customer" />
             </Popconfirm>
@@ -187,19 +189,24 @@ export default function LeadsTab() {
           </Form.Item>
           <Form.Item name="source" label="Source">
             <Select options={[
-              { value: 'WEBSITE', label: 'Website' },
-              { value: 'REFERRAL', label: 'Referral' },
-              { value: 'COLD_CALL', label: 'Cold Call' },
-              { value: 'CONFERENCE', label: 'Conference' },
-              { value: 'OTHER', label: 'Other' },
+              { value: 'website', label: 'Website' },
+              { value: 'referral', label: 'Referral' },
+              { value: 'cold_call', label: 'Cold Call' },
+              { value: 'trade_show', label: 'Trade Show' },
+              { value: 'campaign', label: 'Campaign' },
+              { value: 'social_media', label: 'Social Media' },
+              { value: 'other', label: 'Other' },
             ]} />
           </Form.Item>
           <Form.Item name="status" label="Status">
             <Select options={[
-              { value: 'NEW', label: 'New' },
-              { value: 'CONTACTED', label: 'Contacted' },
-              { value: 'QUALIFIED', label: 'Qualified' },
-              { value: 'LOST', label: 'Lost' },
+              { value: 'new', label: 'New' },
+              { value: 'contacted', label: 'Contacted' },
+              { value: 'qualified', label: 'Qualified' },
+              { value: 'proposal', label: 'Proposal' },
+              { value: 'negotiation', label: 'Negotiation' },
+              { value: 'won', label: 'Won' },
+              { value: 'lost', label: 'Lost' },
             ]} />
           </Form.Item>
           <Form.Item name="score" label="Score">

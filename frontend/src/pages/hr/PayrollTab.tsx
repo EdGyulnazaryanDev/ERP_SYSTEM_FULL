@@ -103,11 +103,11 @@ export default function PayrollTab() {
       dataIndex: 'status',
       key: 'status',
       render: (status: string) => {
-        const colors: any = {
-          DRAFT: 'gray',
-          APPROVED: 'blue',
-          PAID: 'green',
-          CANCELLED: 'red',
+        const colors: Record<string, string> = {
+          draft: 'gray',
+          processed: 'blue',
+          paid: 'green',
+          cancelled: 'red',
         };
         return <Tag color={colors[status] || 'default'}>{status}</Tag>;
       },
@@ -118,20 +118,20 @@ export default function PayrollTab() {
       width: 200,
       render: (_: any, record: any) => (
         <Space>
-          {record.status === 'DRAFT' && (
+          {record.status === 'draft' && (
             <Button
               type="link"
               size="small"
-              onClick={() => updateStatusMutation.mutate({ id: record.id, status: 'APPROVED' })}
+              onClick={() => updateStatusMutation.mutate({ id: record.id, status: 'processed' })}
             >
               Approve
             </Button>
           )}
-          {record.status === 'APPROVED' && (
+          {record.status === 'processed' && (
             <Button
               type="link"
               size="small"
-              onClick={() => updateStatusMutation.mutate({ id: record.id, status: 'PAID' })}
+              onClick={() => updateStatusMutation.mutate({ id: record.id, status: 'paid' })}
             >
               Mark Paid
             </Button>
@@ -147,7 +147,7 @@ export default function PayrollTab() {
   const totalGross = payslips?.data?.reduce((sum: number, p: any) => sum + (Number(p.gross_salary) || 0), 0) || 0;
   const totalDeductions = payslips?.data?.reduce((sum: number, p: any) => sum + (Number(p.total_deductions) || 0), 0) || 0;
   const totalNet = payslips?.data?.reduce((sum: number, p: any) => sum + (Number(p.net_salary) || 0), 0) || 0;
-  const paidCount = payslips?.data?.filter((p: any) => p.status === 'PAID').length || 0;
+  const paidCount = payslips?.data?.filter((p: any) => p.status === 'paid').length || 0;
 
   const months = [
     { value: 1, label: 'January' },

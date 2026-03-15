@@ -49,11 +49,14 @@ export default function EmployeesTab() {
   const handleOpenModal = (employee?: any) => {
     if (employee) {
       setEditingEmployee(employee);
-      form.setFieldsValue({
-        ...employee,
-        date_of_birth: employee.date_of_birth ? dayjs(employee.date_of_birth) : null,
-        hire_date: employee.hire_date ? dayjs(employee.hire_date) : null,
-      });
+      setIsModalOpen(true);
+      setTimeout(() => {
+        form.setFieldsValue({
+          ...employee,
+          date_of_birth: employee.date_of_birth ? dayjs(employee.date_of_birth) : null,
+          hire_date: employee.hire_date ? dayjs(employee.hire_date) : null,
+        });
+      }, 0);
     } else {
       setEditingEmployee(null);
       setIsModalOpen(true);
@@ -108,15 +111,15 @@ export default function EmployeesTab() {
       render: (_: any, record: any) => `${record.first_name} ${record.last_name}`,
     },
     { title: 'Email', dataIndex: 'email', key: 'email' },
-    { title: 'Phone', dataIndex: 'phone_number', key: 'phone_number' },
+    { title: 'Phone', dataIndex: 'phone', key: 'phone' },
     { title: 'Department', dataIndex: 'department', key: 'department' },
     { title: 'Position', dataIndex: 'position', key: 'position' },
     {
       title: 'Status',
-      dataIndex: 'employment_status',
-      key: 'employment_status',
+      dataIndex: 'status',
+      key: 'status',
       render: (status: string) => (
-        <Tag color={status === 'ACTIVE' ? 'green' : status === 'INACTIVE' ? 'red' : 'orange'}>
+        <Tag color={status === 'active' ? 'green' : status === 'inactive' ? 'red' : 'orange'}>
           {status}
         </Tag>
       ),
@@ -221,7 +224,7 @@ export default function EmployeesTab() {
           </Form.Item>
 
           <div className="grid grid-cols-2 gap-4">
-            <Form.Item name="phone_number" label="Phone Number">
+            <Form.Item name="phone" label="Phone Number">
               <Input />
             </Form.Item>
 
@@ -262,19 +265,19 @@ export default function EmployeesTab() {
           <div className="grid grid-cols-2 gap-4">
             <Form.Item name="employment_type" label="Employment Type">
               <Select>
-                <Select.Option value="FULL_TIME">Full Time</Select.Option>
-                <Select.Option value="PART_TIME">Part Time</Select.Option>
-                <Select.Option value="CONTRACT">Contract</Select.Option>
-                <Select.Option value="INTERN">Intern</Select.Option>
+                <Select.Option value="full_time">Full Time</Select.Option>
+                <Select.Option value="part_time">Part Time</Select.Option>
+                <Select.Option value="contract">Contract</Select.Option>
+                <Select.Option value="intern">Intern</Select.Option>
               </Select>
             </Form.Item>
 
-            <Form.Item name="employment_status" label="Status">
+            <Form.Item name="status" label="Status">
               <Select>
-                <Select.Option value="ACTIVE">Active</Select.Option>
-                <Select.Option value="INACTIVE">Inactive</Select.Option>
-                <Select.Option value="ON_LEAVE">On Leave</Select.Option>
-                <Select.Option value="TERMINATED">Terminated</Select.Option>
+                <Select.Option value="active">Active</Select.Option>
+                <Select.Option value="inactive">Inactive</Select.Option>
+                <Select.Option value="on_leave">On Leave</Select.Option>
+                <Select.Option value="terminated">Terminated</Select.Option>
               </Select>
             </Form.Item>
           </div>

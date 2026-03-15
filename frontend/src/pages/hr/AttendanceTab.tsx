@@ -117,12 +117,12 @@ export default function AttendanceTab() {
       dataIndex: 'status',
       key: 'status',
       render: (status: string) => {
-        const colors: any = {
-          PRESENT: 'green',
-          ABSENT: 'red',
-          HALF_DAY: 'orange',
-          LEAVE: 'blue',
-          HOLIDAY: 'purple',
+        const colors: Record<string, string> = {
+          present: 'green',
+          absent: 'red',
+          late: 'orange',
+          half_day: 'gold',
+          on_leave: 'blue',
         };
         return <Tag color={colors[status] || 'default'}>{status}</Tag>;
       },
@@ -280,11 +280,11 @@ export default function AttendanceTab() {
             rules={[{ required: true, message: 'Please select status' }]}
           >
             <Select>
-              <Select.Option value="PRESENT">Present</Select.Option>
-              <Select.Option value="ABSENT">Absent</Select.Option>
-              <Select.Option value="HALF_DAY">Half Day</Select.Option>
-              <Select.Option value="LEAVE">Leave</Select.Option>
-              <Select.Option value="HOLIDAY">Holiday</Select.Option>
+              <Select.Option value="present">Present</Select.Option>
+              <Select.Option value="absent">Absent</Select.Option>
+              <Select.Option value="late">Late</Select.Option>
+              <Select.Option value="half_day">Half Day</Select.Option>
+              <Select.Option value="on_leave">On Leave</Select.Option>
             </Select>
           </Form.Item>
 
