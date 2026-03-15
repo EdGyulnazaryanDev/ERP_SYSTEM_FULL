@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { Table, Button, Tag, Modal, Form, Select, Space, message, Card, Row, Col, InputNumber, Alert } from 'antd';
-import { PlusOutlined, DollarOutlined, FileTextOutlined, SettingOutlined } from '@ant-design/icons';
+import { PlusOutlined, DollarOutlined, FileTextOutlined, SettingOutlined, DownloadOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { hrApi } from '@/api/hr';
 import dayjs from 'dayjs';
+import { downloadPayslipPdf, downloadAllPayslipsPdf } from '@/utils/payslipPdf';
 
 export default function PayrollTab() {
+  const [viewPayslip, setViewPayslip] = useState<any>(null);
   const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
   const [isSalaryModalOpen, setIsSalaryModalOpen] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState<number>(dayjs().month() + 1);
@@ -26,9 +28,11 @@ export default function PayrollTab() {
   });
 
   const generatePayslipsMutation = useMutation({
-    mutationFn: ({ month, year }: any) => hrApi.generatePayslips(month, year),
-    onSuccess: () => {
+    mutationFn: ({ month, year }: { month: number; year: number }) => hrApi.generatePayslips(month, year),
+    onSuccess: (_, variables) => {
       message.success('Payslips generated successfully');
+      setSelectedMonth(variables.month);
+      setSelectedYear(variables.year);
       queryClient.invalidateQueries({ queryKey: ['payslips'] });
       setIsGenerateModalOpen(false);
       form.resetFields();
@@ -104,20 +108,20 @@ export default function PayrollTab() {
       title: 'Gross Salary',
       dataIndex: 'gross_salary',
       key: 'gross_salary',
-      render: (amount: number) => `${amount?.toFixed(2) || '0.00'}`,
+      render: (amount: number) => `$${Number(amount || 0).toFixed(2)}`,
     },
     {
       title: 'Deductions',
       dataIndex: 'total_deductions',
       key: 'total_deductions',
-      render: (amount: number) => `${amount?.toFixed(2) || '0.00'}`,
+      render: (amount: number) => `$${Number(amount || 0).toFixed(2)}`,
     },
     {
       title: 'Net Salary',
       dataIndex: 'net_salary',
       key: 'net_salary',
       render: (amount: number) => (
-        <span className="font-semibold">${amount?.toFixed(2) || '0.00'}</span>
+        <span className="font-semibold">${Number(amount || 0).toFixed(2)}</span>
       ),
     },
     {
@@ -158,8 +162,16 @@ export default function PayrollTab() {
               Mark Paid
             </Button>
           )}
-          <Button type="link" size="small">
+          <Button type="link" size="small" onClick={() => setViewPayslip(record)}>
             View
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            icon={<DownloadOutlined />}
+            onClick={() => downloadPayslipPdf(record)}
+          >
+            PDF
           </Button>
         </Space>
       ),
@@ -168,9 +180,9 @@ export default function PayrollTab() {
 
   const payslipList = Array.isArray(payslips) ? payslips : (payslips?.data || []);
 
-  const totalGross = payslipList.reduce((sum: number, p: any) => sum + (Number(p.gross_salary) || 0), 0);
-  const totalDeductions = payslipList.reduce((sum: number, p: any) => sum + (Number(p.total_deductions) || 0), 0);
-  const totalNet = payslipList.reduce((sum: number, p: any) => sum + (Number(p.net_salary) || 0), 0);
+  const totalGross = payslipList.reduce((sum: number, p: any) => sum + Number(p.gross_salary || 0), 0);
+  const totalDeductions = payslipList.reduce((sum: number, p: any) => sum + Number(p.total_deductions || 0), 0);
+  const totalNet = payslipList.reduce((sum: number, p: any) => sum + Number(p.net_salary || 0), 0);
   const paidCount = payslipList.filter((p: any) => p.status === 'paid').length;
 
   const months = [
@@ -267,6 +279,13 @@ export default function PayrollTab() {
           >
             Generate Payslips
           </Button>
+          <Button
+            icon={<DownloadOutlined />}
+            disabled={payslipList.length === 0}
+            onClick={() => downloadAllPayslipsPdf(payslipList, selectedMonth, selectedYear)}
+          >
+            Download All PDF
+          </Button>
         </Space>
       </div>
 
@@ -337,6 +356,74 @@ export default function PayrollTab() {
             <InputNumber className="w-full" min={0} precision={2} prefix="$" />
           </Form.Item>
         </Form>
+      </Modal>
+
+      <Modal
+        title="Payslip Details"
+        open={!!viewPayslip}
+        onCancel={() => setViewPayslip(null)}
+        footer={
+          <Space>
+            <Button onClick={() => setViewPayslip(null)}>Close</Button>
+            <Button
+              type="primary"
+              icon={<DownloadOutlined />}
+              onClick={() => viewPayslip && downloadPayslipPdf(viewPayslip)}
+            >
+              Download PDF
+            </Button>
+          </Space>
+        }
+        width={600}
+      >
+        {viewPayslip && (
+          <div className="space-y-3">
+            <div className="flex justify-between border-b pb-2">
+              <span className="text-gray-500">Payslip #</span>
+              <span className="font-medium">{viewPayslip.payslip_number}</span>
+            </div>
+            <div className="flex justify-between border-b pb-2">
+              <span className="text-gray-500">Employee</span>
+              <span className="font-medium">
+                {viewPayslip.employee
+                  ? `${viewPayslip.employee.first_name} ${viewPayslip.employee.last_name}`
+                  : '-'}
+              </span>
+            </div>
+            <div className="flex justify-between border-b pb-2">
+              <span className="text-gray-500">Period</span>
+              <span className="font-medium">
+                {dayjs().month(viewPayslip.month - 1).format('MMMM')} {viewPayslip.year}
+              </span>
+            </div>
+            <div className="flex justify-between border-b pb-2">
+              <span className="text-gray-500">Working Days</span>
+              <span className="font-medium">{viewPayslip.working_days}</span>
+            </div>
+            <div className="flex justify-between border-b pb-2">
+              <span className="text-gray-500">Present Days</span>
+              <span className="font-medium">{viewPayslip.present_days}</span>
+            </div>
+            <div className="flex justify-between border-b pb-2">
+              <span className="text-gray-500">Gross Salary</span>
+              <span className="font-medium">${Number(viewPayslip.gross_salary || 0).toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between border-b pb-2">
+              <span className="text-gray-500">Total Deductions</span>
+              <span className="font-medium text-red-500">-${Number(viewPayslip.total_deductions || 0).toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between border-b pb-2">
+              <span className="text-gray-500">Net Salary</span>
+              <span className="font-bold text-green-600 text-lg">${Number(viewPayslip.net_salary || 0).toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Status</span>
+              <Tag color={{ draft: 'gray', processed: 'blue', paid: 'green', cancelled: 'red' }[viewPayslip.status as string] || 'default'}>
+                {viewPayslip.status}
+              </Tag>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );

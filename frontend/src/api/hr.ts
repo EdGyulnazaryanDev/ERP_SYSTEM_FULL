@@ -14,6 +14,7 @@ export const hrApi = {
   clockIn: (data: any) => apiClient.post('/hr/attendance/clock-in', data),
   clockOut: (data: any) => apiClient.post('/hr/attendance/clock-out', data),
   markAttendance: (data: any) => apiClient.post('/hr/attendance/mark', data),
+  getTodayAttendance: () => apiClient.get('/hr/attendance/today'),
   getEmployeeAttendance: (employeeId: string, startDate: string, endDate: string) => 
     apiClient.get(`/hr/attendance/employee/${employeeId}`, { params: { startDate, endDate } }),
 
@@ -24,7 +25,7 @@ export const hrApi = {
 
   // Leave Balance
   initializeLeaveBalance: (employeeId: string, year: number) => 
-    apiClient.post(`/hr/leave-balance/initialize/${employeeId}`, null, { params: { year } }),
+    apiClient.post(`/hr/leave-balance/initialize/${employeeId}`, {}, { params: { year } }),
   getLeaveBalance: (employeeId: string) => apiClient.get(`/hr/leave-balance/${employeeId}`),
 
   // Leave Requests
@@ -43,12 +44,13 @@ export const hrApi = {
   updateSalaryComponent: (id: string, data: any) => apiClient.put(`/hr/salary-components/${id}`, data),
 
   // Salary Structure
+  getAllSalaryStructures: () => apiClient.get('/hr/salary-structure'),
   createSalaryStructure: (data: any) => apiClient.post('/hr/salary-structure', data),
   getSalaryStructure: (employeeId: string) => apiClient.get(`/hr/salary-structure/${employeeId}`),
 
   // Payroll
   generatePayslips: (month: number, year: number) => 
-    apiClient.post('/hr/payroll/generate', null, { params: { month, year } }),
+    apiClient.post('/hr/payroll/generate', {}, { params: { month, year } }),
   getPayslips: (month?: number, year?: number) => 
     apiClient.get('/hr/payslips', { params: { month, year } }),
   getEmployeePayslips: (employeeId: string) => 

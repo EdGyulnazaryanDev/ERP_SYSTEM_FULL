@@ -95,6 +95,11 @@ export class HrController {
     return this.hrService.markAttendance(createAttendanceDto, tenantId);
   }
 
+  @Get('attendance/today')
+  getTodayAttendance(@CurrentTenant() tenantId: string) {
+    return this.hrService.getTodayAttendance(tenantId);
+  }
+
   @Get('attendance/employee/:employeeId')
   getEmployeeAttendance(
     @Param('employeeId') employeeId: string,
@@ -137,7 +142,7 @@ export class HrController {
     @Query('year') year: number,
     @CurrentTenant() tenantId: string,
   ) {
-    return this.hrService.initializeLeaveBalance(employeeId, year, tenantId);
+    return this.hrService.initializeLeaveBalance(employeeId, +year, tenantId);
   }
 
   @Get('leave-balance/:employeeId')
@@ -219,6 +224,11 @@ export class HrController {
 
   // ==================== EMPLOYEE SALARY ENDPOINTS ====================
 
+  @Get('salary-structure')
+  getAllSalaryStructures(@CurrentTenant() tenantId: string) {
+    return this.hrService.getAllSalaryStructures(tenantId);
+  }
+
   @Post('salary-structure')
   createSalaryStructure(
     @Body() createEmployeeSalaryDto: CreateEmployeeSalaryDto,
@@ -243,7 +253,7 @@ export class HrController {
     @Query('year') year: number,
     @CurrentTenant() tenantId: string,
   ) {
-    return this.hrService.generatePayslips(month, year, tenantId);
+    return this.hrService.generatePayslips(+month, +year, tenantId);
   }
 
   @Get('payslips')
@@ -252,7 +262,7 @@ export class HrController {
     @Query('year') year: number,
     @CurrentTenant() tenantId: string,
   ) {
-    return this.hrService.getPayslips(tenantId, month, year);
+    return this.hrService.getPayslips(tenantId, month ? +month : undefined, year ? +year : undefined);
   }
 
   @Get('payslips/employee/:employeeId')

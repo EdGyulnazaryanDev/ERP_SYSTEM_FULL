@@ -1,20 +1,27 @@
 import { useState } from 'react';
-import { Table, Button, Tag, Modal, Form, Input, Select, DatePicker, Space, Popconfirm, message } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined } from '@ant-design/icons';
+import { Table, Button, Tag, Modal, Form, Input, Select, DatePicker, Space, Popconfirm, message, Tabs, InputNumber } from 'antd';
+import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, DollarOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { hrApi } from '@/api/hr';
 import dayjs from 'dayjs';
 
 export default function EmployeesTab() {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSalaryModalOpen, setIsSalaryModalOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [form] = Form.useForm();
+  const [salaryForm] = Form.useForm();
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
     queryKey: ['employees'],
     queryFn: () => hrApi.getEmployees().then(res => res.data),
+  });
+
+  const { data: salaryData, isLoading: salaryLoading } = useQuery({
+    queryKey: ['salaryStructures'],
+    queryFn: () => hrApi.getAllSalaryStructures().then(res => res.data),
   });
 
   const createMutation = useMutation({
@@ -24,7 +31,10 @@ export default function EmployeesTab() {
       queryClient.invalidateQueries({ queryKey: ['employees'] });
       handleCloseModal();
     },
-    onError: (error: any) => message.error(error.response?.data?.message || 'Failed to create employee'),
+    onError: (error: any) => {
+      const msg = error.response?.data?.message || 'Failed to create employee';
+      message.error(typeof msg === 'string' ? msg : msg.join(', '));
+    },
   });
 
   const updateMutation = useMutation({
@@ -34,7 +44,10 @@ export default function EmployeesTab() {
       queryClient.invalidateQueries({ queryKey: ['employees'] });
       handleCloseModal();
     },
-    onError: (error: any) => message.error(error.response?.data?.message || 'Failed to update employee'),
+    onError: (error: any) => {
+      const msg = error.response?.data?.message || 'Failed to update employee';
+      message.error(typeof msg === 'string' ? msg : msg.join(', '));
+    },
   });
 
   const deleteMutation = useMutation({
@@ -43,7 +56,24 @@ export default function EmployeesTab() {
       message.success('Employee deleted successfully');
       queryClient.invalidateQueries({ queryKey: ['employees'] });
     },
-    onError: (error: any) => message.error(error.response?.data?.message || 'Failed to delete employee'),
+    onError: (error: any) => {
+      const msg = error.response?.data?.message || 'Failed to delete employee';
+      message.error(typeof msg === 'string' ? msg : msg.join(', '));
+    },
+  });
+
+  const createSalaryMutation = useMutation({
+    mutationFn: (data: any) => hrApi.createSalaryStructure(data),
+    onSuccess: () => {
+      message.success('Salary structure saved');
+      queryClient.invalidateQueries({ queryKey: ['salaryStructures'] });
+      setIsSalaryModalOpen(false);
+      salaryForm.resetFields();
+    },
+    onError: (error: any) => {
+      const msg = error.response?.data?.message || 'Failed to save salary';
+      message.error(typeof msg === 'string' ? msg : msg.join(', '));
+    },
   });
 
   const handleOpenModal = (employee?: any) => {
@@ -60,9 +90,7 @@ export default function EmployeesTab() {
     } else {
       setEditingEmployee(null);
       setIsModalOpen(true);
-      setTimeout(() => {
-        form.resetFields();
-      }, 0);
+      setTimeout(() => form.resetFields(), 0);
     }
   };
 
@@ -80,7 +108,6 @@ export default function EmployeesTab() {
         date_of_birth: values.date_of_birth ? values.date_of_birth.format('YYYY-MM-DD') : null,
         hire_date: values.hire_date ? values.hire_date.format('YYYY-MM-DD') : null,
       };
-
       if (editingEmployee) {
         updateMutation.mutate({ id: editingEmployee.id, values: formattedValues });
       } else {
@@ -91,21 +118,17 @@ export default function EmployeesTab() {
     }
   };
 
-  const handleSearch = (value: string) => {
-    setSearchQuery(value);
-  };
-
-  const employees = Array.isArray(data) ? data : (data?.data || []);
+  const employees: any[] = Array.isArray(data) ? data : (data?.data || []);
+  const salaryList: any[] = Array.isArray(salaryData) ? salaryData : (salaryData?.data || []);
 
   const filteredData = searchQuery
     ? employees.filter((emp: any) =>
         `${emp.first_name} ${emp.last_name} ${emp.email} ${emp.employee_code}`
-          .toLowerCase()
-          .includes(searchQuery.toLowerCase())
+          .toLowerCase().includes(searchQuery.toLowerCase())
       )
     : employees;
 
-  const columns = [
+  const employeeColumns = [
     { title: 'Code', dataIndex: 'employee_code', key: 'employee_code', width: 100 },
     {
       title: 'Name',
@@ -132,14 +155,10 @@ export default function EmployeesTab() {
       width: 120,
       render: (_: any, record: any) => (
         <Space>
-          <Button
-            type="link"
-            icon={<EditOutlined />}
-            onClick={() => handleOpenModal(record)}
-          />
+          <Button type="link" icon={<EditOutlined />} onClick={() => handleOpenModal(record)} />
           <Popconfirm
             title="Delete employee"
-            description="Are you sure you want to delete this employee?"
+            description="Are you sure?"
             onConfirm={() => deleteMutation.mutate(record.id)}
             okText="Yes"
             cancelText="No"
@@ -151,32 +170,111 @@ export default function EmployeesTab() {
     },
   ];
 
+  const salaryColumns = [
+    {
+      title: 'Employee',
+      key: 'employee',
+      render: (_: any, record: any) =>
+        record.employee ? `${record.employee.first_name} ${record.employee.last_name} (${record.employee.employee_code})` : '-',
+    },
+    {
+      title: 'Basic Salary',
+      dataIndex: 'basic_salary',
+      key: 'basic_salary',
+      render: (v: number) => `$${Number(v).toFixed(2)}`,
+    },
+    {
+      title: 'Gross Salary',
+      dataIndex: 'gross_salary',
+      key: 'gross_salary',
+      render: (v: number) => `$${Number(v).toFixed(2)}`,
+    },
+    {
+      title: 'Deductions',
+      dataIndex: 'total_deductions',
+      key: 'total_deductions',
+      render: (v: number) => `$${Number(v).toFixed(2)}`,
+    },
+    {
+      title: 'Net Salary',
+      dataIndex: 'net_salary',
+      key: 'net_salary',
+      render: (v: number) => <span className="font-semibold">${Number(v).toFixed(2)}</span>,
+    },
+    {
+      title: 'Effective From',
+      dataIndex: 'effective_from',
+      key: 'effective_from',
+      render: (d: string) => d ? dayjs(d).format('MMM DD, YYYY') : '-',
+    },
+    {
+      title: 'Status',
+      dataIndex: 'is_active',
+      key: 'is_active',
+      render: (v: boolean) => <Tag color={v ? 'green' : 'red'}>{v ? 'Active' : 'Inactive'}</Tag>,
+    },
+  ];
+
+  const tabItems = [
+    {
+      key: 'list',
+      label: 'Employee List',
+      children: (
+        <>
+          <div className="mb-4 flex justify-between">
+            <Space>
+              <Input.Search
+                placeholder="Search employees..."
+                allowClear
+                onSearch={setSearchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{ width: 250 }}
+                prefix={<SearchOutlined />}
+              />
+            </Space>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => handleOpenModal()}>
+              Add Employee
+            </Button>
+          </div>
+          <Table
+            columns={employeeColumns}
+            dataSource={filteredData}
+            loading={isLoading}
+            rowKey="id"
+            pagination={{ pageSize: 10 }}
+          />
+        </>
+      ),
+    },
+    {
+      key: 'salaries',
+      label: 'Salary Structures',
+      children: (
+        <>
+          <div className="mb-4 flex justify-end">
+            <Button type="primary" icon={<DollarOutlined />} onClick={() => setIsSalaryModalOpen(true)}>
+              Setup Salary
+            </Button>
+          </div>
+          <Table
+            columns={salaryColumns}
+            dataSource={salaryList}
+            loading={salaryLoading}
+            rowKey="id"
+            pagination={{ pageSize: 10 }}
+          />
+        </>
+      ),
+    },
+  ];
+
   return (
     <div>
       <div className="mb-4 flex justify-between">
         <h2 className="text-xl font-semibold">Employees</h2>
-        <Space>
-          <Input.Search
-            placeholder="Search employees..."
-            allowClear
-            onSearch={handleSearch}
-            onChange={(e) => handleSearch(e.target.value)}
-            style={{ width: 250 }}
-            prefix={<SearchOutlined />}
-          />
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => handleOpenModal()}>
-            Add Employee
-          </Button>
-        </Space>
       </div>
 
-      <Table
-        columns={columns}
-        dataSource={filteredData || []}
-        loading={isLoading}
-        rowKey="id"
-        pagination={{ pageSize: 10 }}
-      />
+      <Tabs items={tabItems} />
 
       <Modal
         title={editingEmployee ? 'Edit Employee' : 'Add Employee'}
@@ -188,58 +286,29 @@ export default function EmployeesTab() {
         forceRender
       >
         <Form form={form} layout="vertical">
-          <Form.Item
-            name="employee_code"
-            label="Employee Code"
-            rules={[{ required: true, message: 'Please enter employee code' }]}
-          >
+          <Form.Item name="employee_code" label="Employee Code" rules={[{ required: true }]}>
             <Input placeholder="EMP001" />
           </Form.Item>
-
           <div className="grid grid-cols-2 gap-4">
-            <Form.Item
-              name="first_name"
-              label="First Name"
-              rules={[{ required: true, message: 'Please enter first name' }]}
-            >
+            <Form.Item name="first_name" label="First Name" rules={[{ required: true }]}>
               <Input />
             </Form.Item>
-
-            <Form.Item
-              name="last_name"
-              label="Last Name"
-              rules={[{ required: true, message: 'Please enter last name' }]}
-            >
+            <Form.Item name="last_name" label="Last Name" rules={[{ required: true }]}>
               <Input />
             </Form.Item>
           </div>
-
-          <Form.Item
-            name="email"
-            label="Email"
-            rules={[
-              { required: true, message: 'Please enter email' },
-              { type: 'email', message: 'Please enter valid email' },
-            ]}
-          >
+          <Form.Item name="email" label="Email" rules={[{ required: true }, { type: 'email' }]}>
             <Input />
           </Form.Item>
-
           <div className="grid grid-cols-2 gap-4">
             <Form.Item name="phone" label="Phone Number">
               <Input />
             </Form.Item>
-
             <Form.Item name="date_of_birth" label="Date of Birth">
               <DatePicker style={{ width: '100%' }} />
             </Form.Item>
           </div>
-
-          <Form.Item
-            name="department"
-            label="Department"
-            rules={[{ required: true, message: 'Please select department' }]}
-          >
+          <Form.Item name="department" label="Department" rules={[{ required: true }]}>
             <Select>
               <Select.Option value="IT">IT</Select.Option>
               <Select.Option value="HR">HR</Select.Option>
@@ -249,21 +318,14 @@ export default function EmployeesTab() {
               <Select.Option value="Operations">Operations</Select.Option>
             </Select>
           </Form.Item>
-
           <div className="grid grid-cols-2 gap-4">
-            <Form.Item
-              name="position"
-              label="Position"
-              rules={[{ required: true, message: 'Please enter position' }]}
-            >
+            <Form.Item name="position" label="Position" rules={[{ required: true }]}>
               <Input />
             </Form.Item>
-
             <Form.Item name="hire_date" label="Hire Date">
               <DatePicker style={{ width: '100%' }} />
             </Form.Item>
           </div>
-
           <div className="grid grid-cols-2 gap-4">
             <Form.Item name="employment_type" label="Employment Type">
               <Select>
@@ -273,7 +335,6 @@ export default function EmployeesTab() {
                 <Select.Option value="intern">Intern</Select.Option>
               </Select>
             </Form.Item>
-
             <Form.Item name="status" label="Status">
               <Select>
                 <Select.Option value="active">Active</Select.Option>
@@ -283,12 +344,46 @@ export default function EmployeesTab() {
               </Select>
             </Form.Item>
           </div>
-
           <Form.Item name="address" label="Address">
             <Input.TextArea rows={2} />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title="Setup Employee Salary"
+        open={isSalaryModalOpen}
+        onOk={async () => {
+          const values = await salaryForm.validateFields();
+          createSalaryMutation.mutate({
+            employee_id: values.employee_id,
+            basic_salary: values.basic_salary,
+            effective_from: dayjs().format('YYYY-MM-DD'),
+          });
+        }}
+        onCancel={() => { setIsSalaryModalOpen(false); salaryForm.resetFields(); }}
+        confirmLoading={createSalaryMutation.isPending}
+      >
+        <Form form={salaryForm} layout="vertical">
+          <Form.Item name="employee_id" label="Employee" rules={[{ required: true }]}>
+            <Select
+              showSearch
+              placeholder="Select employee"
+              filterOption={(input, option) =>
+                String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+              }
+              options={employees.map((e: any) => ({
+                value: e.id,
+                label: `${e.first_name} ${e.last_name} (${e.employee_code})`,
+              }))}
+            />
+          </Form.Item>
+          <Form.Item name="basic_salary" label="Basic Salary" rules={[{ required: true }]}>
+            <InputNumber className="w-full" min={0} precision={2} prefix="$" />
           </Form.Item>
         </Form>
       </Modal>
     </div>
   );
 }
+
