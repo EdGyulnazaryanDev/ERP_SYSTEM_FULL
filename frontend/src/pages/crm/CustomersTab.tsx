@@ -92,13 +92,14 @@ export default function CustomersTab() {
     {
       title: 'Type', dataIndex: 'customer_type', key: 'customer_type', render: (type: string) => {
         if (!type) return null;
-        return <Tag color={type === 'B2B' ? 'blue' : 'cyan'}>{type}</Tag>
+        return <Tag color={type === 'business' ? 'blue' : 'cyan'}>{type}</Tag>
       }
     },
     {
       title: 'Status', dataIndex: 'status', key: 'status', render: (status: string) => {
         if (!status) return null;
-        return <Tag color={status === 'ACTIVE' ? 'green' : 'red'}>{status}</Tag>
+        const colors: Record<string, string> = { active: 'green', inactive: 'red', prospect: 'orange', blocked: 'volcano' };
+        return <Tag color={colors[status] || 'default'}>{status}</Tag>
       }
     },
     {
@@ -158,14 +159,16 @@ export default function CustomersTab() {
           </Form.Item>
           <Form.Item name="customer_type" label="Customer Type">
             <Select options={[
-              { value: 'B2B', label: 'B2B' },
-              { value: 'B2C', label: 'B2C' },
+              { value: 'individual', label: 'Individual' },
+              { value: 'business', label: 'Business' },
             ]} />
           </Form.Item>
           <Form.Item name="status" label="Status">
             <Select options={[
-              { value: 'ACTIVE', label: 'Active' },
-              { value: 'INACTIVE', label: 'Inactive' },
+              { value: 'active', label: 'Active' },
+              { value: 'inactive', label: 'Inactive' },
+              { value: 'prospect', label: 'Prospect' },
+              { value: 'blocked', label: 'Blocked' },
             ]} />
           </Form.Item>
           <Form.Item name="industry" label="Industry">
