@@ -11,6 +11,8 @@ import { ProjectBudgetEntity } from './entities/project-budget.entity';
 import type { CreateProjectDto, UpdateProjectDto } from './dto/create-project.dto';
 import type { CreateTaskDto, UpdateTaskDto } from './dto/create-task.dto';
 import type { CreateTimesheetDto, UpdateTimesheetDto, ApproveTimesheetDto, RejectTimesheetDto } from './dto/create-timesheet.dto';
+import type { CreateMilestoneDto, UpdateMilestoneDto } from './dto/create-milestone.dto';
+import type { CreateResourceDto, UpdateResourceDto } from './dto/create-resource.dto';
 
 @Injectable()
 export class ProjectManagementService {
@@ -31,7 +33,8 @@ export class ProjectManagementService {
     private projectBudgetRepository: Repository<ProjectBudgetEntity>,
   ) {}
 
-  // Project Management
+  // ─── Projects ────────────────────────────────────────────────────────────────
+
   async findAllProjects(tenantId: string): Promise<ProjectEntity[]> {
     return this.projectRepository.find({
       where: { tenant_id: tenantId },
@@ -45,28 +48,18 @@ export class ProjectManagementService {
       where: { id, tenant_id: tenantId },
       relations: ['tasks', 'milestones', 'resources'],
     });
-
-    if (!project) {
-      throw new NotFoundException(`Project with ID ${id} not found`);
-    }
-
+    if (!project) throw new NotFoundException(`Project with ID ${id} not found`);
     return project;
   }
 
   async createProject(data: CreateProjectDto, tenantId: string): Promise<ProjectEntity> {
-    const project = this.projectRepository.create({
-      ...data,
-      tenant_id: tenantId,
-    });
-
+    const project = this.projectRepository.create({ ...data, tenant_id: tenantId });
     return this.projectRepository.save(project);
   }
 
   async updateProject(id: string, data: UpdateProjectDto, tenantId: string): Promise<ProjectEntity> {
     const project = await this.findOneProject(id, tenantId);
-
     Object.assign(project, data);
-
     return this.projectRepository.save(project);
   }
 
@@ -82,11 +75,14 @@ export class ProjectManagementService {
     });
   }
 
-  // Task Management
-  async findAllTasks(projectId: string, tenantId: string): Promise<TaskEntity[]> {
+  // ─── Tasks ───────────────────────────────────────────────────────────────────
+
+  async findAllTasks(tenantId: string, projectId?: string): Promise<TaskEntity[]> {
+    const where: any = { tenant_id: tenantId };
+    if (projectId) where.project_id = projectId;
     return this.taskRepository.find({
-      where: { project_id: projectId, tenant_id: tenantId },
-      relations: ['dependencies'],
+      where,
+      relations: ['dependencies', 'project'],
       order: { created_at: 'DESC' },
     });
   }
@@ -96,28 +92,18 @@ export class ProjectManagementService {
       where: { id, tenant_id: tenantId },
       relations: ['project', 'dependencies', 'parent_task'],
     });
-
-    if (!task) {
-      throw new NotFoundException(`Task with ID ${id} not found`);
-    }
-
+    if (!task) throw new NotFoundException(`Task with ID ${id} not found`);
     return task;
   }
 
   async createTask(data: CreateTaskDto, tenantId: string): Promise<TaskEntity> {
-    const task = this.taskRepository.create({
-      ...data,
-      tenant_id: tenantId,
-    });
-
+    const task = this.taskRepository.create({ ...data, tenant_id: tenantId });
     return this.taskRepository.save(task);
   }
 
   async updateTask(id: string, data: UpdateTaskDto, tenantId: string): Promise<TaskEntity> {
     const task = await this.findOneTask(id, tenantId);
-
     Object.assign(task, data);
-
     return this.taskRepository.save(task);
   }
 
@@ -134,13 +120,85 @@ export class ProjectManagementService {
     });
   }
 
-  // Timesheet Management
+  // ─── Milestones ──────────────────────────────────────────────────────────────
+
+  async findAllMilestones(tenantId: string, projectId?: string): Promise<MilestoneEntity[]> {
+    const where: any = { tenant_id: tenantId };
+    if (projectId) where.project_id = projectId;
+    return this.milestoneRepository.find({
+      where,
+      relations: ['project'],
+      order: { due_date: 'ASC' },
+    });
+  }
+
+  async findOneMilestone(id: string, tenantId: string): Promise<MilestoneEntity> {
+    const milestone = await this.milestoneRepository.findOne({
+      where: { id, tenant_id: tenantId },
+      relations: ['project'],
+    });
+    if (!milestone) throw new NotFoundException(`Milestone with ID ${id} not found`);
+    return milestone;
+  }
+
+  async createMilestone(data: CreateMilestoneDto, tenantId: string): Promise<MilestoneEntity> {
+    const milestone = this.milestoneRepository.create({ ...data, tenant_id: tenantId });
+    return this.milestoneRepository.save(milestone);
+  }
+
+  async updateMilestone(id: string, data: UpdateMilestoneDto, tenantId: string): Promise<MilestoneEntity> {
+    const milestone = await this.findOneMilestone(id, tenantId);
+    Object.assign(milestone, data);
+    return this.milestoneRepository.save(milestone);
+  }
+
+  async deleteMilestone(id: string, tenantId: string): Promise<void> {
+    const milestone = await this.findOneMilestone(id, tenantId);
+    await this.milestoneRepository.remove(milestone);
+  }
+
+  // ─── Resources ───────────────────────────────────────────────────────────────
+
+  async findAllResources(tenantId: string, projectId?: string): Promise<ProjectResourceEntity[]> {
+    const where: any = { tenant_id: tenantId };
+    if (projectId) where.project_id = projectId;
+    return this.projectResourceRepository.find({
+      where,
+      relations: ['project'],
+      order: { created_at: 'DESC' },
+    });
+  }
+
+  async findOneResource(id: string, tenantId: string): Promise<ProjectResourceEntity> {
+    const resource = await this.projectResourceRepository.findOne({
+      where: { id, tenant_id: tenantId },
+      relations: ['project'],
+    });
+    if (!resource) throw new NotFoundException(`Resource with ID ${id} not found`);
+    return resource;
+  }
+
+  async createResource(data: CreateResourceDto, tenantId: string): Promise<ProjectResourceEntity> {
+    const resource = this.projectResourceRepository.create({ ...data, tenant_id: tenantId });
+    return this.projectResourceRepository.save(resource);
+  }
+
+  async updateResource(id: string, data: UpdateResourceDto, tenantId: string): Promise<ProjectResourceEntity> {
+    const resource = await this.findOneResource(id, tenantId);
+    Object.assign(resource, data);
+    return this.projectResourceRepository.save(resource);
+  }
+
+  async deleteResource(id: string, tenantId: string): Promise<void> {
+    const resource = await this.findOneResource(id, tenantId);
+    await this.projectResourceRepository.remove(resource);
+  }
+
+  // ─── Timesheets ──────────────────────────────────────────────────────────────
+
   async findAllTimesheets(tenantId: string, employeeId?: string): Promise<TimesheetEntity[]> {
     const where: any = { tenant_id: tenantId };
-    if (employeeId) {
-      where.employee_id = employeeId;
-    }
-
+    if (employeeId) where.employee_id = employeeId;
     return this.timesheetRepository.find({
       where,
       relations: ['entries'],
@@ -153,11 +211,7 @@ export class ProjectManagementService {
       where: { id, tenant_id: tenantId },
       relations: ['entries'],
     });
-
-    if (!timesheet) {
-      throw new NotFoundException(`Timesheet with ID ${id} not found`);
-    }
-
+    if (!timesheet) throw new NotFoundException(`Timesheet with ID ${id} not found`);
     return timesheet;
   }
 
@@ -172,7 +226,6 @@ export class ProjectManagementService {
 
     const savedTimesheet = await this.timesheetRepository.save(timesheet);
 
-    // Create entries
     const entries = data.entries.map((entry) =>
       this.timesheetEntryRepository.create({
         ...entry,
@@ -183,7 +236,6 @@ export class ProjectManagementService {
 
     await this.timesheetEntryRepository.save(entries);
 
-    // Calculate total hours
     const totalHours = entries.reduce((sum, entry) => sum + Number(entry.hours), 0);
     savedTimesheet.total_hours = totalHours;
     await this.timesheetRepository.save(savedTimesheet);
@@ -198,28 +250,18 @@ export class ProjectManagementService {
       throw new Error('Only draft timesheets can be updated');
     }
 
-    if (data.notes) {
-      timesheet.notes = data.notes;
-    }
+    if (data.notes) timesheet.notes = data.notes;
 
     if (data.entries) {
-      // Delete existing entries
       await this.timesheetEntryRepository.delete({ timesheet_id: id, tenant_id: tenantId });
 
-      // Create new entries
       const entries = data.entries.map((entry) =>
-        this.timesheetEntryRepository.create({
-          ...entry,
-          timesheet_id: id,
-          tenant_id: tenantId,
-        }),
+        this.timesheetEntryRepository.create({ ...entry, timesheet_id: id, tenant_id: tenantId }),
       );
 
       await this.timesheetEntryRepository.save(entries);
 
-      // Recalculate total hours
-      const totalHours = entries.reduce((sum, entry) => sum + Number(entry.hours), 0);
-      timesheet.total_hours = totalHours;
+      timesheet.total_hours = entries.reduce((sum, entry) => sum + Number(entry.hours), 0);
     }
 
     return this.timesheetRepository.save(timesheet);
@@ -227,59 +269,30 @@ export class ProjectManagementService {
 
   async submitTimesheet(id: string, tenantId: string): Promise<TimesheetEntity> {
     const timesheet = await this.findOneTimesheet(id, tenantId);
-
-    if (timesheet.status !== TimesheetStatus.DRAFT) {
-      throw new Error('Only draft timesheets can be submitted');
-    }
-
+    if (timesheet.status !== TimesheetStatus.DRAFT) throw new Error('Only draft timesheets can be submitted');
     timesheet.status = TimesheetStatus.SUBMITTED;
     return this.timesheetRepository.save(timesheet);
   }
 
   async approveTimesheet(id: string, data: ApproveTimesheetDto, tenantId: string): Promise<TimesheetEntity> {
     const timesheet = await this.findOneTimesheet(id, tenantId);
-
-    if (timesheet.status !== TimesheetStatus.SUBMITTED) {
-      throw new Error('Only submitted timesheets can be approved');
-    }
-
+    if (timesheet.status !== TimesheetStatus.SUBMITTED) throw new Error('Only submitted timesheets can be approved');
     timesheet.status = TimesheetStatus.APPROVED;
     timesheet.approved_by = data.approved_by;
     timesheet.approved_at = new Date();
-
     return this.timesheetRepository.save(timesheet);
   }
 
   async rejectTimesheet(id: string, data: RejectTimesheetDto, tenantId: string): Promise<TimesheetEntity> {
     const timesheet = await this.findOneTimesheet(id, tenantId);
-
-    if (timesheet.status !== TimesheetStatus.SUBMITTED) {
-      throw new Error('Only submitted timesheets can be rejected');
-    }
-
+    if (timesheet.status !== TimesheetStatus.SUBMITTED) throw new Error('Only submitted timesheets can be rejected');
     timesheet.status = TimesheetStatus.REJECTED;
     timesheet.rejection_reason = data.rejection_reason;
-
     return this.timesheetRepository.save(timesheet);
   }
 
-  // Project Resources
-  async getProjectResources(projectId: string, tenantId: string): Promise<ProjectResourceEntity[]> {
-    return this.projectResourceRepository.find({
-      where: { project_id: projectId, tenant_id: tenantId },
-      order: { created_at: 'DESC' },
-    });
-  }
+  // ─── Gantt / Budget ──────────────────────────────────────────────────────────
 
-  // Project Budget
-  async getProjectBudget(projectId: string, tenantId: string): Promise<ProjectBudgetEntity[]> {
-    return this.projectBudgetRepository.find({
-      where: { project_id: projectId, tenant_id: tenantId },
-      order: { category: 'ASC' },
-    });
-  }
-
-  // Gantt Chart Data
   async getGanttChartData(projectId: string, tenantId: string): Promise<any> {
     const tasks = await this.taskRepository.find({
       where: { project_id: projectId, tenant_id: tenantId },
@@ -296,5 +309,12 @@ export class ProjectManagementService {
       dependencies: task.dependencies.map((dep) => dep.depends_on_task_id),
       assignee: task.assigned_to,
     }));
+  }
+
+  async getProjectBudget(projectId: string, tenantId: string): Promise<ProjectBudgetEntity[]> {
+    return this.projectBudgetRepository.find({
+      where: { project_id: projectId, tenant_id: tenantId },
+      order: { category: 'ASC' },
+    });
   }
 }
