@@ -32,7 +32,10 @@ export class WarehouseService {
     return { data };
   }
 
-  async findOneWarehouse(id: string, tenantId: string): Promise<WarehouseEntity> {
+  async findOneWarehouse(
+    id: string,
+    tenantId: string,
+  ): Promise<WarehouseEntity> {
     const warehouse = await this.warehouseRepo.findOne({
       where: { id, tenant_id: tenantId },
     });
@@ -40,7 +43,10 @@ export class WarehouseService {
     return warehouse;
   }
 
-  async createWarehouse(payload: Partial<WarehouseEntity>, tenantId: string) {
+  async createWarehouse(
+    payload: Partial<WarehouseEntity>,
+    tenantId: string,
+  ) {
     if (!payload.warehouse_code?.trim())
       throw new BadRequestException('warehouse_code is required');
     if (!payload.warehouse_name?.trim())
@@ -53,7 +59,7 @@ export class WarehouseService {
       where: { warehouse_code: code, tenant_id: tenantId },
     });
     if (existing)
-      throw new ConflictException('Warehouse code already exists');
+      throw new ConflictException(`Warehouse code "${code}" already exists`);
 
     const warehouse = this.warehouseRepo.create({
       ...payload,
@@ -64,15 +70,22 @@ export class WarehouseService {
     return this.warehouseRepo.save(warehouse);
   }
 
-  async updateWarehouse(id: string, payload: Partial<WarehouseEntity>, tenantId: string) {
+  async updateWarehouse(
+    id: string,
+    payload: Partial<WarehouseEntity>,
+    tenantId: string,
+  ) {
     const warehouse = await this.findOneWarehouse(id, tenantId);
-    if (payload.warehouse_code && payload.warehouse_code !== warehouse.warehouse_code) {
+    if (
+      payload.warehouse_code &&
+      payload.warehouse_code !== warehouse.warehouse_code
+    ) {
       const code = payload.warehouse_code.trim().toUpperCase();
       const conflict = await this.warehouseRepo.findOne({
         where: { warehouse_code: code, tenant_id: tenantId },
       });
       if (conflict)
-        throw new ConflictException('Warehouse code already exists');
+        throw new ConflictException(`Warehouse code "${code}" already exists`);
       payload.warehouse_code = code;
     }
     Object.assign(warehouse, payload);
@@ -85,7 +98,9 @@ export class WarehouseService {
       where: { warehouse_id: id, tenant_id: tenantId },
     });
     if (binCount > 0)
-      throw new BadRequestException('Cannot delete warehouse that has bins. Remove bins first.');
+      throw new BadRequestException(
+        `Cannot delete warehouse with ${binCount} bin(s). Remove bins first.`,
+      );
     await this.warehouseRepo.remove(warehouse);
     return { message: 'Warehouse deleted successfully' };
   }
@@ -93,6 +108,7 @@ export class WarehouseService {
   async findAllBins(tenantId: string, warehouseId?: string) {
     const where: Record<string, string> = { tenant_id: tenantId };
     if (warehouseId) where.warehouse_id = warehouseId;
+
     const data = await this.binRepo.find({
       where,
       relations: ['warehouse'],
@@ -117,7 +133,9 @@ export class WarehouseService {
   }
 
   async findOneBin(id: string, tenantId: string): Promise<BinEntity> {
-    const bin = await this.binRepo.findOne({ where: { id, tenant_id: tenantId } });
+    const bin = await this.binRepo.findOne({
+      where: { id, tenant_id: tenantId },
+    });
     if (!bin) throw new NotFoundException('Bin not found');
     return bin;
   }
@@ -127,12 +145,21 @@ export class WarehouseService {
     const binCode = payload.bin_code?.trim();
     if (!warehouseId) throw new BadRequestException('warehouse_id is required');
     if (!binCode) throw new BadRequestException('bin_code is required');
+
     await this.findOneWarehouse(warehouseId, tenantId);
+
     const existing = await this.binRepo.findOne({
-      where: { warehouse_id: warehouseId, bin_code: binCode, tenant_id: tenantId },
+      where: {
+        warehouse_id: warehouseId,
+        bin_code: binCode,
+        tenant_id: tenantId,
+      },
     });
     if (existing)
-      throw new ConflictException('Bin code already exists in this warehouse');
+      throw new ConflictException(
+        `Bin code "${binCode}" already exists in this warehouse`,
+      );
+
     const bin = this.binRepo.create({
       ...payload,
       bin_code: binCode.toUpperCase(),
@@ -141,7 +168,11 @@ export class WarehouseService {
     return this.binRepo.save(bin);
   }
 
-  async updateBin(id: string, payload: Partial<BinEntity>, tenantId: string) {
+  async updateBin(
+    id: string,
+    payload: Partial<BinEntity>,
+    tenantId: string,
+  ) {
     const bin = await this.findOneBin(id, tenantId);
     Object.assign(bin, payload);
     return this.binRepo.save(bin);
@@ -163,13 +194,21 @@ export class WarehouseService {
     return { data };
   }
 
-  async findOneMovement(id: string, tenantId: string): Promise<StockMovementEntity> {
-    const movement = await this.movementRepo.findOne({ where: { id, tenant_id: tenantId } });
+  async findOneMovement(
+    id: string,
+    tenantId: string,
+  ): Promise<StockMovementEntity> {
+    const movement = await this.movementRepo.findOne({
+      where: { id, tenant_id: tenantId },
+    });
     if (!movement) throw new NotFoundException('Stock movement not found');
     return movement;
   }
 
-  async createMovement(payload: Partial<StockMovementEntity>, tenantId: string) {
+  async createMovement(
+    payload: Partial<StockMovementEntity>,
+    tenantId: string,
+  ) {
     if (!payload.movement_type)
       throw new BadRequestException('movement_type is required');
     const qty = Number(payload.quantity);
@@ -177,6 +216,7 @@ export class WarehouseService {
       throw new BadRequestException('quantity must be a positive number');
     if (!payload.movement_date)
       throw new BadRequestException('movement_date is required');
+
     const movement_number = await this.generateMovementNumber(tenantId);
     const movement = this.movementRepo.create({
       ...payload,
@@ -187,7 +227,11 @@ export class WarehouseService {
     return this.movementRepo.save(movement);
   }
 
-  async updateMovement(id: string, payload: Partial<StockMovementEntity>, tenantId: string) {
+  async updateMovement(
+    id: string,
+    payload: Partial<StockMovementEntity>,
+    tenantId: string,
+  ) {
     const movement = await this.findOneMovement(id, tenantId);
     if (payload.quantity !== undefined) {
       const qty = Number(payload.quantity);
@@ -207,18 +251,20 @@ export class WarehouseService {
 
   private async generateMovementNumber(tenantId: string): Promise<string> {
     const date = new Date();
-    const prefix = 'MOV-' + date.getFullYear() + String(date.getMonth() + 1).padStart(2, '0');
+    const prefix = `MOV-${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}`;
+
     const result = await this.movementRepo
       .createQueryBuilder('m')
       .select('MAX(m.movement_number)', 'max')
       .where('m.tenant_id = :tenantId', { tenantId })
-      .andWhere('m.movement_number LIKE :prefix', { prefix: prefix + '-%' })
+      .andWhere('m.movement_number LIKE :prefix', { prefix: `${prefix}-%` })
       .getRawOne<{ max: string | null }>();
+
     let seq = 1;
     if (result?.max) {
       const parts = result.max.split('-');
       seq = parseInt(parts[parts.length - 1], 10) + 1;
     }
-    return prefix + '-' + String(seq).padStart(5, '0');
+    return `${prefix}-${String(seq).padStart(5, '0')}`;
   }
 }
