@@ -6,34 +6,44 @@ import { ProjectManagementService } from './project-management.service';
 import { CreateProjectDto, UpdateProjectDto } from './dto/create-project.dto';
 import { CreateTaskDto, UpdateTaskDto } from './dto/create-task.dto';
 import { CreateTimesheetDto, UpdateTimesheetDto, ApproveTimesheetDto, RejectTimesheetDto } from './dto/create-timesheet.dto';
+import { CreateMilestoneDto, UpdateMilestoneDto } from './dto/create-milestone.dto';
+import { CreateResourceDto, UpdateResourceDto } from './dto/create-resource.dto';
 
 @Controller('project-management')
 @UseGuards(JwtAuthGuard)
 export class ProjectManagementController {
-  constructor(private readonly projectManagementService: ProjectManagementService) { }
+  constructor(private readonly projectManagementService: ProjectManagementService) {}
 
-  // Projects
+  // ─── Projects ────────────────────────────────────────────────────────────────
+
   @Get('projects')
   @RequirePermission('project', 'read')
-  async findAllProjects(@CurrentTenant() tenantId: string) {
+  findAllProjects(@CurrentTenant() tenantId: string) {
     return this.projectManagementService.findAllProjects(tenantId);
+  }
+
+  // NOTE: specific sub-routes must come BEFORE /:id to avoid route conflicts
+  @Get('projects/manager/:managerId')
+  @RequirePermission('project', 'read')
+  getProjectsByManager(@Param('managerId') managerId: string, @CurrentTenant() tenantId: string) {
+    return this.projectManagementService.getProjectsByManager(managerId, tenantId);
   }
 
   @Get('projects/:id')
   @RequirePermission('project', 'read')
-  async findOneProject(@Param('id') id: string, @CurrentTenant() tenantId: string) {
+  findOneProject(@Param('id') id: string, @CurrentTenant() tenantId: string) {
     return this.projectManagementService.findOneProject(id, tenantId);
   }
 
   @Post('projects')
   @RequirePermission('project', 'create')
-  async createProject(@Body() data: CreateProjectDto, @CurrentTenant() tenantId: string) {
+  createProject(@Body() data: CreateProjectDto, @CurrentTenant() tenantId: string) {
     return this.projectManagementService.createProject(data, tenantId);
   }
 
   @Put('projects/:id')
   @RequirePermission('project', 'update')
-  async updateProject(@Param('id') id: string, @Body() data: UpdateProjectDto, @CurrentTenant() tenantId: string) {
+  updateProject(@Param('id') id: string, @Body() data: UpdateProjectDto, @CurrentTenant() tenantId: string) {
     return this.projectManagementService.updateProject(id, data, tenantId);
   }
 
@@ -44,52 +54,47 @@ export class ProjectManagementController {
     return { message: 'Project deleted successfully' };
   }
 
-  @Get('projects/manager/:managerId')
-  @RequirePermission('project', 'read')
-  async getProjectsByManager(@Param('managerId') managerId: string, @CurrentTenant() tenantId: string) {
-    return this.projectManagementService.getProjectsByManager(managerId, tenantId);
-  }
-
   @Get('projects/:projectId/gantt')
   @RequirePermission('project', 'read')
-  async getGanttChartData(@Param('projectId') projectId: string, @CurrentTenant() tenantId: string) {
+  getGanttChartData(@Param('projectId') projectId: string, @CurrentTenant() tenantId: string) {
     return this.projectManagementService.getGanttChartData(projectId, tenantId);
-  }
-
-  @Get('projects/:projectId/resources')
-  @RequirePermission('project', 'read')
-  async getProjectResources(@Param('projectId') projectId: string, @CurrentTenant() tenantId: string) {
-    return this.projectManagementService.getProjectResources(projectId, tenantId);
   }
 
   @Get('projects/:projectId/budget')
   @RequirePermission('project', 'read')
-  async getProjectBudget(@Param('projectId') projectId: string, @CurrentTenant() tenantId: string) {
+  getProjectBudget(@Param('projectId') projectId: string, @CurrentTenant() tenantId: string) {
     return this.projectManagementService.getProjectBudget(projectId, tenantId);
   }
 
-  // Tasks
-  @Get('projects/:projectId/tasks')
+  // ─── Tasks ───────────────────────────────────────────────────────────────────
+
+  @Get('tasks')
   @RequirePermission('task', 'read')
-  async findAllTasks(@Param('projectId') projectId: string, @CurrentTenant() tenantId: string) {
-    return this.projectManagementService.findAllTasks(projectId, tenantId);
+  findAllTasks(@CurrentTenant() tenantId: string, @Query('projectId') projectId?: string) {
+    return this.projectManagementService.findAllTasks(tenantId, projectId);
+  }
+
+  @Get('tasks/assignee/:assigneeId')
+  @RequirePermission('task', 'read')
+  getTasksByAssignee(@Param('assigneeId') assigneeId: string, @CurrentTenant() tenantId: string) {
+    return this.projectManagementService.getTasksByAssignee(assigneeId, tenantId);
   }
 
   @Get('tasks/:id')
   @RequirePermission('task', 'read')
-  async findOneTask(@Param('id') id: string, @CurrentTenant() tenantId: string) {
+  findOneTask(@Param('id') id: string, @CurrentTenant() tenantId: string) {
     return this.projectManagementService.findOneTask(id, tenantId);
   }
 
   @Post('tasks')
   @RequirePermission('task', 'create')
-  async createTask(@Body() data: CreateTaskDto, @CurrentTenant() tenantId: string) {
+  createTask(@Body() data: CreateTaskDto, @CurrentTenant() tenantId: string) {
     return this.projectManagementService.createTask(data, tenantId);
   }
 
   @Put('tasks/:id')
   @RequirePermission('task', 'update')
-  async updateTask(@Param('id') id: string, @Body() data: UpdateTaskDto, @CurrentTenant() tenantId: string) {
+  updateTask(@Param('id') id: string, @Body() data: UpdateTaskDto, @CurrentTenant() tenantId: string) {
     return this.projectManagementService.updateTask(id, data, tenantId);
   }
 
@@ -100,52 +105,113 @@ export class ProjectManagementController {
     return { message: 'Task deleted successfully' };
   }
 
-  @Get('tasks/assignee/:assigneeId')
-  @RequirePermission('task', 'read')
-  async getTasksByAssignee(@Param('assigneeId') assigneeId: string, @CurrentTenant() tenantId: string) {
-    return this.projectManagementService.getTasksByAssignee(assigneeId, tenantId);
+  // ─── Milestones ──────────────────────────────────────────────────────────────
+
+  @Get('milestones')
+  @RequirePermission('project', 'read')
+  findAllMilestones(@CurrentTenant() tenantId: string, @Query('projectId') projectId?: string) {
+    return this.projectManagementService.findAllMilestones(tenantId, projectId);
   }
 
-  // Timesheets
+  @Get('milestones/:id')
+  @RequirePermission('project', 'read')
+  findOneMilestone(@Param('id') id: string, @CurrentTenant() tenantId: string) {
+    return this.projectManagementService.findOneMilestone(id, tenantId);
+  }
+
+  @Post('milestones')
+  @RequirePermission('project', 'create')
+  createMilestone(@Body() data: CreateMilestoneDto, @CurrentTenant() tenantId: string) {
+    return this.projectManagementService.createMilestone(data, tenantId);
+  }
+
+  @Put('milestones/:id')
+  @RequirePermission('project', 'update')
+  updateMilestone(@Param('id') id: string, @Body() data: UpdateMilestoneDto, @CurrentTenant() tenantId: string) {
+    return this.projectManagementService.updateMilestone(id, data, tenantId);
+  }
+
+  @Delete('milestones/:id')
+  @RequirePermission('project', 'delete')
+  async deleteMilestone(@Param('id') id: string, @CurrentTenant() tenantId: string) {
+    await this.projectManagementService.deleteMilestone(id, tenantId);
+    return { message: 'Milestone deleted successfully' };
+  }
+
+  // ─── Resources ───────────────────────────────────────────────────────────────
+
+  @Get('resources')
+  @RequirePermission('project', 'read')
+  findAllResources(@CurrentTenant() tenantId: string, @Query('projectId') projectId?: string) {
+    return this.projectManagementService.findAllResources(tenantId, projectId);
+  }
+
+  @Get('resources/:id')
+  @RequirePermission('project', 'read')
+  findOneResource(@Param('id') id: string, @CurrentTenant() tenantId: string) {
+    return this.projectManagementService.findOneResource(id, tenantId);
+  }
+
+  @Post('resources')
+  @RequirePermission('project', 'create')
+  createResource(@Body() data: CreateResourceDto, @CurrentTenant() tenantId: string) {
+    return this.projectManagementService.createResource(data, tenantId);
+  }
+
+  @Put('resources/:id')
+  @RequirePermission('project', 'update')
+  updateResource(@Param('id') id: string, @Body() data: UpdateResourceDto, @CurrentTenant() tenantId: string) {
+    return this.projectManagementService.updateResource(id, data, tenantId);
+  }
+
+  @Delete('resources/:id')
+  @RequirePermission('project', 'delete')
+  async deleteResource(@Param('id') id: string, @CurrentTenant() tenantId: string) {
+    await this.projectManagementService.deleteResource(id, tenantId);
+    return { message: 'Resource deleted successfully' };
+  }
+
+  // ─── Timesheets ──────────────────────────────────────────────────────────────
+
   @Get('timesheets')
   @RequirePermission('timesheet', 'read')
-  async findAllTimesheets(@CurrentTenant() tenantId: string, @Query('employeeId') employeeId?: string) {
+  findAllTimesheets(@CurrentTenant() tenantId: string, @Query('employeeId') employeeId?: string) {
     return this.projectManagementService.findAllTimesheets(tenantId, employeeId);
   }
 
   @Get('timesheets/:id')
   @RequirePermission('timesheet', 'read')
-  async findOneTimesheet(@Param('id') id: string, @CurrentTenant() tenantId: string) {
+  findOneTimesheet(@Param('id') id: string, @CurrentTenant() tenantId: string) {
     return this.projectManagementService.findOneTimesheet(id, tenantId);
   }
 
   @Post('timesheets')
   @RequirePermission('timesheet', 'create')
-  async createTimesheet(@Body() data: CreateTimesheetDto, @CurrentTenant() tenantId: string) {
+  createTimesheet(@Body() data: CreateTimesheetDto, @CurrentTenant() tenantId: string) {
     return this.projectManagementService.createTimesheet(data, tenantId);
   }
 
   @Put('timesheets/:id')
   @RequirePermission('timesheet', 'update')
-  async updateTimesheet(@Param('id') id: string, @Body() data: UpdateTimesheetDto, @CurrentTenant() tenantId: string) {
+  updateTimesheet(@Param('id') id: string, @Body() data: UpdateTimesheetDto, @CurrentTenant() tenantId: string) {
     return this.projectManagementService.updateTimesheet(id, data, tenantId);
   }
 
   @Post('timesheets/:id/submit')
   @RequirePermission('timesheet', 'update')
-  async submitTimesheet(@Param('id') id: string, @CurrentTenant() tenantId: string) {
+  submitTimesheet(@Param('id') id: string, @CurrentTenant() tenantId: string) {
     return this.projectManagementService.submitTimesheet(id, tenantId);
   }
 
   @Post('timesheets/:id/approve')
   @RequirePermission('timesheet', 'approve')
-  async approveTimesheet(@Param('id') id: string, @Body() data: ApproveTimesheetDto, @CurrentTenant() tenantId: string) {
+  approveTimesheet(@Param('id') id: string, @Body() data: ApproveTimesheetDto, @CurrentTenant() tenantId: string) {
     return this.projectManagementService.approveTimesheet(id, data, tenantId);
   }
 
   @Post('timesheets/:id/reject')
   @RequirePermission('timesheet', 'approve')
-  async rejectTimesheet(@Param('id') id: string, @Body() data: RejectTimesheetDto, @CurrentTenant() tenantId: string) {
+  rejectTimesheet(@Param('id') id: string, @Body() data: RejectTimesheetDto, @CurrentTenant() tenantId: string) {
     return this.projectManagementService.rejectTimesheet(id, data, tenantId);
   }
 }

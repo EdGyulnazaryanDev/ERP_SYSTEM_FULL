@@ -33,7 +33,7 @@ export class ProjectEntity {
   @Column({ type: 'uuid' })
   tenant_id: string;
 
-  @Column({ type: 'varchar', length: 50, unique: true })
+  @Column({ type: 'varchar', length: 50, unique: true, nullable: true })
   project_code: string;
 
   @Column({ type: 'varchar', length: 255 })
