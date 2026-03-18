@@ -1,4 +1,15 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, ParseUUIDPipe } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  ParseUUIDPipe,
+} from '@nestjs/common';
 import { WarehouseService } from './warehouse.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentTenant } from '../../common/decorators/current-tenant.decorator';
@@ -25,7 +36,10 @@ export class WarehouseController {
   }
 
   @Post()
-  createWarehouse(@Body() body: Record<string, unknown>, @CurrentTenant() tenantId: string) {
+  createWarehouse(
+    @Body() body: Record<string, unknown>,
+    @CurrentTenant() tenantId: string,
+  ) {
     return this.warehouseService.createWarehouse(body as any, tenantId);
   }
 
@@ -57,7 +71,10 @@ export class WarehouseController {
   }
 
   @Post('bins')
-  createBin(@Body() body: Record<string, unknown>, @CurrentTenant() tenantId: string) {
+  createBin(
+    @Body() body: Record<string, unknown>,
+    @CurrentTenant() tenantId: string,
+  ) {
     return this.warehouseService.createBin(body as any, tenantId);
   }
 
@@ -89,7 +106,10 @@ export class WarehouseController {
   }
 
   @Post('movements')
-  createMovement(@Body() body: Record<string, unknown>, @CurrentTenant() tenantId: string) {
+  createMovement(
+    @Body() body: Record<string, unknown>,
+    @CurrentTenant() tenantId: string,
+  ) {
     return this.warehouseService.createMovement(body as any, tenantId);
   }
 
