@@ -43,10 +43,7 @@ export class WarehouseService {
     return warehouse;
   }
 
-  async createWarehouse(
-    payload: Partial<WarehouseEntity>,
-    tenantId: string,
-  ) {
+  async createWarehouse(payload: Partial<WarehouseEntity>, tenantId: string) {
     if (!payload.warehouse_code?.trim())
       throw new BadRequestException('warehouse_code is required');
     if (!payload.warehouse_name?.trim())
@@ -168,11 +165,7 @@ export class WarehouseService {
     return this.binRepo.save(bin);
   }
 
-  async updateBin(
-    id: string,
-    payload: Partial<BinEntity>,
-    tenantId: string,
-  ) {
+  async updateBin(id: string, payload: Partial<BinEntity>, tenantId: string) {
     const bin = await this.findOneBin(id, tenantId);
     Object.assign(bin, payload);
     return this.binRepo.save(bin);

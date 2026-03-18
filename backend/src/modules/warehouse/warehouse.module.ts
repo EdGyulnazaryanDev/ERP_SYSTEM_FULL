@@ -7,7 +7,9 @@ import { BinEntity } from './entities/bin.entity';
 import { StockMovementEntity } from './entities/stock-movement.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([WarehouseEntity, BinEntity, StockMovementEntity])],
+  imports: [
+    TypeOrmModule.forFeature([WarehouseEntity, BinEntity, StockMovementEntity]),
+  ],
   controllers: [WarehouseController],
   providers: [WarehouseService],
   exports: [WarehouseService],
