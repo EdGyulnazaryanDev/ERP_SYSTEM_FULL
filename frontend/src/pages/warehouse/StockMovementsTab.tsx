@@ -27,7 +27,7 @@ const MOVEMENT_TYPE_COLORS: Record<MovementType, string> = {
 
 const fetchMovements = (type?: MovementType) =>
   apiClient
-    .get<{ data: StockMovement[] }>('/warehouse/movements/all', { params: type ? { type } : {} })
+    .get<{ data: StockMovement[] }>('/warehouse/movements', { params: type ? { type } : {} })
     .then((r) => r.data.data);
 
 export default function StockMovementsTab() {
