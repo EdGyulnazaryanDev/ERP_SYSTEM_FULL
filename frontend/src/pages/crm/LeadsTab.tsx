@@ -1,4 +1,4 @@
-import { Table, Button, Tag, Space, Modal, Form, Input, Select, message, Popconfirm, DatePicker } from 'antd';
+import { Table, Button, Tag, Space, Modal, Form, Input, InputNumber, Select, message, Popconfirm, DatePicker } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, SwapOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { crmApi } from '@/api/crm';
@@ -97,6 +97,9 @@ export default function LeadsTab() {
     form.validateFields().then(values => {
       const payload = {
         ...values,
+        score: values.score ? Number(values.score) : undefined,
+        expected_revenue: values.expected_revenue ? Number(values.expected_revenue) : undefined,
+        probability: values.probability ? Number(values.probability) : undefined,
         next_follow_up: values.next_follow_up ? values.next_follow_up.toISOString() : undefined,
       };
 
@@ -119,9 +122,11 @@ export default function LeadsTab() {
       title: 'Status', dataIndex: 'status', key: 'status', render: (status: string) => {
         if (!status) return null;
         let color = 'blue';
-        if (status === 'WON') color = 'green';
-        if (status === 'LOST') color = 'red';
-        if (status === 'QUALIFIED') color = 'cyan';
+        if (status === 'won') color = 'green';
+        if (status === 'lost') color = 'red';
+        if (status === 'qualified') color = 'cyan';
+        if (status === 'proposal') color = 'orange';
+        if (status === 'negotiation') color = 'purple';
         return <Tag color={color}>{status}</Tag>;
       }
     },
@@ -131,7 +136,7 @@ export default function LeadsTab() {
       render: (_: any, record: any) => (
         <Space>
           <Button icon={<EditOutlined />} size="small" onClick={() => handleEdit(record)} />
-          {record.status !== 'WON' && (
+          {record.status !== 'won' && (
             <Popconfirm title="Convert to customer?" onConfirm={() => handleConvert(record.id)}>
               <Button icon={<SwapOutlined />} size="small" title="Convert to Customer" />
             </Popconfirm>
@@ -187,29 +192,34 @@ export default function LeadsTab() {
           </Form.Item>
           <Form.Item name="source" label="Source">
             <Select options={[
-              { value: 'WEBSITE', label: 'Website' },
-              { value: 'REFERRAL', label: 'Referral' },
-              { value: 'COLD_CALL', label: 'Cold Call' },
-              { value: 'CONFERENCE', label: 'Conference' },
-              { value: 'OTHER', label: 'Other' },
+              { value: 'website', label: 'Website' },
+              { value: 'referral', label: 'Referral' },
+              { value: 'cold_call', label: 'Cold Call' },
+              { value: 'trade_show', label: 'Trade Show' },
+              { value: 'campaign', label: 'Campaign' },
+              { value: 'social_media', label: 'Social Media' },
+              { value: 'other', label: 'Other' },
             ]} />
           </Form.Item>
           <Form.Item name="status" label="Status">
             <Select options={[
-              { value: 'NEW', label: 'New' },
-              { value: 'CONTACTED', label: 'Contacted' },
-              { value: 'QUALIFIED', label: 'Qualified' },
-              { value: 'LOST', label: 'Lost' },
+              { value: 'new', label: 'New' },
+              { value: 'contacted', label: 'Contacted' },
+              { value: 'qualified', label: 'Qualified' },
+              { value: 'proposal', label: 'Proposal' },
+              { value: 'negotiation', label: 'Negotiation' },
+              { value: 'won', label: 'Won' },
+              { value: 'lost', label: 'Lost' },
             ]} />
           </Form.Item>
           <Form.Item name="score" label="Score">
-            <Input type="number" />
+            <InputNumber className="w-full" min={0} max={100} />
           </Form.Item>
           <Form.Item name="expected_revenue" label="Expected Revenue">
-            <Input type="number" />
+            <InputNumber className="w-full" min={0} precision={2} />
           </Form.Item>
           <Form.Item name="probability" label="Probability (%)">
-            <Input type="number" max={100} min={0} />
+            <InputNumber className="w-full" min={0} max={100} />
           </Form.Item>
           <Form.Item name="next_follow_up" label="Next Follow Up">
             <DatePicker className="w-full" />

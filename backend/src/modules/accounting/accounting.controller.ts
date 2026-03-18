@@ -12,22 +12,22 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentTenant } from '../../common/decorators/current-tenant.decorator';
 import { AccountingService } from './accounting.service';
-import type {
+import {
   CreateChartOfAccountDto,
   UpdateChartOfAccountDto,
 } from './dto/create-chart-of-account.dto';
-import type {
+import {
   CreateJournalEntryDto,
   PostJournalEntryDto,
   ReverseJournalEntryDto,
 } from './dto/create-journal-entry.dto';
-import type {
+import {
   CreateAccountReceivableDto,
   CreateAccountPayableDto,
   RecordPaymentDto,
 } from './dto/create-ar-ap.dto';
-import type { CreatePaymentDto } from './dto/create-payment.dto';
-import type {
+import { CreatePaymentDto } from './dto/create-payment.dto';
+import {
   CreateBankAccountDto,
   UpdateBankAccountDto,
 } from './dto/create-bank-account.dto';
@@ -35,16 +35,21 @@ import type {
 @Controller('accounting')
 @UseGuards(JwtAuthGuard)
 export class AccountingController {
-  constructor(private readonly accountingService: AccountingService) {}
+  constructor(private readonly accountingService: AccountingService) { }
 
   // ==================== CHART OF ACCOUNTS ENDPOINTS ====================
 
   @Post('accounts')
-  createAccount(
+  async createAccount(
     @Body() data: CreateChartOfAccountDto,
     @CurrentTenant() tenantId: string,
   ) {
-    return this.accountingService.createAccount(data, tenantId);
+    try {
+      return await this.accountingService.createAccount(data, tenantId);
+    } catch (e) {
+      console.error("ACCOUNT CREATION ERROR:", e);
+      throw e;
+    }
   }
 
   @Get('accounts')

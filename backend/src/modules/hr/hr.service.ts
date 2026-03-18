@@ -138,15 +138,13 @@ export class HrService {
       },
     });
 
-    if (existing && existing.clock_in_time) {
-      throw new BadRequestException('Already clocked in today');
-    }
-
     const now = new Date();
     const clockInTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
 
     if (existing) {
       existing.clock_in_time = clockInTime;
+      existing.clock_out_time = null as any;
+      existing.work_hours = 0;
       existing.status = AttendanceStatus.PRESENT;
       return this.attendanceRepo.save(existing);
     }
@@ -172,12 +170,8 @@ export class HrService {
       },
     });
 
-    if (!attendance || !attendance.clock_in_time) {
+    if (!attendance) {
       throw new BadRequestException('No clock-in record found for today');
-    }
-
-    if (attendance.clock_out_time) {
-      throw new BadRequestException('Already clocked out today');
     }
 
     const now = new Date();
@@ -221,6 +215,17 @@ export class HrService {
     });
 
     return this.attendanceRepo.save(attendance);
+  }
+
+  async getTodayAttendance(tenantId: string): Promise<AttendanceEntity[]> {
+    const today = new Date().toISOString().split('T')[0];
+    return this.attendanceRepo.find({
+      where: {
+        date: new Date(today),
+        tenant_id: tenantId,
+      },
+      relations: ['employee'],
+    });
   }
 
   async getEmployeeAttendance(
@@ -321,6 +326,10 @@ export class HrService {
     await this.findOneEmployee(employeeId, tenantId);
 
     const currentYear = new Date().getFullYear();
+
+    // Auto-initialize balance if not exists
+    await this.initializeLeaveBalance(employeeId, currentYear, tenantId);
+
     const balance = await this.leaveBalanceRepo.findOne({
       where: {
         employee_id: employeeId,
@@ -466,6 +475,14 @@ export class HrService {
 
   // ==================== EMPLOYEE SALARY METHODS ====================
 
+  async getAllSalaryStructures(tenantId: string): Promise<EmployeeSalaryEntity[]> {
+    return this.employeeSalaryRepo.find({
+      where: { is_active: true, tenant_id: tenantId },
+      relations: ['employee'],
+      order: { created_at: 'DESC' },
+    });
+  }
+
   async createSalaryStructure(data: CreateEmployeeSalaryDto, tenantId: string): Promise<EmployeeSalaryEntity> {
     await this.findOneEmployee(data.employee_id, tenantId);
 
@@ -521,25 +538,32 @@ export class HrService {
 
   async generatePayslips(month: number, year: number, tenantId: string): Promise<PayslipEntity[]> {
     const employees = await this.findAllEmployees(tenantId);
-    const payslips: PayslipEntity[] = [];
 
     for (const employee of employees) {
       const existing = await this.payslipRepo.findOne({
         where: {
           employee_id: employee.id,
-          month,
-          year,
+          month: +month,
+          year: +year,
           tenant_id: tenantId,
         },
       });
 
       if (!existing) {
-        const payslip = await this.generatePayslip(employee.id, month, year, tenantId);
-        payslips.push(payslip);
+        try {
+          await this.generatePayslip(employee.id, +month, +year, tenantId);
+        } catch (e) {
+          // skip employees without salary structure
+        }
       }
     }
 
-    return payslips;
+    // Return all payslips for this period
+    return this.payslipRepo.find({
+      where: { month: +month, year: +year, tenant_id: tenantId },
+      relations: ['employee'],
+      order: { created_at: 'DESC' },
+    });
   }
 
   private async generatePayslip(
@@ -554,8 +578,10 @@ export class HrService {
       throw new BadRequestException(`No salary structure found for employee ${employeeId}`);
     }
 
-    const startDate = new Date(year, month - 1, 1);
-    const endDate = new Date(year, month, 0);
+    const m = +month;
+    const y = +year;
+    const startDate = new Date(y, m - 1, 1);
+    const endDate = new Date(y, m, 0);
 
     const attendances = await this.attendanceRepo.find({
       where: {
@@ -566,15 +592,15 @@ export class HrService {
     });
 
     const presentDays = attendances.filter((a) => a.status === AttendanceStatus.PRESENT).length;
-    const workingDays = this.getWorkingDaysInMonth(month, year);
+    const workingDays = this.getWorkingDaysInMonth(m, y);
 
-    const payslipNumber = `PAY-${year}${month.toString().padStart(2, '0')}-${employeeId.substring(0, 8)}`;
+    const payslipNumber = `PAY-${y}${m.toString().padStart(2, '0')}-${employeeId.substring(0, 8)}`;
 
     const payslip = this.payslipRepo.create({
       employee_id: employeeId,
       payslip_number: payslipNumber,
-      month,
-      year,
+      month: m,
+      year: y,
       pay_period_start: startDate,
       pay_period_end: endDate,
       working_days: workingDays,
