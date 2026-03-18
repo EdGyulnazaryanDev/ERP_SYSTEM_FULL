@@ -100,6 +100,8 @@ export default function WarehousesTab() {
     },
   ];
 
+  console.log("warehouse page ");
+  
   return (
     <div>
       <div className="mb-4 flex justify-between items-center">
