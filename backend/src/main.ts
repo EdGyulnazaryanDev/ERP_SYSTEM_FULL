@@ -33,6 +33,7 @@ async function bootstrap() {
   app.useGlobalFilters(new GlobalExceptionFilter());
 
   const PORT = process.env.PORT || 3000;
+  app.enableShutdownHooks();
   await app.listen(PORT);
 }
 

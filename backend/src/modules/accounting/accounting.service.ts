@@ -65,7 +65,7 @@ export class AccountingService {
     private fiscalYearRepo: Repository<FiscalYearEntity>,
     @InjectRepository(FiscalPeriodEntity)
     private fiscalPeriodRepo: Repository<FiscalPeriodEntity>,
-  ) {}
+  ) { }
 
   // ==================== CHART OF ACCOUNTS METHODS ====================
 
@@ -81,12 +81,17 @@ export class AccountingService {
       throw new ConflictException('Account code already exists');
     }
 
-    const account = this.coaRepo.create({
-      ...data,
-      tenant_id: tenantId,
-    });
+    try {
+      const account = this.coaRepo.create({
+        ...data,
+        tenant_id: tenantId,
+      });
 
-    return this.coaRepo.save(account);
+      return await this.coaRepo.save(account);
+    } catch (e) {
+      console.error("SERVICE LEVEL ACCOUNT CREATION ERROR:", e);
+      throw e;
+    }
   }
 
   async getAccounts(tenantId: string): Promise<ChartOfAccountEntity[]> {

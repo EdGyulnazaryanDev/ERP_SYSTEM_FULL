@@ -45,7 +45,7 @@ export class ProcurementService {
     private goodsReceiptRepo: Repository<GoodsReceiptEntity>,
     @InjectRepository(GoodsReceiptItemEntity)
     private goodsReceiptItemRepo: Repository<GoodsReceiptItemEntity>,
-  ) {}
+  ) { }
 
   // ==================== PURCHASE REQUISITION METHODS ====================
 
@@ -608,7 +608,7 @@ export class ProcurementService {
     grn.status = GoodsReceiptStatus.APPROVED;
     grn.approved_by = data.approved_by;
     grn.approved_at = new Date();
-    grn.quality_check_notes = data.quality_check_notes;
+    grn.quality_check_notes = data.quality_check_notes || '';
 
     return this.goodsReceiptRepo.save(grn);
   }

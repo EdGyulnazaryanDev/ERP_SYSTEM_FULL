@@ -44,7 +44,7 @@ export class CrmService {
     private quoteRepo: Repository<QuoteEntity>,
     @InjectRepository(QuoteItemEntity)
     private quoteItemRepo: Repository<QuoteItemEntity>,
-  ) {}
+  ) { }
 
   // ==================== CUSTOMER METHODS ====================
 
@@ -215,10 +215,11 @@ export class CrmService {
 
     const activity = this.leadActivityRepo.create({
       ...data,
+      activity_type: data.activity_type as any, // Cast to any to bypass string -> enum type mismatch temporarily, ideally handled in DTO
       tenant_id: tenantId,
     });
 
-    return this.leadActivityRepo.save(activity);
+    return await this.leadActivityRepo.save(activity);
   }
 
   async getLeadActivities(leadId: string, tenantId: string): Promise<LeadActivityEntity[]> {

@@ -1,5 +1,6 @@
 import { IsString, IsDateString, IsOptional, IsEnum, IsArray, IsNumber } from 'class-validator';
-import { GoodsReceiptStatus, ItemQualityStatus } from '../entities/goods-receipt.entity';
+import { GoodsReceiptStatus } from '../entities/goods-receipt.entity';
+import { ItemQualityStatus } from '../entities/goods-receipt-item.entity';
 
 export class GoodsReceiptItemInput {
   po_item_id: string;

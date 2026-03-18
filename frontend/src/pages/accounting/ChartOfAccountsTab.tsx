@@ -58,8 +58,8 @@ export default function ChartOfAccountsTab() {
     },
     {
       title: 'Subtype',
-      dataIndex: 'account_subtype',
-      key: 'account_subtype',
+      dataIndex: 'account_sub_type',
+      key: 'account_sub_type',
       render: (subtype: string) => subtype || '-',
     },
     {
@@ -161,7 +161,7 @@ export default function ChartOfAccountsTab() {
           <Form.Item name="account_type" label="Account Type" rules={[{ required: true }]}>
             <Select options={accountTypes.map(t => ({ label: t, value: t }))} />
           </Form.Item>
-          <Form.Item name="account_subtype" label="Account Subtype">
+          <Form.Item name="account_sub_type" label="Account Subtype">
             <Select options={accountSubtypes.map(t => ({ label: t, value: t }))} allowClear />
           </Form.Item>
           <Form.Item name="description" label="Description">
