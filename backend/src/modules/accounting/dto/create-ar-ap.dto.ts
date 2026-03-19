@@ -35,6 +35,19 @@ export class CreateAccountReceivableDto {
   @IsOptional()
   @IsString()
   reference?: string;
+
+  // Optional: override which CoA accounts to use for the auto journal entry
+  @IsOptional()
+  @IsUUID()
+  ar_account_id?: string; // Debit: Accounts Receivable account
+
+  @IsOptional()
+  @IsUUID()
+  revenue_account_id?: string; // Credit: Revenue account
+
+  @IsOptional()
+  @IsUUID()
+  bank_account_id?: string; // For payment: Debit Bank account
 }
 
 export class CreateAccountPayableDto {
@@ -64,6 +77,19 @@ export class CreateAccountPayableDto {
   @IsOptional()
   @IsString()
   reference?: string;
+
+  // Optional: override which CoA accounts to use for the auto journal entry
+  @IsOptional()
+  @IsUUID()
+  ap_account_id?: string; // Credit: Accounts Payable account
+
+  @IsOptional()
+  @IsUUID()
+  expense_account_id?: string; // Debit: Expense account
+
+  @IsOptional()
+  @IsUUID()
+  bank_account_id?: string; // For payment: Credit Bank account
 }
 
 export class RecordPaymentDto {
@@ -80,4 +106,9 @@ export class RecordPaymentDto {
   @IsOptional()
   @IsString()
   reference?: string;
+
+  // Optional: which bank/cash account to use in the journal entry
+  @IsOptional()
+  @IsUUID()
+  bank_account_id?: string;
 }

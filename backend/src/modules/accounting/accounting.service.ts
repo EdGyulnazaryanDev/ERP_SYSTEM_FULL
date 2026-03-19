@@ -7,7 +7,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between } from 'typeorm';
 import { ChartOfAccountEntity } from './entities/chart-of-account.entity';
-import { JournalEntryEntity, JournalEntryStatus } from './entities/journal-entry.entity';
+import { JournalEntryEntity, JournalEntryStatus, JournalEntryType } from './entities/journal-entry.entity';
 import { JournalEntryLineEntity } from './entities/journal-entry-line.entity';
 import { AccountReceivableEntity } from './entities/account-receivable.entity';
 import { AccountPayableEntity } from './entities/account-payable.entity';
@@ -319,6 +319,18 @@ export class AccountingService {
     return reversalEntry;
   }
 
+  // ==================== HELPER: find default account by subtype ====================
+
+  private async findDefaultAccount(
+    tenantId: string,
+    subType: string,
+  ): Promise<ChartOfAccountEntity | null> {
+    return this.coaRepo.findOne({
+      where: { tenant_id: tenantId, account_sub_type: subType as any, is_active: true },
+      order: { account_code: 'ASC' },
+    });
+  }
+
   // ==================== ACCOUNTS RECEIVABLE METHODS ====================
 
   async createAR(
@@ -340,7 +352,42 @@ export class AccountingService {
       tenant_id: tenantId,
     });
 
-    return this.arRepo.save(ar);
+    const savedAR = await this.arRepo.save(ar);
+
+    // Auto-create journal entry: Debit AR account, Credit Revenue account
+    try {
+      const arAccount = data.ar_account_id
+        ? await this.getAccount(data.ar_account_id, tenantId)
+        : await this.findDefaultAccount(tenantId, 'accounts_receivable');
+
+      const revenueAccount = data.revenue_account_id
+        ? await this.getAccount(data.revenue_account_id, tenantId)
+        : await this.findDefaultAccount(tenantId, 'sales_revenue') ||
+          await this.findDefaultAccount(tenantId, 'service_revenue');
+
+      if (arAccount && revenueAccount) {
+        const je = await this.createJournalEntry({
+          entry_date: data.invoice_date,
+          entry_type: JournalEntryType.SALES,
+          description: `Invoice ${data.invoice_number}${data.description ? ': ' + data.description : ''}`,
+          reference: data.invoice_number,
+          lines: [
+            { account_id: arAccount.id, description: `AR - ${data.invoice_number}`, debit: data.amount, credit: 0 },
+            { account_id: revenueAccount.id, description: `Revenue - ${data.invoice_number}`, debit: 0, credit: data.amount },
+          ],
+        }, tenantId);
+
+        // Auto-post it and link back
+        await this.postJournalEntry(je.id, { posted_by: 'system' }, tenantId);
+        savedAR.journal_entry_id = je.id;
+        await this.arRepo.save(savedAR);
+      }
+    } catch (e) {
+      // Journal entry creation is best-effort — don't fail the AR creation
+      console.warn('Could not auto-create journal entry for AR:', e.message);
+    }
+
+    return savedAR;
   }
 
   async getARList(tenantId: string): Promise<AccountReceivableEntity[]> {
@@ -385,7 +432,35 @@ export class AccountingService {
       ar.status = 'partially_paid' as any;
     }
 
-    return this.arRepo.save(ar);
+    const savedAR = await this.arRepo.save(ar);
+
+    // Auto-create journal entry: Debit Bank/Cash, Credit AR
+    try {
+      const bankAccount = data.bank_account_id
+        ? await this.getAccount(data.bank_account_id, tenantId)
+        : await this.findDefaultAccount(tenantId, 'bank') ||
+          await this.findDefaultAccount(tenantId, 'cash');
+
+      const arAccount = await this.findDefaultAccount(tenantId, 'accounts_receivable');
+
+      if (bankAccount && arAccount) {
+        const je = await this.createJournalEntry({
+          entry_date: data.payment_date,
+          entry_type: JournalEntryType.RECEIPT,
+          description: `Payment received for invoice ${ar.invoice_number}`,
+          reference: data.reference || ar.invoice_number,
+          lines: [
+            { account_id: bankAccount.id, description: `Payment - ${ar.invoice_number}`, debit: data.payment_amount, credit: 0 },
+            { account_id: arAccount.id, description: `AR cleared - ${ar.invoice_number}`, debit: 0, credit: data.payment_amount },
+          ],
+        }, tenantId);
+        await this.postJournalEntry(je.id, { posted_by: 'system' }, tenantId);
+      }
+    } catch (e) {
+      console.warn('Could not auto-create journal entry for AR payment:', e.message);
+    }
+
+    return savedAR;
   }
 
   // ==================== ACCOUNTS PAYABLE METHODS ====================
@@ -410,7 +485,39 @@ export class AccountingService {
       tenant_id: tenantId,
     });
 
-    return this.apRepo.save(ap);
+    const savedAP = await this.apRepo.save(ap);
+
+    // Auto-create journal entry: Debit Expense, Credit AP account
+    try {
+      const expenseAccount = data.expense_account_id
+        ? await this.getAccount(data.expense_account_id, tenantId)
+        : await this.findDefaultAccount(tenantId, 'operating_expense') ||
+          await this.findDefaultAccount(tenantId, 'administrative_expense');
+
+      const apAccount = data.ap_account_id
+        ? await this.getAccount(data.ap_account_id, tenantId)
+        : await this.findDefaultAccount(tenantId, 'accounts_payable');
+
+      if (expenseAccount && apAccount) {
+        const je = await this.createJournalEntry({
+          entry_date: data.bill_date,
+          entry_type: JournalEntryType.PURCHASE,
+          description: `Bill ${data.bill_number}${data.description ? ': ' + data.description : ''}`,
+          reference: data.bill_number,
+          lines: [
+            { account_id: expenseAccount.id, description: `Expense - ${data.bill_number}`, debit: data.amount, credit: 0 },
+            { account_id: apAccount.id, description: `AP - ${data.bill_number}`, debit: 0, credit: data.amount },
+          ],
+        }, tenantId);
+        await this.postJournalEntry(je.id, { posted_by: 'system' }, tenantId);
+        savedAP.journal_entry_id = je.id;
+        await this.apRepo.save(savedAP);
+      }
+    } catch (e) {
+      console.warn('Could not auto-create journal entry for AP:', e.message);
+    }
+
+    return savedAP;
   }
 
   async getAPList(tenantId: string): Promise<AccountPayableEntity[]> {
@@ -457,7 +564,39 @@ export class AccountingService {
       ap.status = 'partially_paid' as any;
     }
 
-    return this.apRepo.save(ap);
+    const savedAP = await this.apRepo.save(ap);
+
+    // Auto-create journal entry: Debit AP account, Credit Bank/Cash
+    try {
+      const apAccount = data.bank_account_id
+        ? null
+        : await this.findDefaultAccount(tenantId, 'accounts_payable');
+
+      const bankAccount = data.bank_account_id
+        ? await this.getAccount(data.bank_account_id, tenantId)
+        : await this.findDefaultAccount(tenantId, 'bank') ||
+          await this.findDefaultAccount(tenantId, 'cash');
+
+      const apCoaAccount = await this.findDefaultAccount(tenantId, 'accounts_payable');
+
+      if (apCoaAccount && bankAccount) {
+        const je = await this.createJournalEntry({
+          entry_date: data.payment_date,
+          entry_type: JournalEntryType.PAYMENT,
+          description: `Payment for bill ${ap.bill_number}`,
+          reference: data.reference || ap.bill_number,
+          lines: [
+            { account_id: apCoaAccount.id, description: `AP cleared - ${ap.bill_number}`, debit: data.payment_amount, credit: 0 },
+            { account_id: bankAccount.id, description: `Payment - ${ap.bill_number}`, debit: 0, credit: data.payment_amount },
+          ],
+        }, tenantId);
+        await this.postJournalEntry(je.id, { posted_by: 'system' }, tenantId);
+      }
+    } catch (e) {
+      console.warn('Could not auto-create journal entry for AP payment:', e.message);
+    }
+
+    return savedAP;
   }
 
   // ==================== PAYMENT METHODS ====================
