@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Form,
   Input,
@@ -11,14 +11,17 @@ import {
   message,
   Row,
   Col,
+  Select,
 } from 'antd';
 import { SaveOutlined } from '@ant-design/icons';
 import { inventoryApi } from '@/api/inventory';
+import apiClient from '@/api/client';
 
 export default function InventoryFormPage() {
   const navigate = useNavigate();
   const { id } = useParams();
   const [form] = Form.useForm();
+  const queryClient = useQueryClient();
 
   const { data: item, isLoading } = useQuery({
     queryKey: ['inventory', id],
@@ -27,6 +30,16 @@ export default function InventoryFormPage() {
       return response.data;
     },
     enabled: !!id,
+  });
+
+  const { data: warehouses = [] } = useQuery({
+    queryKey: ['warehouses-list'],
+    queryFn: async () => {
+      const res = await apiClient.get<{ data: { id: string; warehouse_name: string; warehouse_code: string }[] }>('/warehouse');
+      const raw = res.data;
+      // GET /warehouse returns { data: [...] }
+      return Array.isArray(raw) ? raw : (raw?.data ?? []);
+    },
   });
 
   const saveMutation = useMutation({
@@ -52,6 +65,8 @@ export default function InventoryFormPage() {
     },
     onSuccess: () => {
       message.success(`Inventory item ${id ? 'updated' : 'created'} successfully`);
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-summary'] });
       navigate('/inventory');
     },
     onError: (error: any) => {
@@ -235,7 +250,18 @@ export default function InventoryFormPage() {
             </Col>
             <Col span={12}>
               <Form.Item label="Warehouse" name="warehouse">
-                <Input placeholder="Warehouse name" />
+                <Select
+                  placeholder="Select warehouse (optional)"
+                  allowClear
+                  showSearch
+                  optionFilterProp="children"
+                >
+                  {warehouses.map((w: { id: string; warehouse_name: string; warehouse_code: string }) => (
+                    <Select.Option key={w.warehouse_code} value={w.warehouse_name}>
+                      {w.warehouse_code} — {w.warehouse_name}
+                    </Select.Option>
+                  ))}
+                </Select>
               </Form.Item>
             </Col>
           </Row>

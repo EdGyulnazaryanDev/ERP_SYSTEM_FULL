@@ -62,6 +62,29 @@ export class ProcurementService {
     });
   }
 
+  /**
+   * Returns all requisitions and purchase orders pending approval.
+   * Used by managers/CEO to see their approval queue.
+   */
+  async findPendingApprovals(tenantId: string): Promise<{
+    requisitions: PurchaseRequisitionEntity[];
+    purchaseOrders: PurchaseOrderEntity[];
+  }> {
+    const [requisitions, purchaseOrders] = await Promise.all([
+      this.requisitionRepo.find({
+        where: { tenant_id: tenantId, status: RequisitionStatus.PENDING_APPROVAL },
+        relations: ['items'],
+        order: { created_at: 'ASC' },
+      }),
+      this.purchaseOrderRepo.find({
+        where: { tenant_id: tenantId, status: PurchaseOrderStatus.PENDING_APPROVAL },
+        relations: ['items'],
+        order: { created_at: 'ASC' },
+      }),
+    ]);
+    return { requisitions, purchaseOrders };
+  }
+
   async findOneRequisition(id: string, tenantId: string): Promise<PurchaseRequisitionEntity> {
     const requisition = await this.requisitionRepo.findOne({
       where: { id, tenant_id: tenantId },

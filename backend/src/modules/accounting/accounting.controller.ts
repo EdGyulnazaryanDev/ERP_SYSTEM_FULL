@@ -15,6 +15,7 @@ import { AccountingService } from './accounting.service';
 import { SuggestionService } from './services/suggestion.service';
 import { MatchingService } from './services/matching.service';
 import { RuleEngineService } from './services/rule-engine.service';
+import { DashboardService } from './services/dashboard.service';
 import {
   CreateChartOfAccountDto,
   UpdateChartOfAccountDto,
@@ -43,6 +44,7 @@ export class AccountingController {
     private readonly suggestionService: SuggestionService,
     private readonly matchingService: MatchingService,
     private readonly ruleEngineService: RuleEngineService,
+    private readonly dashboardService: DashboardService,
   ) { }
 
   // ==================== CHART OF ACCOUNTS ENDPOINTS ====================
@@ -288,6 +290,16 @@ export class AccountingController {
   @Get('intelligence/reconcile')
   reconcile(@CurrentTenant() tenantId: string) {
     return this.matchingService.reconcileBankTransactions(tenantId);
+  }
+
+  @Get('intelligence/duplicate-payments')
+  detectDuplicates(@CurrentTenant() tenantId: string) {
+    return this.matchingService.detectDuplicatePayments(tenantId);
+  }
+
+  @Get('intelligence/dashboard')
+  getSmartDashboard(@CurrentTenant() tenantId: string) {
+    return this.dashboardService.getSmartDashboard(tenantId);
   }
 
   @Post('intelligence/match-payment')

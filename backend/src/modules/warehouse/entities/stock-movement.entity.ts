@@ -34,6 +34,9 @@ export class StockMovementEntity {
   @Column({ type: 'varchar', length: 255, nullable: true })
   product_name: string;
 
+  @Column({ type: 'uuid', nullable: true })
+  courier_id: string;
+
   @Column({ type: 'enum', enum: MovementType })
   movement_type: MovementType;
 

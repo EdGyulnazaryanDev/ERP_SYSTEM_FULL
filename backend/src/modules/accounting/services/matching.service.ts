@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { AccountReceivableEntity } from '../entities/account-receivable.entity';
 import { AccountPayableEntity } from '../entities/account-payable.entity';
 import { BankTransactionEntity } from '../entities/bank-transaction.entity';
+import { PaymentEntity } from '../entities/payment.entity';
 
 export interface MatchSuggestion {
   confidence: number; // 0-100
@@ -13,6 +14,15 @@ export interface MatchSuggestion {
   billId?: string;
   amount: number;
   difference: number;
+}
+
+export interface DuplicatePaymentAlert {
+  paymentId: string;
+  duplicatePaymentId: string;
+  amount: number;
+  date: string;
+  reference: string;
+  reason: string;
 }
 
 @Injectable()
@@ -26,6 +36,8 @@ export class MatchingService {
     private apRepo: Repository<AccountPayableEntity>,
     @InjectRepository(BankTransactionEntity)
     private bankTxRepo: Repository<BankTransactionEntity>,
+    @InjectRepository(PaymentEntity)
+    private paymentRepo: Repository<PaymentEntity>,
   ) {}
 
   // Match a payment amount to open invoices
@@ -154,5 +166,38 @@ export class MatchingService {
     }
 
     return { matched, unmatched };
+  }
+
+  async detectDuplicatePayments(tenantId: string): Promise<DuplicatePaymentAlert[]> {
+    const payments = await this.paymentRepo.find({ where: { tenant_id: tenantId } });
+    const alerts: DuplicatePaymentAlert[] = [];
+    const seen = new Map<string, PaymentEntity>();
+
+    for (const payment of payments) {
+      // Key: same amount + same customer/vendor + same date (within 1 day)
+      const key = `${payment.amount}-${payment.customer_id || payment.vendor_id}-${payment.payment_type}`;
+      const existing = seen.get(key);
+
+      if (existing) {
+        const daysDiff = Math.abs(
+          new Date(payment.payment_date).getTime() - new Date(existing.payment_date).getTime()
+        ) / (1000 * 60 * 60 * 24);
+
+        if (daysDiff <= 1) {
+          alerts.push({
+            paymentId: existing.id,
+            duplicatePaymentId: payment.id,
+            amount: Number(payment.amount),
+            date: String(payment.payment_date),
+            reference: payment.reference || '',
+            reason: `Same amount (${payment.amount}), same party, within 1 day of payment ${existing.payment_number}`,
+          });
+        }
+      } else {
+        seen.set(key, payment);
+      }
+    }
+
+    return alerts;
   }
 }

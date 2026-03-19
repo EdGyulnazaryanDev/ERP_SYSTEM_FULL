@@ -6,10 +6,11 @@ import { AccountPayableEntity } from '../entities/account-payable.entity';
 import { ChartOfAccountEntity } from '../entities/chart-of-account.entity';
 import { JournalEntryEntity } from '../entities/journal-entry.entity';
 import { BankAccountEntity } from '../entities/bank-account.entity';
+import { CustomerEntity } from '../../crm/entities/customer.entity';
 
 export interface Suggestion {
   id: string;
-  type: 'ar' | 'ap' | 'bank' | 'coa' | 'cashflow' | 'anomaly';
+  type: 'ar' | 'ap' | 'bank' | 'coa' | 'cashflow' | 'anomaly' | 'credit';
   severity: 'info' | 'warning' | 'critical';
   title: string;
   message: string;
@@ -32,6 +33,8 @@ export class SuggestionService {
     private journalRepo: Repository<JournalEntryEntity>,
     @InjectRepository(BankAccountEntity)
     private bankRepo: Repository<BankAccountEntity>,
+    @InjectRepository(CustomerEntity)
+    private customerRepo: Repository<CustomerEntity>,
   ) {}
 
   async generateSuggestions(tenantId: string): Promise<Suggestion[]> {
@@ -73,6 +76,37 @@ export class SuggestionService {
         action: 'Follow up with customers',
         data: { count: dueSoonAR.length, total },
       });
+    }
+
+    // ── Credit Limit Checks ─────────────────────────────────────────
+    const customers = await this.customerRepo.find({ where: { tenant_id: tenantId } });
+    for (const customer of customers) {
+      if (!customer.credit_limit || Number(customer.credit_limit) === 0) continue;
+      const customerAR = openAR.filter(ar => ar.customer_id === customer.id);
+      const totalExposure = customerAR.reduce((s, ar) => s + Number(ar.balance_amount), 0);
+      const utilization = (totalExposure / Number(customer.credit_limit)) * 100;
+
+      if (utilization >= 100) {
+        suggestions.push({
+          id: `credit-exceeded-${customer.id}`,
+          type: 'credit',
+          severity: 'critical',
+          title: `Credit limit exceeded: ${customer.company_name}`,
+          message: `Outstanding balance ${totalExposure.toFixed(2)} exceeds credit limit of ${Number(customer.credit_limit).toFixed(2)} (${utilization.toFixed(0)}% utilized)`,
+          action: 'Block new orders until balance is reduced',
+          data: { customer_id: customer.id, exposure: totalExposure, limit: customer.credit_limit, utilization },
+        });
+      } else if (utilization >= 80) {
+        suggestions.push({
+          id: `credit-warning-${customer.id}`,
+          type: 'credit',
+          severity: 'warning',
+          title: `Credit limit at ${utilization.toFixed(0)}%: ${customer.company_name}`,
+          message: `Outstanding ${totalExposure.toFixed(2)} of ${Number(customer.credit_limit).toFixed(2)} limit`,
+          action: 'Monitor closely and consider requesting payment',
+          data: { customer_id: customer.id, exposure: totalExposure, limit: customer.credit_limit, utilization },
+        });
+      }
     }
 
     // ── AP Suggestions ──────────────────────────────────────────────

@@ -6,6 +6,7 @@ import { FinancialBrainService } from './services/financial-brain.service';
 import { SuggestionService } from './services/suggestion.service';
 import { MatchingService } from './services/matching.service';
 import { RuleEngineService } from './services/rule-engine.service';
+import { DashboardService } from './services/dashboard.service';
 import { ChartOfAccountEntity } from './entities/chart-of-account.entity';
 import { JournalEntryEntity } from './entities/journal-entry.entity';
 import { JournalEntryLineEntity } from './entities/journal-entry-line.entity';
@@ -18,6 +19,8 @@ import { BankReconciliationEntity } from './entities/bank-reconciliation.entity'
 import { TaxCodeEntity } from './entities/tax-code.entity';
 import { FiscalYearEntity } from './entities/fiscal-year.entity';
 import { FiscalPeriodEntity } from './entities/fiscal-period.entity';
+import { CustomerEntity } from '../crm/entities/customer.entity';
+import { SupplierEntity } from '../suppliers/supplier.entity';
 
 @Module({
   imports: [
@@ -34,6 +37,8 @@ import { FiscalPeriodEntity } from './entities/fiscal-period.entity';
       TaxCodeEntity,
       FiscalYearEntity,
       FiscalPeriodEntity,
+      CustomerEntity,
+      SupplierEntity,
     ]),
   ],
   controllers: [AccountingController],
@@ -43,7 +48,8 @@ import { FiscalPeriodEntity } from './entities/fiscal-period.entity';
     SuggestionService,
     MatchingService,
     RuleEngineService,
+    DashboardService,
   ],
-  exports: [AccountingService, FinancialBrainService, SuggestionService, MatchingService, RuleEngineService],
+  exports: [AccountingService, FinancialBrainService, SuggestionService, MatchingService, RuleEngineService, DashboardService],
 })
 export class AccountingModule {}

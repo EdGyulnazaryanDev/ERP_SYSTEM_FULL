@@ -4,11 +4,21 @@ import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { ColumnsType } from 'antd/es/table';
 import apiClient from '@/api/client';
+import { inventoryApi, type Inventory } from '@/api/inventory';
 import dayjs from 'dayjs';
 import type { StockMovement, MovementType } from './types';
 
+interface Courier {
+  id: string;
+  name: string;
+  code: string;
+  status: string;
+}
+
 interface FormValues {
+  product_id?: string;
   product_name?: string;
+  courier_id?: string;
   movement_type: MovementType;
   from_location?: string;
   to_location?: string;
@@ -27,8 +37,26 @@ const MOVEMENT_TYPE_COLORS: Record<MovementType, string> = {
 
 const fetchMovements = (type?: MovementType) =>
   apiClient
-    .get<{ data: StockMovement[] }>('/warehouse/movements', { params: type ? { type } : {} })
-    .then((r) => r.data.data);
+    .get<{ data: StockMovement[] }>('/warehouse/movements/all', { params: type ? { type } : {} })
+    .then((r) => r.data.data ?? []);
+
+// Reuse the same inventoryApi that InventoryPage uses — returns plain array
+const fetchInventory = (): Promise<Inventory[]> =>
+  inventoryApi.getAll().then((r) => {
+    const data = r?.data;
+    return Array.isArray(data) ? data : [];
+  });
+
+const fetchCouriers = (): Promise<Courier[]> =>
+  apiClient
+    .get('/transportation/couriers', { params: { status: 'active' } })
+    .then((r) => {
+      const raw = r?.data;
+      // Handle both { data: [...] } and plain array responses
+      if (Array.isArray(raw)) return raw;
+      if (Array.isArray(raw?.data)) return raw.data;
+      return [];
+    });
 
 export default function StockMovementsTab() {
   const queryClient = useQueryClient();
@@ -36,10 +64,23 @@ export default function StockMovementsTab() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editing, setEditing] = useState<StockMovement | null>(null);
   const [filterType, setFilterType] = useState<MovementType | undefined>();
+  const [movementType, setMovementType] = useState<MovementType | undefined>();
 
   const { data = [], isLoading } = useQuery({
     queryKey: ['stock-movements', filterType],
     queryFn: () => fetchMovements(filterType),
+  });
+
+  const { data: inventoryItems = [] } = useQuery({
+    queryKey: ['inventory'],
+    queryFn: fetchInventory,
+    enabled: isModalOpen,
+  });
+
+  const { data: couriers = [] } = useQuery({
+    queryKey: ['couriers-active'],
+    queryFn: fetchCouriers,
+    enabled: isModalOpen,
   });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['stock-movements'] });
@@ -47,6 +88,7 @@ export default function StockMovementsTab() {
   const closeModal = () => {
     setIsModalOpen(false);
     setEditing(null);
+    setMovementType(undefined);
     form.resetFields();
   };
 
@@ -74,6 +116,7 @@ export default function StockMovementsTab() {
 
   const openEdit = (record: StockMovement) => {
     setEditing(record);
+    setMovementType(record.movement_type);
     setIsModalOpen(true);
     setTimeout(() => {
       form.setFieldsValue({
@@ -81,6 +124,13 @@ export default function StockMovementsTab() {
         movement_date: record.movement_date ? dayjs(record.movement_date) : null,
       });
     }, 0);
+  };
+
+  const handleProductSelect = (productId: string) => {
+    const item = inventoryItems.find((i: Inventory) => i.id === productId);
+    if (item) {
+      form.setFieldsValue({ product_name: item.product_name });
+    }
   };
 
   const handleSubmit = (values: FormValues) => {
@@ -160,7 +210,7 @@ export default function StockMovementsTab() {
         <Button
           type="primary"
           icon={<PlusOutlined />}
-          onClick={() => { setEditing(null); setIsModalOpen(true); form.resetFields(); }}
+          onClick={() => { setEditing(null); setMovementType(undefined); setIsModalOpen(true); form.resetFields(); }}
         >
           Record Movement
         </Button>
@@ -182,17 +232,53 @@ export default function StockMovementsTab() {
         footer={null}
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
-          <Form.Item name="product_name" label="Product Name">
-            <Input placeholder="Product name" />
+          {/* Product selector — loads from inventory */}
+          <Form.Item name="product_id" label="Product">
+            <Select
+              showSearch
+              allowClear
+              placeholder="Select product from inventory"
+              optionFilterProp="label"
+              onChange={handleProductSelect}
+              options={inventoryItems.map((i: Inventory) => ({
+                value: i.id,
+                label: `${i.product_name} (${i.sku}) — stock: ${i.available_quantity}`,
+              }))}
+            />
           </Form.Item>
+          {/* Hidden product_name auto-filled on select */}
+          <Form.Item name="product_name" label="Product Name (override)" style={{ display: 'none' }}>
+            <Input />
+          </Form.Item>
+
           <Form.Item name="movement_type" label="Movement Type" rules={[{ required: true, message: 'Select a type' }]}>
-            <Select placeholder="Select type">
+            <Select
+              placeholder="Select type"
+              onChange={(v) => setMovementType(v as MovementType)}
+            >
               <Select.Option value="RECEIPT">Receipt (Incoming)</Select.Option>
               <Select.Option value="ISSUE">Issue (Outgoing)</Select.Option>
               <Select.Option value="TRANSFER">Transfer (Internal)</Select.Option>
               <Select.Option value="ADJUSTMENT">Adjustment</Select.Option>
             </Select>
           </Form.Item>
+
+          {/* Courier selector — only shown for RECEIPT movements */}
+          {movementType === 'RECEIPT' && (
+            <Form.Item name="courier_id" label="Courier (optional)">
+              <Select
+                showSearch
+                allowClear
+                placeholder="Select available courier"
+                optionFilterProp="label"
+                options={couriers.map((c) => ({
+                  value: c.id,
+                  label: `${c.name} (${c.code})`,
+                }))}
+              />
+            </Form.Item>
+          )}
+
           <Form.Item name="from_location" label="From Location">
             <Input placeholder="Source location" />
           </Form.Item>
