@@ -4,14 +4,50 @@ import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { accountingApi } from '@/api/accounting';
 
-const accountTypes = ['ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'EXPENSE'];
-const accountSubtypes = ['CURRENT', 'NON_CURRENT', 'OPERATING', 'NON_OPERATING'];
+const accountTypes = [
+  { label: 'Asset', value: 'asset' },
+  { label: 'Liability', value: 'liability' },
+  { label: 'Equity', value: 'equity' },
+  { label: 'Revenue', value: 'revenue' },
+  { label: 'Expense', value: 'expense' },
+];
+
+const accountSubtypes: Record<string, { label: string; value: string }[]> = {
+  asset: [
+    { label: 'Current Asset', value: 'current_asset' },
+    { label: 'Fixed Asset', value: 'fixed_asset' },
+    { label: 'Cash', value: 'cash' },
+    { label: 'Bank', value: 'bank' },
+    { label: 'Accounts Receivable', value: 'accounts_receivable' },
+    { label: 'Inventory', value: 'inventory' },
+  ],
+  liability: [
+    { label: 'Current Liability', value: 'current_liability' },
+    { label: 'Long Term Liability', value: 'long_term_liability' },
+    { label: 'Accounts Payable', value: 'accounts_payable' },
+  ],
+  equity: [
+    { label: 'Capital', value: 'capital' },
+    { label: 'Retained Earnings', value: 'retained_earnings' },
+  ],
+  revenue: [
+    { label: 'Sales Revenue', value: 'sales_revenue' },
+    { label: 'Service Revenue', value: 'service_revenue' },
+    { label: 'Other Income', value: 'other_income' },
+  ],
+  expense: [
+    { label: 'Cost of Goods Sold', value: 'cost_of_goods_sold' },
+    { label: 'Operating Expense', value: 'operating_expense' },
+    { label: 'Administrative Expense', value: 'administrative_expense' },
+  ],
+};
 
 export default function ChartOfAccountsTab() {
   const queryClient = useQueryClient();
   const [form] = Form.useForm();
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [editingRecord, setEditingRecord] = useState<any>(null);
+  const [selectedType, setSelectedType] = useState<string>('');
 
   const { data, isLoading } = useQuery({
     queryKey: ['chart-of-accounts'],
@@ -64,9 +100,9 @@ export default function ChartOfAccountsTab() {
     },
     {
       title: 'Balance',
-      dataIndex: 'balance',
-      key: 'balance',
-      render: (balance: number) => `$${balance?.toFixed(2) || '0.00'}`,
+      dataIndex: 'current_balance',
+      key: 'current_balance',
+      render: (balance: number) => `$${Number(balance || 0).toFixed(2)}`,
     },
     {
       title: 'Active',
@@ -85,6 +121,7 @@ export default function ChartOfAccountsTab() {
             onClick={() => {
               setEditingRecord(record);
               setIsModalVisible(true);
+              setSelectedType(record.account_type || '');
               setTimeout(() => form.setFieldsValue(record), 0);
             }}
           />
@@ -124,7 +161,7 @@ export default function ChartOfAccountsTab() {
 
       <Table
         columns={columns}
-        dataSource={data?.data || []}
+        dataSource={Array.isArray(data) ? data : data?.data || []}
         loading={isLoading}
         rowKey="id"
         pagination={{ pageSize: 20 }}
@@ -159,10 +196,13 @@ export default function ChartOfAccountsTab() {
             <Input />
           </Form.Item>
           <Form.Item name="account_type" label="Account Type" rules={[{ required: true }]}>
-            <Select options={accountTypes.map(t => ({ label: t, value: t }))} />
+            <Select
+              options={accountTypes}
+              onChange={(val) => { setSelectedType(val); form.setFieldValue('account_sub_type', undefined); }}
+            />
           </Form.Item>
-          <Form.Item name="account_sub_type" label="Account Subtype">
-            <Select options={accountSubtypes.map(t => ({ label: t, value: t }))} allowClear />
+          <Form.Item name="account_sub_type" label="Account Subtype" rules={[{ required: true }]}>
+            <Select options={accountSubtypes[selectedType] || []} allowClear />
           </Form.Item>
           <Form.Item name="description" label="Description">
             <Input.TextArea rows={3} />

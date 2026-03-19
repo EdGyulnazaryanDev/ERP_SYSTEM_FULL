@@ -45,7 +45,7 @@ export default function BankAccountsTab() {
   const handleSubmit = (values: any) => {
     const payload = {
       ...values,
-      initial_balance: values.initial_balance ? Number(values.initial_balance) : undefined
+      opening_balance: values.opening_balance ? Number(values.opening_balance) : undefined
     };
 
     if (editingRecord) {
@@ -59,7 +59,7 @@ export default function BankAccountsTab() {
     { title: 'Account Name', dataIndex: 'account_name', key: 'account_name' },
     { title: 'Account Number', dataIndex: 'account_number', key: 'account_number' },
     { title: 'Bank Name', dataIndex: 'bank_name', key: 'bank_name' },
-    { title: 'Balance', dataIndex: 'current_balance', key: 'current_balance', render: (bal: number) => `$${(bal || 0).toFixed(2)}` },
+    { title: 'Balance', dataIndex: 'current_balance', key: 'current_balance', render: (bal: number) => `$${Number(bal || 0).toFixed(2)}` },
     { title: 'Currency', dataIndex: 'currency', key: 'currency' },
     { title: 'Active', dataIndex: 'is_active', key: 'is_active', render: (active: boolean) => <Tag color={active ? 'green' : 'red'}>{active ? 'Yes' : 'No'}</Tag> },
     {
@@ -98,7 +98,7 @@ export default function BankAccountsTab() {
         </Button>
       </div>
 
-      <Table columns={columns} dataSource={data?.data || []} loading={isLoading} rowKey="id" />
+      <Table columns={columns} dataSource={Array.isArray(data) ? data : data?.data || []} loading={isLoading} rowKey="id" />
 
       <Modal
         title={editingRecord ? 'Edit Bank Account' : 'Add Bank Account'}
@@ -129,7 +129,7 @@ export default function BankAccountsTab() {
           </Form.Item>
 
           {!editingRecord && (
-            <Form.Item name="initial_balance" label="Initial Balance" rules={[{ required: true }]}>
+            <Form.Item name="opening_balance" label="Opening Balance">
               <Input type="number" step="0.01" prefix="$" placeholder="0.00" />
             </Form.Item>
           )}

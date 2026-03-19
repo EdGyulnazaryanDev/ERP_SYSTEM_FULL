@@ -13,6 +13,7 @@ import { AccountReceivableEntity } from './entities/account-receivable.entity';
 import { AccountPayableEntity } from './entities/account-payable.entity';
 import { PaymentEntity } from './entities/payment.entity';
 import { BankAccountEntity } from './entities/bank-account.entity';
+import { BankAccountType } from './entities/bank-account.entity';
 import { BankTransactionEntity } from './entities/bank-transaction.entity';
 import { BankReconciliationEntity } from './entities/bank-reconciliation.entity';
 import { TaxCodeEntity } from './entities/tax-code.entity';
@@ -182,8 +183,9 @@ export class AccountingService {
     });
     const entryNumber = `JE-${new Date().getFullYear()}-${String(count + 1).padStart(6, '0')}`;
 
+    const { lines, ...entryData } = data;
     const entry = this.journalEntryRepo.create({
-      ...data,
+      ...entryData,
       entry_number: entryNumber,
       total_debit: totalDebit,
       total_credit: totalCredit,
@@ -333,6 +335,8 @@ export class AccountingService {
 
     const ar = this.arRepo.create({
       ...data,
+      total_amount: data.amount,
+      balance_amount: data.amount - (data.paid_amount || 0),
       tenant_id: tenantId,
     });
 
@@ -400,6 +404,9 @@ export class AccountingService {
 
     const ap = this.apRepo.create({
       ...data,
+      vendor_id: data.supplier_id,
+      total_amount: data.amount,
+      balance_amount: data.amount - (data.paid_amount || 0),
       tenant_id: tenantId,
     });
 
@@ -409,6 +416,7 @@ export class AccountingService {
   async getAPList(tenantId: string): Promise<AccountPayableEntity[]> {
     return this.apRepo.find({
       where: { tenant_id: tenantId },
+      relations: ['supplier'],
       order: { bill_date: 'DESC' },
     });
   }
@@ -416,6 +424,7 @@ export class AccountingService {
   async getAP(id: string, tenantId: string): Promise<AccountPayableEntity> {
     const ap = await this.apRepo.findOne({
       where: { id, tenant_id: tenantId },
+      relations: ['supplier'],
     });
 
     if (!ap) {
@@ -507,6 +516,7 @@ export class AccountingService {
 
     const bankAccount = this.bankAccountRepo.create({
       ...data,
+      account_type: data.account_type || BankAccountType.CHECKING,
       current_balance: data.opening_balance || 0,
       tenant_id: tenantId,
     });
