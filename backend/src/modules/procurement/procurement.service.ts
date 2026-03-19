@@ -6,6 +6,8 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { FinancialEventType, PurchaseOrderReceivedEvent } from '../accounting/events/financial.events';
 import { PurchaseRequisitionEntity, RequisitionStatus } from './entities/purchase-requisition.entity';
 import { PurchaseRequisitionItemEntity } from './entities/purchase-requisition-item.entity';
 import { RfqEntity, RfqStatus } from './entities/rfq.entity';
@@ -45,7 +47,10 @@ export class ProcurementService {
     private goodsReceiptRepo: Repository<GoodsReceiptEntity>,
     @InjectRepository(GoodsReceiptItemEntity)
     private goodsReceiptItemRepo: Repository<GoodsReceiptItemEntity>,
+    private eventEmitter: EventEmitter2,
   ) { }
+
+
 
   // ==================== PURCHASE REQUISITION METHODS ====================
 
@@ -564,6 +569,23 @@ export class ProcurementService {
         }
 
         await this.purchaseOrderRepo.save(po);
+
+        // Emit financial event for PO received
+        if (allReceived || someReceived) {
+          const event = new PurchaseOrderReceivedEvent();
+          event.tenantId = tenantId;
+          event.poId = po.id;
+          event.poNumber = po.po_number;
+          event.supplierId = po.supplier_id;
+          event.totalAmount = Number(po.total_amount || 0);
+          event.date = new Date().toISOString().split('T')[0];
+          event.items = (data.items || []).map(i => ({
+            productId: i.product_id || '',
+            quantity: i.quantity_received,
+            unitCost: Number(i.unit_price || 0),
+          }));
+          this.eventEmitter.emit(FinancialEventType.PURCHASE_ORDER_RECEIVED, event);
+        }
       }
     }
 

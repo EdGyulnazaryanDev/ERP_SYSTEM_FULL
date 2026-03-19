@@ -2,6 +2,10 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AccountingController } from './accounting.controller';
 import { AccountingService } from './accounting.service';
+import { FinancialBrainService } from './services/financial-brain.service';
+import { SuggestionService } from './services/suggestion.service';
+import { MatchingService } from './services/matching.service';
+import { RuleEngineService } from './services/rule-engine.service';
 import { ChartOfAccountEntity } from './entities/chart-of-account.entity';
 import { JournalEntryEntity } from './entities/journal-entry.entity';
 import { JournalEntryLineEntity } from './entities/journal-entry-line.entity';
@@ -33,7 +37,13 @@ import { FiscalPeriodEntity } from './entities/fiscal-period.entity';
     ]),
   ],
   controllers: [AccountingController],
-  providers: [AccountingService],
-  exports: [AccountingService],
+  providers: [
+    AccountingService,
+    FinancialBrainService,
+    SuggestionService,
+    MatchingService,
+    RuleEngineService,
+  ],
+  exports: [AccountingService, FinancialBrainService, SuggestionService, MatchingService, RuleEngineService],
 })
 export class AccountingModule {}
