@@ -12,6 +12,10 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentTenant } from '../../common/decorators/current-tenant.decorator';
 import { AccountingService } from './accounting.service';
+import { SuggestionService } from './services/suggestion.service';
+import { MatchingService } from './services/matching.service';
+import { RuleEngineService } from './services/rule-engine.service';
+import { DashboardService } from './services/dashboard.service';
 import {
   CreateChartOfAccountDto,
   UpdateChartOfAccountDto,
@@ -35,7 +39,13 @@ import {
 @Controller('accounting')
 @UseGuards(JwtAuthGuard)
 export class AccountingController {
-  constructor(private readonly accountingService: AccountingService) { }
+  constructor(
+    private readonly accountingService: AccountingService,
+    private readonly suggestionService: SuggestionService,
+    private readonly matchingService: MatchingService,
+    private readonly ruleEngineService: RuleEngineService,
+    private readonly dashboardService: DashboardService,
+  ) { }
 
   // ==================== CHART OF ACCOUNTS ENDPOINTS ====================
 
@@ -257,6 +267,51 @@ export class AccountingController {
       tenantId,
       startDate,
       endDate,
+    );
+  }
+
+  // ==================== INTELLIGENCE ENDPOINTS ====================
+
+  @Get('intelligence/suggestions')
+  getSuggestions(@CurrentTenant() tenantId: string) {
+    return this.suggestionService.generateSuggestions(tenantId);
+  }
+
+  @Get('intelligence/insights')
+  getInsights(@CurrentTenant() tenantId: string) {
+    return this.suggestionService.getFinancialInsights(tenantId);
+  }
+
+  @Get('intelligence/rules')
+  runRules(@CurrentTenant() tenantId: string) {
+    return this.ruleEngineService.runAllRules(tenantId);
+  }
+
+  @Get('intelligence/reconcile')
+  reconcile(@CurrentTenant() tenantId: string) {
+    return this.matchingService.reconcileBankTransactions(tenantId);
+  }
+
+  @Get('intelligence/duplicate-payments')
+  detectDuplicates(@CurrentTenant() tenantId: string) {
+    return this.matchingService.detectDuplicatePayments(tenantId);
+  }
+
+  @Get('intelligence/dashboard')
+  getSmartDashboard(@CurrentTenant() tenantId: string) {
+    return this.dashboardService.getSmartDashboard(tenantId);
+  }
+
+  @Post('intelligence/match-payment')
+  matchPayment(
+    @Body() body: { amount: number; customer_id?: string; date?: string },
+    @CurrentTenant() tenantId: string,
+  ) {
+    return this.matchingService.matchPaymentToInvoices(
+      tenantId,
+      body.amount,
+      body.customer_id,
+      body.date,
     );
   }
 }

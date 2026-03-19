@@ -54,6 +54,9 @@ export class AccountReceivableEntity {
   reference: string;
 
   @Column({ type: 'text', nullable: true })
+  description: string;
+
+  @Column({ type: 'text', nullable: true })
   notes: string;
 
   @Column({ type: 'uuid', nullable: true })

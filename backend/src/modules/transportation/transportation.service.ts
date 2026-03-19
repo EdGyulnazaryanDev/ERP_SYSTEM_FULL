@@ -5,11 +5,13 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between, In } from 'typeorm';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ShipmentEntity, ShipmentStatus } from './entities/shipment.entity';
 import { ShipmentItemEntity } from './entities/shipment-item.entity';
 import { CourierEntity } from './entities/courier.entity';
 import { DeliveryRouteEntity, RouteStatus } from './entities/delivery-route.entity';
 import type { CreateShipmentDto } from './dto/create-shipment.dto';
+import { FinancialEventType, ShipmentDeliveredEvent } from '../accounting/events/financial.events';
 
 @Injectable()
 export class TransportationService {
@@ -22,6 +24,7 @@ export class TransportationService {
     private courierRepo: Repository<CourierEntity>,
     @InjectRepository(DeliveryRouteEntity)
     private routeRepo: Repository<DeliveryRouteEntity>,
+    private eventEmitter: EventEmitter2,
   ) {}
 
   // Shipments
@@ -188,6 +191,15 @@ export class TransportationService {
       if (shipment.courier_id) {
         await this.updateCourierStats(shipment.courier_id);
       }
+
+      // Emit financial event
+      const event = new ShipmentDeliveredEvent();
+      event.tenantId = tenantId;
+      event.shipmentId = shipment.id;
+      event.trackingNumber = shipment.tracking_number;
+      event.shippingCost = Number(shipment.shipping_cost || 0) + Number(shipment.insurance_cost || 0);
+      event.date = new Date().toISOString().split('T')[0];
+      this.eventEmitter.emit(FinancialEventType.SHIPMENT_DELIVERED, event);
     }
 
     return this.shipmentRepo.save(shipment);

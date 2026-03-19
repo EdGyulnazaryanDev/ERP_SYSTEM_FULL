@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { CoreModule } from './core/core.module';
@@ -46,6 +47,8 @@ import { TenantInterceptor } from './common/interceptors/tenant.interceptor';
       isGlobal: true,
       envFilePath: ['.env.local', '.env'],
     }),
+
+    EventEmitterModule.forRoot({ wildcard: false, delimiter: '.', global: true }),
 
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],

@@ -119,4 +119,13 @@ export class InventoryController {
     await this.inventoryService.delete(id, tenantId);
     return { message: 'Inventory item deleted successfully' };
   }
+
+  @Post(':id/adjust-stock')
+  adjustStock(
+    @Param('id') id: string,
+    @Body() body: { quantity: number; movement_type: 'IN' | 'OUT' | 'ADJUSTMENT'; reference?: string },
+    @CurrentTenant() tenantId: string,
+  ) {
+    return this.inventoryService.adjustStock(id, body.quantity, body.movement_type, tenantId, body.reference);
+  }
 }

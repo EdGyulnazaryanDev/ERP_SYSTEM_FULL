@@ -9,7 +9,7 @@ import type { Bin, Warehouse } from './types';
 type FormValues = Omit<Bin, 'id' | 'warehouse_name' | 'created_at' | 'updated_at'>;
 
 const fetchBins = () =>
-  apiClient.get<{ data: Bin[] }>('/warehouse/bins').then((r) => r.data.data);
+  apiClient.get<{ data: Bin[] }>('/warehouse/bins/all').then((r) => r.data.data ?? []);
 
 const fetchWarehouses = () =>
   apiClient.get<{ data: Warehouse[] }>('/warehouse').then((r) => r.data.data);

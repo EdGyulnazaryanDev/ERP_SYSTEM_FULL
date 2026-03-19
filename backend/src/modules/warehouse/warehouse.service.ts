@@ -3,18 +3,26 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { WarehouseEntity } from './entities/warehouse.entity';
 import { BinEntity } from './entities/bin.entity';
 import {
   StockMovementEntity,
   MovementType,
 } from './entities/stock-movement.entity';
+import { InventoryEntity } from '../inventory/entities/inventory.entity';
+import { TransactionEntity, TransactionType, TransactionStatus } from '../transactions/entities/transaction.entity';
+import { TransactionItemEntity } from '../transactions/entities/transaction-item.entity';
+import { FinancialEventType, StockMovedEvent } from '../accounting/events/financial.events';
 
 @Injectable()
 export class WarehouseService {
+  private readonly logger = new Logger(WarehouseService.name);
+
   constructor(
     @InjectRepository(WarehouseEntity)
     private warehouseRepo: Repository<WarehouseEntity>,
@@ -22,6 +30,13 @@ export class WarehouseService {
     private binRepo: Repository<BinEntity>,
     @InjectRepository(StockMovementEntity)
     private movementRepo: Repository<StockMovementEntity>,
+    @InjectRepository(InventoryEntity)
+    private inventoryRepo: Repository<InventoryEntity>,
+    @InjectRepository(TransactionEntity)
+    private transactionRepo: Repository<TransactionEntity>,
+    @InjectRepository(TransactionItemEntity)
+    private transactionItemRepo: Repository<TransactionItemEntity>,
+    private eventEmitter: EventEmitter2,
   ) {}
 
   async findAllWarehouses(tenantId: string) {
@@ -210,14 +225,149 @@ export class WarehouseService {
     if (!payload.movement_date)
       throw new BadRequestException('movement_date is required');
 
+    // ── Fix 1: validate stock availability for ISSUE movements ──────────────
+    let inventoryItem: InventoryEntity | null = null;
+    if (payload.product_id) {
+      inventoryItem = await this.inventoryRepo.findOne({
+        where: { id: payload.product_id, tenant_id: tenantId },
+      });
+      if (!inventoryItem) {
+        inventoryItem = await this.inventoryRepo.findOne({
+          where: { product_id: payload.product_id, tenant_id: tenantId },
+        });
+      }
+    }
+
+    if (payload.movement_type === MovementType.ISSUE) {
+      if (!inventoryItem) {
+        throw new BadRequestException(
+          'Cannot issue stock: product not found in inventory. Select a product first.',
+        );
+      }
+      if (inventoryItem.available_quantity < qty) {
+        throw new BadRequestException(
+          `Insufficient stock: available ${inventoryItem.available_quantity}, requested ${qty}`,
+        );
+      }
+      // Deduct from inventory
+      inventoryItem.quantity -= qty;
+      inventoryItem.available_quantity = inventoryItem.quantity - inventoryItem.reserved_quantity;
+      await this.inventoryRepo.save(inventoryItem);
+    } else if (payload.movement_type === MovementType.RECEIPT && inventoryItem) {
+      // Add to inventory on receipt
+      inventoryItem.quantity += qty;
+      inventoryItem.available_quantity = inventoryItem.quantity - inventoryItem.reserved_quantity;
+      await this.inventoryRepo.save(inventoryItem);
+    }
+
     const movement_number = await this.generateMovementNumber(tenantId);
     const movement = this.movementRepo.create({
       ...payload,
       tenant_id: tenantId,
       movement_number,
       quantity: qty,
+      // auto-fill product_name from inventory if not provided
+      product_name: payload.product_name || inventoryItem?.product_name,
     });
-    return this.movementRepo.save(movement);
+    const saved = await this.movementRepo.save(movement);
+
+    // ── Fix 2: use real unit_cost so JE is not skipped ───────────────────────
+    const unitCost = inventoryItem ? Number(inventoryItem.unit_cost) : 0;
+    const totalCost = unitCost * qty;
+
+    // Create transaction record for full audit trail
+    await this.createMovementTransaction(saved, tenantId, unitCost, totalCost);
+
+    // Emit STOCK_MOVED with real cost so FinancialBrainService creates JE
+    const financialMovementType = this.toFinancialMovementType(saved.movement_type);
+    if (financialMovementType) {
+      const event = new StockMovedEvent();
+      event.tenantId = tenantId;
+      event.productId = saved.product_id || '';
+      event.productName = saved.product_name || 'Unknown product';
+      event.quantity = qty;
+      event.movementType = financialMovementType;
+      event.unitCost = unitCost;
+      event.totalCost = totalCost;
+      event.reference = saved.movement_number;
+      this.eventEmitter.emit(FinancialEventType.STOCK_MOVED, event);
+    }
+
+    return saved;
+  }
+
+  private toFinancialMovementType(type: MovementType): 'IN' | 'OUT' | 'ADJUSTMENT' | null {
+    switch (type) {
+      case MovementType.RECEIPT: return 'IN';
+      case MovementType.ISSUE: return 'OUT';
+      case MovementType.ADJUSTMENT: return 'ADJUSTMENT';
+      default: return null; // TRANSFER doesn't generate a financial event
+    }
+  }
+
+  private async createMovementTransaction(
+    movement: StockMovementEntity,
+    tenantId: string,
+    unitCost = 0,
+    totalCost = 0,
+  ): Promise<void> {
+    try {
+      const typeMap: Partial<Record<MovementType, TransactionType>> = {
+        [MovementType.RECEIPT]: TransactionType.PURCHASE,
+        [MovementType.ISSUE]: TransactionType.SALE,
+        [MovementType.ADJUSTMENT]: TransactionType.ADJUSTMENT,
+        [MovementType.TRANSFER]: TransactionType.TRANSFER,
+      };
+      const txType = typeMap[movement.movement_type];
+      if (!txType) return;
+
+      const txNumber = await this.generateTransactionNumber(tenantId, txType);
+      const movDate = movement.movement_date instanceof Date
+        ? movement.movement_date
+        : new Date(movement.movement_date);
+
+      const item = this.transactionItemRepo.create({
+        product_id: movement.product_id,
+        product_name: movement.product_name || 'Stock movement',
+        quantity: movement.quantity,
+        unit_price: unitCost,
+        discount_amount: 0,
+        tax_amount: 0,
+        total_amount: totalCost,
+      });
+
+      const tx = this.transactionRepo.create({
+        tenant_id: tenantId,
+        transaction_number: txNumber,
+        type: txType,
+        status: TransactionStatus.COMPLETED,
+        transaction_date: movDate,
+        subtotal: totalCost,
+        tax_amount: 0,
+        tax_rate: 0,
+        discount_amount: 0,
+        shipping_amount: 0,
+        total_amount: totalCost,
+        paid_amount: totalCost,
+        balance_amount: 0,
+        notes: `Auto-generated from stock movement ${movement.movement_number}`,
+        items: [item],
+      });
+
+      await this.transactionRepo.save(tx);
+      this.logger.log(`[WAREHOUSE] Transaction ${txNumber} (${totalCost}) created for movement ${movement.movement_number}`);
+    } catch (e: any) {
+      this.logger.error(`[WAREHOUSE] Failed to create transaction for movement: ${e.message}`);
+    }
+  }
+
+  private async generateTransactionNumber(tenantId: string, type: TransactionType): Promise<string> {
+    const prefix = type.substring(0, 3).toUpperCase();
+    const date = new Date();
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const count = await this.transactionRepo.count({ where: { tenant_id: tenantId, type } });
+    return `${prefix}-${year}${month}-${String(count + 1).padStart(5, '0')}`;
   }
 
   async updateMovement(
