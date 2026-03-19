@@ -59,16 +59,16 @@ export default function TasksTab() {
   });
 
   const handleSubmit = (values: any) => {
-    const payload = {
-      ...values,
+    const { project_id, ...updateFields } = values;
+    const dates = {
       start_date: values.start_date ? values.start_date.format('YYYY-MM-DD') : undefined,
       due_date: values.due_date ? values.due_date.format('YYYY-MM-DD') : undefined,
       estimated_hours: values.estimated_hours ? Number(values.estimated_hours) : undefined,
     };
     if (editingRecord) {
-      updateMutation.mutate({ id: editingRecord.id, data: payload });
+      updateMutation.mutate({ id: editingRecord.id, data: { ...updateFields, ...dates } });
     } else {
-      createMutation.mutate(payload);
+      createMutation.mutate({ ...values, project_id, ...dates });
     }
   };
 
@@ -127,9 +127,15 @@ export default function TasksTab() {
               setIsModalVisible(true);
               setTimeout(() => {
                 form.setFieldsValue({
-                  ...record,
+                  project_id: record.project_id,
+                  task_name: record.task_name,
+                  assigned_to: record.assigned_to,
+                  priority: record.priority,
+                  status: record.status,
                   start_date: record.start_date ? dayjs(record.start_date) : null,
                   due_date: record.due_date ? dayjs(record.due_date) : null,
+                  estimated_hours: record.estimated_hours,
+                  description: record.description,
                 });
               }, 0);
             }}
@@ -168,13 +174,15 @@ export default function TasksTab() {
         width={600}
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
-          <Form.Item name="project_id" label="Project" rules={[{ required: true }]}>
-            <Select placeholder="Select project" showSearch optionFilterProp="children">
-              {(projects || []).map((p: any) => (
-                <Select.Option key={p.id} value={p.id}>{p.project_name}</Select.Option>
-              ))}
-            </Select>
-          </Form.Item>
+          {!editingRecord && (
+            <Form.Item name="project_id" label="Project" rules={[{ required: true }]}>
+              <Select placeholder="Select project" showSearch optionFilterProp="children">
+                {(projects || []).map((p: any) => (
+                  <Select.Option key={p.id} value={p.id}>{p.project_name}</Select.Option>
+                ))}
+              </Select>
+            </Form.Item>
+          )}
 
           <Form.Item name="task_name" label="Task Name" rules={[{ required: true }]}>
             <Input />

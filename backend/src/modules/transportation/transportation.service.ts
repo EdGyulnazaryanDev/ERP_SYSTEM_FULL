@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between } from 'typeorm';
+import { Repository, Between, In } from 'typeorm';
 import { ShipmentEntity, ShipmentStatus } from './entities/shipment.entity';
 import { ShipmentItemEntity } from './entities/shipment-item.entity';
 import { CourierEntity } from './entities/courier.entity';
@@ -277,6 +277,12 @@ export class TransportationService {
       );
     }
 
+    // Detach courier from non-active shipments before deleting
+    await this.shipmentRepo.update({ courier_id: id }, { courier_id: null as any });
+
+    // Delete any routes assigned to this courier
+    await this.routeRepo.delete({ courier_id: id });
+
     await this.courierRepo.remove(courier);
   }
 
@@ -301,7 +307,7 @@ export class TransportationService {
 
     // Update shipments to assign courier
     await this.shipmentRepo.update(
-      { id: shipmentIds as any },
+      { id: In(shipmentIds) },
       { courier_id: courierId },
     );
 

@@ -188,7 +188,7 @@ export default function CouriersPage() {
       title: 'Base Rate',
       dataIndex: 'base_rate',
       key: 'base_rate',
-      render: (rate: number) => `$${rate.toFixed(2)}`,
+      render: (rate: number) => rate != null ? `$${Number(rate).toFixed(2)}` : '-',
     },
     {
       title: 'Actions',
