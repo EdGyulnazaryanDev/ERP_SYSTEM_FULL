@@ -54,14 +54,14 @@ export default function MilestonesTab() {
   });
 
   const handleSubmit = (values: any) => {
-    const payload = {
-      ...values,
+    const { project_id, ...updateFields } = values;
+    const dates = {
       due_date: values.due_date ? values.due_date.format('YYYY-MM-DD') : null,
     };
     if (editingRecord) {
-      updateMutation.mutate({ id: editingRecord.id, data: payload });
+      updateMutation.mutate({ id: editingRecord.id, data: { ...updateFields, ...dates } });
     } else {
-      createMutation.mutate(payload);
+      createMutation.mutate({ ...values, project_id, ...dates });
     }
   };
 
@@ -105,8 +105,11 @@ export default function MilestonesTab() {
               setIsModalVisible(true);
               setTimeout(() => {
                 form.setFieldsValue({
-                  ...record,
+                  project_id: record.project_id,
+                  milestone_name: record.milestone_name,
                   due_date: record.due_date ? dayjs(record.due_date) : null,
+                  status: record.status,
+                  description: record.description,
                 });
               }, 0);
             }}
@@ -144,13 +147,15 @@ export default function MilestonesTab() {
         footer={null}
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
-          <Form.Item name="project_id" label="Project" rules={[{ required: true }]}>
-            <Select placeholder="Select project" showSearch optionFilterProp="children">
-              {(projects || []).map((p: any) => (
-                <Select.Option key={p.id} value={p.id}>{p.project_name}</Select.Option>
-              ))}
-            </Select>
-          </Form.Item>
+          {!editingRecord && (
+            <Form.Item name="project_id" label="Project" rules={[{ required: true }]}>
+              <Select placeholder="Select project" showSearch optionFilterProp="children">
+                {(projects || []).map((p: any) => (
+                  <Select.Option key={p.id} value={p.id}>{p.project_name}</Select.Option>
+                ))}
+              </Select>
+            </Form.Item>
+          )}
 
           <Form.Item name="milestone_name" label="Milestone Name" rules={[{ required: true }]}>
             <Input />

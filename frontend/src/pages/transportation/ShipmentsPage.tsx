@@ -122,7 +122,7 @@ export default function ShipmentsPage() {
       title: 'Total Cost',
       dataIndex: 'total_cost',
       key: 'total_cost',
-      render: (cost: number) => `$${cost.toFixed(2)}`,
+      render: (cost: number) => cost != null ? `$${Number(cost).toFixed(2)}` : '-',
     },
     {
       title: 'Actions',

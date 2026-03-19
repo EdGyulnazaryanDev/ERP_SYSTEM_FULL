@@ -54,17 +54,17 @@ export default function ProjectsTab() {
   });
 
   const handleSubmit = (values: any) => {
-    const payload = {
-      ...values,
+    const { project_code, ...updateFields } = values;
+    const base = {
       start_date: values.start_date ? values.start_date.format('YYYY-MM-DD') : null,
       end_date: values.end_date ? values.end_date.format('YYYY-MM-DD') : null,
       progress_percentage: Number(values.progress_percentage || 0),
       estimated_budget: values.estimated_budget ? Number(values.estimated_budget) : undefined,
     };
     if (editingRecord) {
-      updateMutation.mutate({ id: editingRecord.id, data: payload });
+      updateMutation.mutate({ id: editingRecord.id, data: { ...updateFields, ...base } });
     } else {
-      createMutation.mutate(payload);
+      createMutation.mutate({ ...values, project_code, ...base });
     }
   };
 
@@ -118,9 +118,15 @@ export default function ProjectsTab() {
               setIsModalVisible(true);
               setTimeout(() => {
                 form.setFieldsValue({
-                  ...record,
+                  project_name: record.project_name,
+                  project_manager_id: record.project_manager_id,
+                  status: record.status,
+                  priority: record.priority,
                   start_date: record.start_date ? dayjs(record.start_date) : null,
                   end_date: record.end_date ? dayjs(record.end_date) : null,
+                  estimated_budget: record.estimated_budget,
+                  progress_percentage: record.progress_percentage,
+                  description: record.description,
                 });
               }, 0);
             }}
@@ -163,9 +169,11 @@ export default function ProjectsTab() {
         width={600}
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
-          <Form.Item name="project_code" label="Project Code">
-            <Input placeholder="e.g. PRJ-001 (auto-generated if empty)" />
-          </Form.Item>
+          {!editingRecord && (
+            <Form.Item name="project_code" label="Project Code">
+              <Input placeholder="e.g. PRJ-001 (auto-generated if empty)" />
+            </Form.Item>
+          )}
 
           <Form.Item name="project_name" label="Project Name" rules={[{ required: true }]}>
             <Input />

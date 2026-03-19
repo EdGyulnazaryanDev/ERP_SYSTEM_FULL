@@ -70,15 +70,15 @@ export default function ResourcesTab() {
   });
 
   const handleSubmit = (values: any) => {
-    const payload = {
-      ...values,
+    const { project_id, employee_id, ...updateFields } = values;
+    const dates = {
       allocation_start_date: values.allocation_start_date ? values.allocation_start_date.format('YYYY-MM-DD') : null,
       allocation_end_date: values.allocation_end_date ? values.allocation_end_date.format('YYYY-MM-DD') : null,
     };
     if (editingRecord) {
-      updateMutation.mutate({ id: editingRecord.id, data: payload });
+      updateMutation.mutate({ id: editingRecord.id, data: { ...updateFields, ...dates } });
     } else {
-      createMutation.mutate(payload);
+      createMutation.mutate({ ...values, project_id, employee_id, ...dates });
     }
   };
 
@@ -137,9 +137,13 @@ export default function ResourcesTab() {
               setIsModalVisible(true);
               setTimeout(() => {
                 form.setFieldsValue({
-                  ...record,
+                  project_id: record.project_id,
+                  employee_id: record.employee_id,
+                  role: record.role,
+                  allocation_percentage: record.allocation_percentage,
                   allocation_start_date: record.allocation_start_date ? dayjs(record.allocation_start_date) : null,
                   allocation_end_date: record.allocation_end_date ? dayjs(record.allocation_end_date) : null,
+                  hourly_rate: record.hourly_rate,
                 });
               }, 0);
             }}
@@ -177,21 +181,25 @@ export default function ResourcesTab() {
         footer={null}
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
-          <Form.Item name="project_id" label="Project" rules={[{ required: true }]}>
-            <Select placeholder="Select project" showSearch optionFilterProp="children">
-              {(projects || []).map((p: any) => (
-                <Select.Option key={p.id} value={p.id}>{p.project_name}</Select.Option>
-              ))}
-            </Select>
-          </Form.Item>
+          {!editingRecord && (
+            <Form.Item name="project_id" label="Project" rules={[{ required: true }]}>
+              <Select placeholder="Select project" showSearch optionFilterProp="children">
+                {(projects || []).map((p: any) => (
+                  <Select.Option key={p.id} value={p.id}>{p.project_name}</Select.Option>
+                ))}
+              </Select>
+            </Form.Item>
+          )}
 
-          <Form.Item name="employee_id" label="Employee" rules={[{ required: true }]}>
-            <Select placeholder="Select employee" showSearch optionFilterProp="children">
-              {(employees || []).map((emp: any) => (
-                <Select.Option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name}</Select.Option>
-              ))}
-            </Select>
-          </Form.Item>
+          {!editingRecord && (
+            <Form.Item name="employee_id" label="Employee" rules={[{ required: true }]}>
+              <Select placeholder="Select employee" showSearch optionFilterProp="children">
+                {(employees || []).map((emp: any) => (
+                  <Select.Option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name}</Select.Option>
+                ))}
+              </Select>
+            </Form.Item>
+          )}
 
           <Form.Item name="role" label="Role" initialValue="developer">
             <Select>

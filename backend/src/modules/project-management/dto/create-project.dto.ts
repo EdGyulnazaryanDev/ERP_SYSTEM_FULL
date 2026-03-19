@@ -49,6 +49,10 @@ export class CreateProjectDto {
   tags?: string[];
 
   @IsOptional()
+  @IsNumber()
+  progress_percentage?: number;
+
+  @IsOptional()
   @IsString()
   notes?: string;
 }
