@@ -576,13 +576,13 @@ export class ProcurementService {
           event.tenantId = tenantId;
           event.poId = po.id;
           event.poNumber = po.po_number;
-          event.supplierId = po.supplier_id;
+          event.supplierId = (po as any).vendor_id || (po as any).supplier_id || '';
           event.totalAmount = Number(po.total_amount || 0);
           event.date = new Date().toISOString().split('T')[0];
           event.items = (data.items || []).map(i => ({
-            productId: i.product_id || '',
+            productId: (i as any).product_id || '',
             quantity: i.quantity_received,
-            unitCost: Number(i.unit_price || 0),
+            unitCost: Number((i as any).unit_price || 0),
           }));
           this.eventEmitter.emit(FinancialEventType.PURCHASE_ORDER_RECEIVED, event);
         }

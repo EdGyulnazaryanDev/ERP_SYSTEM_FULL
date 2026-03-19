@@ -100,7 +100,7 @@ export class MatchingService {
     unmatched: Array<{ bankTxId: string; amount: number; description: string }>;
   }> {
     const bankTxs = await this.bankTxRepo.find({
-      where: { tenant_id: tenantId, is_reconciled: false as any },
+      where: { tenant_id: tenantId, reconciliation_status: 'unreconciled' as any },
     });
 
     const openAR = await this.arRepo.find({
@@ -114,7 +114,8 @@ export class MatchingService {
     const unmatched: Array<{ bankTxId: string; amount: number; description: string }> = [];
 
     for (const tx of bankTxs) {
-      const txAmount = Number(tx.amount);
+      // Use debit for outgoing, credit for incoming; net = credit - debit
+      const txAmount = Number(tx.credit) - Number(tx.debit);
       let bestMatch: { id: string; type: string; confidence: number; reason: string } | null = null;
 
       // Try matching against AR (incoming payments)
@@ -148,7 +149,7 @@ export class MatchingService {
       if (bestMatch) {
         matched.push({ bankTxId: tx.id, matchedTo: bestMatch.type, confidence: bestMatch.confidence, reason: bestMatch.reason });
       } else {
-        unmatched.push({ bankTxId: tx.id, amount: txAmount, description: (tx as any).description || '' });
+        unmatched.push({ bankTxId: tx.id, amount: txAmount, description: tx.description || '' });
       }
     }
 
