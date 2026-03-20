@@ -46,18 +46,31 @@ const statusIcons: Record<ShipmentStatus, React.ReactNode> = {
 };
 
 export default function ShipmentTrackingPage() {
-  const { trackingNumber: urlTrackingNumber } = useParams();
+  const { trackingNumber: urlTrackingNumber, id: urlId } = useParams();
   const [trackingNumber, setTrackingNumber] = useState(urlTrackingNumber || '');
   const [searchedNumber, setSearchedNumber] = useState(urlTrackingNumber || '');
 
-  const { data: shipment, isLoading, error } = useQuery({
+  // When accessed via /transportation/shipments/:id, fetch by UUID directly
+  const { data: shipmentById } = useQuery({
+    queryKey: ['shipment-by-id', urlId],
+    queryFn: async () => {
+      const response = await transportationApi.getShipment(urlId!);
+      return response.data;
+    },
+    enabled: !!urlId,
+  });
+
+  const { data: shipmentByTracking, isLoading, error } = useQuery({
     queryKey: ['track-shipment', searchedNumber],
     queryFn: async () => {
       const response = await transportationApi.trackShipment(searchedNumber);
       return response.data;
     },
-    enabled: !!searchedNumber,
+    enabled: !!searchedNumber && !urlId,
   });
+
+  const shipment = urlId ? shipmentById : shipmentByTracking;
+  const isLoadingAny = isLoading || (!!urlId && !shipmentById && !error);
 
   const handleSearch = () => {
     setSearchedNumber(trackingNumber);
@@ -67,31 +80,35 @@ export default function ShipmentTrackingPage() {
     <div style={{ padding: 24, maxWidth: 1200, margin: '0 auto' }}>
       <Card>
         <Space direction="vertical" style={{ width: '100%' }} size="large">
-          <div style={{ textAlign: 'center' }}>
-            <h1>Track Your Shipment</h1>
-            <p>Enter your tracking number to see the current status of your shipment</p>
-          </div>
+          {!urlId && (
+            <div style={{ textAlign: 'center' }}>
+              <h1>Track Your Shipment</h1>
+              <p>Enter your tracking number to see the current status of your shipment</p>
+            </div>
+          )}
 
-          <Search
-            placeholder="Enter tracking number"
-            value={trackingNumber}
-            onChange={(e) => setTrackingNumber(e.target.value)}
-            onSearch={handleSearch}
-            enterButton={
-              <Button type="primary" icon={<SearchOutlined />}>
-                Track
-              </Button>
-            }
-            size="large"
-          />
+          {!urlId && (
+            <Search
+              placeholder="Enter tracking number"
+              value={trackingNumber}
+              onChange={(e) => setTrackingNumber(e.target.value)}
+              onSearch={handleSearch}
+              enterButton={
+                <Button type="primary" icon={<SearchOutlined />}>
+                  Track
+                </Button>
+              }
+              size="large"
+            />
+          )}
 
-          {isLoading && (
+          {isLoadingAny && (
             <div style={{ textAlign: 'center', padding: 40 }}>
               <Spin size="large" />
             </div>
           )}
 
-          {error && (
+          {!isLoadingAny && !shipment && (searchedNumber || urlId) && (
             <Empty
               description="Shipment not found. Please check your tracking number and try again."
             />

@@ -83,7 +83,12 @@ export default function StockMovementsTab() {
     enabled: isModalOpen,
   });
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['stock-movements'] });
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['stock-movements'] });
+    queryClient.invalidateQueries({ queryKey: ['inventory'] });
+    queryClient.invalidateQueries({ queryKey: ['inventory-summary'] });
+    queryClient.invalidateQueries({ queryKey: ['inventory-for-tx'] });
+  };
 
   const closeModal = () => {
     setIsModalOpen(false);

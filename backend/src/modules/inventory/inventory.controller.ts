@@ -135,7 +135,11 @@ export class InventoryController {
   }
 
   @Post(':id/trigger-reorder')
-  triggerReorder(@Param('id') id: string, @CurrentTenant() tenantId: string) {
-    return this.inventoryService.manualReorder(id, tenantId);
+  triggerReorder(
+    @Param('id') id: string,
+    @Body() body: { quantity?: number },
+    @CurrentTenant() tenantId: string,
+  ) {
+    return this.inventoryService.manualReorder(id, tenantId, body?.quantity);
   }
 }

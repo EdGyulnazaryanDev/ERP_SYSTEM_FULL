@@ -267,9 +267,7 @@ export class TransactionsService {
 
       // COGS: emit STOCK_MOVED OUT for each item
       for (const item of transaction.items) {
-        const inv = await this.inventoryRepo.findOne({
-          where: { product_id: item.product_id, tenant_id: tenantId },
-        });
+        const inv = await this.findInventoryByProductRef(tenantId, item.product_id);
         const unitCost = inv ? Number(inv.unit_cost) : 0;
         if (unitCost > 0) {
           const stockEvent = new StockMovedEvent();
@@ -405,8 +403,8 @@ export class TransactionsService {
         analytics.purchaseCount++;
       }
 
-      // Daily sales
-      const dateKey = transaction.transaction_date.toISOString().split('T')[0];
+      // Daily sales — transaction_date may be a string or Date depending on DB driver
+      const dateKey = new Date(transaction.transaction_date).toISOString().split('T')[0];
       dailySalesMap.set(
         dateKey,
         (dailySalesMap.get(dateKey) || 0) + Number(transaction.total_amount),
@@ -461,15 +459,28 @@ export class TransactionsService {
     return analytics;
   }
 
+  private async findInventoryByProductRef(
+    tenantId: string,
+    productId: string,
+  ): Promise<InventoryEntity | null> {
+    // product_id on the item may be the inventory row's own `id` OR its `product_id` column
+    return (
+      (await this.inventoryRepo.findOne({
+        where: { product_id: productId, tenant_id: tenantId },
+      })) ??
+      (await this.inventoryRepo.findOne({
+        where: { id: productId, tenant_id: tenantId },
+      }))
+    );
+  }
+
   private async updateInventory(
     tenantId: string,
     productId: string,
     quantity: number,
     transactionType: TransactionType,
   ): Promise<void> {
-    const inventory = await this.inventoryRepo.findOne({
-      where: { product_id: productId, tenant_id: tenantId },
-    });
+    const inventory = await this.findInventoryByProductRef(tenantId, productId);
 
     if (!inventory) {
       throw new NotFoundException(

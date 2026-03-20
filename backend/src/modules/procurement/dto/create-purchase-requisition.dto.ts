@@ -85,8 +85,9 @@ export class UpdatePurchaseRequisitionDto {
 }
 
 export class ApproveRequisitionDto {
+  @IsOptional()
   @IsString()
-  approved_by: string;
+  approved_by?: string;
 
   @IsOptional()
   @IsString()

@@ -45,7 +45,7 @@ export class FinancialBrainService {
             { account_id: revenueAccount.id, description: `Revenue - ${event.invoiceNumber}`, debit: 0, credit: event.amount },
           ],
         }, event.tenantId);
-        await this.accountingService.postJournalEntry(je.id, { posted_by: 'system' }, event.tenantId);
+        await this.accountingService.postJournalEntry(je.id, {}, event.tenantId);
         this.logger.log(`[BRAIN] Auto-posted JE ${je.entry_number} for invoice ${event.invoiceNumber}`);
       } else {
         this.logger.warn(`[BRAIN] Missing CoA accounts for invoice JE. Add accounts_receivable and sales_revenue to Chart of Accounts.`);
@@ -76,7 +76,7 @@ export class FinancialBrainService {
             { account_id: arAccount.id, description: `AR cleared - ${event.invoiceNumber}`, debit: 0, credit: event.amount },
           ],
         }, event.tenantId);
-        await this.accountingService.postJournalEntry(je.id, { posted_by: 'system' }, event.tenantId);
+        await this.accountingService.postJournalEntry(je.id, {}, event.tenantId);
         this.logger.log(`[BRAIN] Auto-posted JE ${je.entry_number} for payment on ${event.invoiceNumber}`);
       }
     } catch (e) {
@@ -104,7 +104,7 @@ export class FinancialBrainService {
             { account_id: apAccount.id, description: `AP - ${event.billNumber}`, debit: 0, credit: event.amount },
           ],
         }, event.tenantId);
-        await this.accountingService.postJournalEntry(je.id, { posted_by: 'system' }, event.tenantId);
+        await this.accountingService.postJournalEntry(je.id, {}, event.tenantId);
         this.logger.log(`[BRAIN] Auto-posted JE ${je.entry_number} for bill ${event.billNumber}`);
       }
     } catch (e) {
@@ -132,7 +132,7 @@ export class FinancialBrainService {
             { account_id: bankAccount.id, description: `Payment - ${event.billNumber}`, debit: 0, credit: event.amount },
           ],
         }, event.tenantId);
-        await this.accountingService.postJournalEntry(je.id, { posted_by: 'system' }, event.tenantId);
+        await this.accountingService.postJournalEntry(je.id, {}, event.tenantId);
       }
     } catch (e) {
       this.logger.error(`[BRAIN] Failed to create JE for AP payment: ${e.message}`);
@@ -171,7 +171,7 @@ export class FinancialBrainService {
             { account_id: inventoryAccount.id, description: `Inventory - ${event.productName}`, debit: 0, credit: event.totalCost },
           ],
         }, event.tenantId);
-        await this.accountingService.postJournalEntry(je.id, { posted_by: 'system' }, event.tenantId);
+        await this.accountingService.postJournalEntry(je.id, {}, event.tenantId);
         this.logger.log(`[BRAIN] Auto-posted COGS JE for stock OUT: ${event.productName}`);
       } else if (event.movementType === 'IN' && inventoryAccount && apAccount) {
         // Stock IN: Debit Inventory, Credit AP (goods received)
@@ -185,7 +185,7 @@ export class FinancialBrainService {
             { account_id: apAccount.id, description: `Payable - ${event.productName}`, debit: 0, credit: event.totalCost },
           ],
         }, event.tenantId);
-        await this.accountingService.postJournalEntry(je.id, { posted_by: 'system' }, event.tenantId);
+        await this.accountingService.postJournalEntry(je.id, {}, event.tenantId);
         this.logger.log(`[BRAIN] Auto-posted Inventory IN JE: ${event.productName}`);
       } else if (event.movementType === 'ADJUSTMENT' && inventoryAccount) {
         // Adjustment: use equity/retained earnings as the other side if available, else AP
@@ -203,7 +203,7 @@ export class FinancialBrainService {
               { account_id: equityAccount.id, description: `Adjustment offset - ${event.productName}`, debit: 0, credit: event.totalCost },
             ],
           }, event.tenantId);
-          await this.accountingService.postJournalEntry(je.id, { posted_by: 'system' }, event.tenantId);
+          await this.accountingService.postJournalEntry(je.id, {}, event.tenantId);
           this.logger.log(`[BRAIN] Auto-posted Inventory ADJUSTMENT JE: ${event.productName}`);
         }
       } else {
@@ -236,7 +236,7 @@ export class FinancialBrainService {
             { account_id: apAccount.id, description: `Shipping payable - ${event.trackingNumber}`, debit: 0, credit: event.shippingCost },
           ],
         }, event.tenantId);
-        await this.accountingService.postJournalEntry(je.id, { posted_by: 'system' }, event.tenantId);
+        await this.accountingService.postJournalEntry(je.id, {}, event.tenantId);
       }
     } catch (e) {
       this.logger.error(`[BRAIN] Failed to create JE for shipment: ${e.message}`);
@@ -262,7 +262,7 @@ export class FinancialBrainService {
             { account_id: apAccount.id, description: `AP - ${event.poNumber}`, debit: 0, credit: event.totalAmount },
           ],
         }, event.tenantId);
-        await this.accountingService.postJournalEntry(je.id, { posted_by: 'system' }, event.tenantId);
+        await this.accountingService.postJournalEntry(je.id, {}, event.tenantId);
       }
     } catch (e) {
       this.logger.error(`[BRAIN] Failed to create JE for PO receipt: ${e.message}`);
@@ -290,7 +290,7 @@ export class FinancialBrainService {
             { account_id: bankAccount.id, description: 'Salary payment', debit: 0, credit: event.netAmount },
           ],
         }, event.tenantId);
-        await this.accountingService.postJournalEntry(je.id, { posted_by: 'system' }, event.tenantId);
+        await this.accountingService.postJournalEntry(je.id, {}, event.tenantId);
       }
     } catch (e) {
       this.logger.error(`[BRAIN] Failed to create JE for payroll: ${e.message}`);

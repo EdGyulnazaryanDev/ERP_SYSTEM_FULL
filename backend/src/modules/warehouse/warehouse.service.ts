@@ -17,7 +17,10 @@ import {
 import { InventoryEntity } from '../inventory/entities/inventory.entity';
 import { TransactionEntity, TransactionType, TransactionStatus } from '../transactions/entities/transaction.entity';
 import { TransactionItemEntity } from '../transactions/entities/transaction-item.entity';
+import { ShipmentEntity, ShipmentStatus, ShipmentPriority } from '../transportation/entities/shipment.entity';
+import { ShipmentItemEntity } from '../transportation/entities/shipment-item.entity';
 import { FinancialEventType, StockMovedEvent } from '../accounting/events/financial.events';
+import { InventoryService } from '../inventory/inventory.service';
 
 @Injectable()
 export class WarehouseService {
@@ -36,7 +39,12 @@ export class WarehouseService {
     private transactionRepo: Repository<TransactionEntity>,
     @InjectRepository(TransactionItemEntity)
     private transactionItemRepo: Repository<TransactionItemEntity>,
+    @InjectRepository(ShipmentEntity)
+    private shipmentRepo: Repository<ShipmentEntity>,
+    @InjectRepository(ShipmentItemEntity)
+    private shipmentItemRepo: Repository<ShipmentItemEntity>,
     private eventEmitter: EventEmitter2,
+    private inventoryService: InventoryService,
   ) {}
 
   async findAllWarehouses(tenantId: string) {
@@ -265,6 +273,14 @@ export class WarehouseService {
       inventoryItem.quantity -= qty;
       inventoryItem.available_quantity = inventoryItem.quantity - inventoryItem.reserved_quantity;
       await this.inventoryRepo.save(inventoryItem);
+
+      // Trigger reorder check after ISSUE (outgoing stock)
+      if (payload.movement_type === MovementType.ISSUE &&
+          inventoryItem.available_quantity <= inventoryItem.reorder_level) {
+        this.inventoryService.triggerAutoReorder(inventoryItem, tenantId).catch((e) =>
+          this.logger.error(`[WAREHOUSE] Reorder trigger failed: ${e.message}`),
+        );
+      }
     } else if (payload.movement_type === MovementType.RECEIPT && inventoryItem) {
       inventoryItem.quantity += qty;
       inventoryItem.available_quantity = inventoryItem.quantity - inventoryItem.reserved_quantity;
@@ -300,7 +316,13 @@ export class WarehouseService {
     // Create transaction + JE only for financially significant movements
     // TRANSFER is internal — no transaction, no JE
     if (saved.movement_type !== MovementType.TRANSFER) {
-      await this.createMovementTransaction(saved, tenantId, unitCost, totalCost);
+      const unitPrice = inventoryItem ? Number(inventoryItem.unit_price) : undefined;
+      await this.createMovementTransaction(saved, tenantId, unitCost, totalCost, unitPrice);
+    }
+
+    // TRANSFER → auto-create a shipment so logistics can track it
+    if (saved.movement_type === MovementType.TRANSFER) {
+      await this.createTransferShipment(saved, tenantId);
     }
 
     // Emit STOCK_MOVED — FinancialBrainService will create JE
@@ -338,6 +360,7 @@ export class WarehouseService {
     tenantId: string,
     unitCost = 0,
     totalCost = 0,
+    unitPrice?: number,
   ): Promise<void> {
     try {
       const typeMap: Partial<Record<MovementType, TransactionType>> = {
@@ -349,6 +372,12 @@ export class WarehouseService {
       const txType = typeMap[movement.movement_type];
       if (!txType) return;
 
+      // For ISSUE (sale), use the selling unit_price; for others use unit_cost
+      const lineUnitPrice = movement.movement_type === MovementType.ISSUE && unitPrice
+        ? unitPrice
+        : unitCost;
+      const lineTotal = lineUnitPrice * movement.quantity;
+
       const txNumber = await this.generateTransactionNumber(tenantId, txType);
       const movDate = movement.movement_date instanceof Date
         ? movement.movement_date
@@ -358,10 +387,10 @@ export class WarehouseService {
         product_id: movement.product_id,
         product_name: movement.product_name || 'Stock movement',
         quantity: movement.quantity,
-        unit_price: unitCost,
+        unit_price: lineUnitPrice,
         discount_amount: 0,
         tax_amount: 0,
-        total_amount: totalCost,
+        total_amount: lineTotal,
       });
 
       const tx = this.transactionRepo.create({
@@ -370,20 +399,20 @@ export class WarehouseService {
         type: txType,
         status: TransactionStatus.COMPLETED,
         transaction_date: movDate,
-        subtotal: totalCost,
+        subtotal: lineTotal,
         tax_amount: 0,
         tax_rate: 0,
         discount_amount: 0,
         shipping_amount: 0,
-        total_amount: totalCost,
-        paid_amount: totalCost,
+        total_amount: lineTotal,
+        paid_amount: lineTotal,
         balance_amount: 0,
         notes: `Auto-generated from stock movement ${movement.movement_number}`,
         items: [item],
       });
 
       await this.transactionRepo.save(tx);
-      this.logger.log(`[WAREHOUSE] Transaction ${txNumber} (${totalCost}) created for movement ${movement.movement_number}`);
+      this.logger.log(`[WAREHOUSE] Transaction ${txNumber} (${lineTotal}) created for movement ${movement.movement_number}`);
     } catch (e: any) {
       this.logger.error(`[WAREHOUSE] Failed to create transaction for movement: ${e.message}`);
     }
@@ -458,6 +487,63 @@ export class WarehouseService {
     const movement = await this.findOneMovement(id, tenantId);
     await this.movementRepo.remove(movement);
     return { message: 'Stock movement deleted successfully' };
+  }
+
+  private async createTransferShipment(
+    movement: StockMovementEntity,
+    tenantId: string,
+  ): Promise<void> {
+    try {
+      const trackingNumber = await this.generateShipmentTrackingNumber(tenantId);
+      const item = this.shipmentItemRepo.create({
+        product_id: movement.product_id,
+        product_name: movement.product_name || 'Transfer item',
+        quantity: movement.quantity,
+        description: `Stock transfer — movement ${movement.movement_number}`,
+      });
+
+      const shipment = this.shipmentRepo.create({
+        tenant_id: tenantId,
+        tracking_number: trackingNumber,
+        status: ShipmentStatus.PENDING,
+        priority: ShipmentPriority.NORMAL,
+        origin_name: movement.from_location || 'Warehouse',
+        origin_address: movement.from_location || 'Internal',
+        destination_name: movement.to_location || 'Destination',
+        destination_address: movement.to_location || 'Internal',
+        notes: `Auto-created from stock transfer ${movement.movement_number}. Ref: ${movement.reference_document || '—'}`,
+        shipping_cost: 0,
+        insurance_cost: 0,
+        total_cost: 0,
+        tracking_history: [
+          {
+            status: ShipmentStatus.PENDING,
+            timestamp: new Date(),
+            location: movement.from_location || 'Warehouse',
+            notes: `Transfer initiated from movement ${movement.movement_number}`,
+          },
+        ],
+        items: [item],
+      });
+
+      const saved = await this.shipmentRepo.save(shipment);
+
+      // Link movement to shipment
+      movement.shipment_id = saved.id;
+      await this.movementRepo.save(movement);
+
+      this.logger.log(`[TRANSFER] Shipment ${trackingNumber} created for movement ${movement.movement_number}`);
+    } catch (e: any) {
+      this.logger.error(`[TRANSFER] Failed to create shipment: ${e.message}`);
+    }
+  }
+
+  private async generateShipmentTrackingNumber(tenantId: string): Promise<string> {
+    const date = new Date();
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const count = await this.shipmentRepo.count({ where: { tenant_id: tenantId } });
+    return `TRK-${year}${month}-${String(count + 1).padStart(6, '0')}`;
   }
 
   private async generateMovementNumber(tenantId: string): Promise<string> {

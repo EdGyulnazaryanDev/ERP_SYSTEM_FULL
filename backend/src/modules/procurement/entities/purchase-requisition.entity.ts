@@ -38,7 +38,7 @@ export class PurchaseRequisitionEntity {
   @Column({ type: 'date' })
   requisition_date: Date;
 
-  @Column({ type: 'uuid' })
+  @Column({ type: 'uuid', nullable: true })
   requested_by: string;
 
   @Column({ type: 'varchar', length: 100, nullable: true })

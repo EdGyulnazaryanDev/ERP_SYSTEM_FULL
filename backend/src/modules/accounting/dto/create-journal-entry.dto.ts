@@ -48,8 +48,9 @@ export class CreateJournalEntryDto {
 }
 
 export class PostJournalEntryDto {
+  @IsOptional()
   @IsUUID()
-  posted_by: string;
+  posted_by?: string;
 }
 
 export class ReverseJournalEntryDto {

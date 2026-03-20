@@ -12,6 +12,8 @@ import { InventoryEntity } from './entities/inventory.entity';
 import { FinancialEventType, StockMovedEvent } from '../accounting/events/financial.events';
 import { PurchaseRequisitionEntity, RequisitionStatus, RequisitionPriority } from '../procurement/entities/purchase-requisition.entity';
 import { PurchaseRequisitionItemEntity } from '../procurement/entities/purchase-requisition-item.entity';
+import { TransactionEntity, TransactionType, TransactionStatus } from '../transactions/entities/transaction.entity';
+import { TransactionItemEntity } from '../transactions/entities/transaction-item.entity';
 
 @Injectable()
 export class InventoryService {
@@ -24,6 +26,10 @@ export class InventoryService {
     private requisitionRepo: Repository<PurchaseRequisitionEntity>,
     @InjectRepository(PurchaseRequisitionItemEntity)
     private requisitionItemRepo: Repository<PurchaseRequisitionItemEntity>,
+    @InjectRepository(TransactionEntity)
+    private transactionRepo: Repository<TransactionEntity>,
+    @InjectRepository(TransactionItemEntity)
+    private transactionItemRepo: Repository<TransactionItemEntity>,
     private eventEmitter: EventEmitter2,
   ) {}
 
@@ -177,7 +183,7 @@ export class InventoryService {
     return saved;
   }
 
-  private async triggerAutoReorder(item: InventoryEntity, tenantId: string): Promise<void> {
+  async triggerAutoReorder(item: InventoryEntity, tenantId: string, customQty?: number): Promise<void> {
     try {
       // Avoid duplicate pending requisitions for the same product
       const existing = await this.requisitionRepo.findOne({
@@ -187,25 +193,26 @@ export class InventoryService {
         },
         relations: ['items'],
       });
-      if (existing?.items?.some((i) => i.product_id === item.id)) {
+      if (!customQty && existing?.items?.some((i) => i.product_id === item.id)) {
         this.logger.log(`[AUTO-REORDER] Skipped — pending requisition already exists for ${item.product_name}`);
         return;
       }
 
-      const reorderQty = item.reorder_quantity || 50;
-      const reqNumber = `AUTO-REQ-${Date.now()}`;
+      const reorderQty = customQty || item.reorder_quantity || 50;
+      const unitCost = Number(item.unit_cost);
+      const totalCost = reorderQty * unitCost;
+      const reqNumber = `REQ-${Date.now()}`;
 
       const requisition = this.requisitionRepo.create({
         tenant_id: tenantId,
         requisition_number: reqNumber,
         requisition_date: new Date() as any,
-        requested_by: 'system' as any,
         department: 'Inventory',
         status: RequisitionStatus.PENDING_APPROVAL,
         priority: RequisitionPriority.HIGH,
-        purpose: `Auto-reorder: ${item.product_name} stock (${item.available_quantity}) fell below reorder level (${item.reorder_level})`,
+        purpose: `Reorder: ${item.product_name} — current stock ${item.available_quantity}, reorder level ${item.reorder_level}`,
         notes: item.supplier_id
-          ? `Preferred supplier ID: ${item.supplier_id}${item.supplier_name ? ' (' + item.supplier_name + ')' : ''}`
+          ? `Preferred supplier: ${item.supplier_name || item.supplier_id}`
           : 'No preferred supplier set — assign manually',
       });
 
@@ -219,17 +226,60 @@ export class InventoryService {
         description: `SKU: ${item.sku}`,
         quantity: reorderQty,
         unit: 'pcs',
-        estimated_price: Number(item.unit_cost),
-        total_estimated: reorderQty * Number(item.unit_cost),
+        estimated_price: unitCost,
+        total_estimated: totalCost,
       });
 
       await this.requisitionItemRepo.save(reqItem);
 
+      // Create a PURCHASE transaction (draft) so accountants can see the pending order
+      const txCount = await this.transactionRepo.count({ where: { tenant_id: tenantId, type: TransactionType.PURCHASE } });
+      const txNumber = `PUR-REORDER-${String(txCount + 1).padStart(5, '0')}`;
+
+      const txItem = this.transactionItemRepo.create({
+        product_id: item.id,
+        product_name: item.product_name,
+        sku: item.sku,
+        quantity: reorderQty,
+        unit_price: unitCost,
+        discount_amount: 0,
+        tax_amount: 0,
+        total_amount: totalCost,
+        notes: `Reorder requisition ${reqNumber}`,
+      });
+
+      const tx = this.transactionRepo.create({
+        tenant_id: tenantId,
+        transaction_number: txNumber,
+        type: TransactionType.PURCHASE,
+        status: TransactionStatus.DRAFT,
+        supplier_id: item.supplier_id as any,
+        supplier_name: item.supplier_name || undefined,
+        transaction_date: new Date(),
+        subtotal: totalCost,
+        tax_amount: 0,
+        tax_rate: 0,
+        discount_amount: 0,
+        shipping_amount: 0,
+        total_amount: totalCost,
+        paid_amount: 0,
+        balance_amount: totalCost,
+        notes: `Auto-generated reorder for ${item.product_name} — requisition ${reqNumber}`,
+        items: [txItem],
+      });
+
+      await this.transactionRepo.save(tx);
+
+      // NOTE: Do NOT emit BILL_CREATED here.
+      // When this draft transaction is completed via TransactionsService.complete(),
+      // it emits BILL_CREATED + STOCK_MOVED IN -> FinancialBrainService creates the JE.
+      // Emitting here would double-post the AP liability.
+
       this.logger.log(
-        `[AUTO-REORDER] Created requisition ${reqNumber} for ${item.product_name} x${reorderQty}`,
+        `[REORDER] Requisition ${reqNumber} + Transaction ${txNumber} created for ${item.product_name} x${reorderQty} ($${totalCost})`,
       );
-    } catch (e) {
-      this.logger.error(`[AUTO-REORDER] Failed to create requisition: ${e.message}`);
+    } catch (e: any) {
+      this.logger.error(`[REORDER] Failed: ${e.message}`);
     }
   }
 
@@ -256,13 +306,14 @@ export class InventoryService {
       }));
   }
 
-  async manualReorder(id: string, tenantId: string): Promise<any> {
+  async manualReorder(id: string, tenantId: string, quantity?: number): Promise<any> {
     const item = await this.findOne(id, tenantId);
-    await this.triggerAutoReorder(item, tenantId);
+    const reorderQty = quantity || item.reorder_quantity || 50;
+    await this.triggerAutoReorder(item, tenantId, reorderQty);
     return {
       message: `Reorder requisition created for ${item.product_name}`,
       product_name: item.product_name,
-      reorder_quantity: item.reorder_quantity,
+      reorder_quantity: reorderQty,
     };
   }
 
