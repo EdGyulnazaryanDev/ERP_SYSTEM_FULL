@@ -5,6 +5,8 @@ import { InventoryService } from './inventory.service';
 import { InventoryEntity } from './entities/inventory.entity';
 import { PurchaseRequisitionEntity } from '../procurement/entities/purchase-requisition.entity';
 import { PurchaseRequisitionItemEntity } from '../procurement/entities/purchase-requisition-item.entity';
+import { TransactionEntity } from '../transactions/entities/transaction.entity';
+import { TransactionItemEntity } from '../transactions/entities/transaction-item.entity';
 
 @Module({
   imports: [
@@ -12,6 +14,8 @@ import { PurchaseRequisitionItemEntity } from '../procurement/entities/purchase-
       InventoryEntity,
       PurchaseRequisitionEntity,
       PurchaseRequisitionItemEntity,
+      TransactionEntity,
+      TransactionItemEntity,
     ]),
   ],
   controllers: [InventoryController],

@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Table, Button, Space, Modal, Form, Input, DatePicker, message, Tag, Select } from 'antd';
-import { PlusOutlined, EditOutlined } from '@ant-design/icons';
+import { Table, Button, Space, Modal, Form, Input, DatePicker, message, Tag, Select, Popconfirm } from 'antd';
+import { PlusOutlined, EditOutlined, CheckOutlined, StopOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { procurementApi } from '@/api/procurement';
 import { hrApi } from '@/api/hr';
@@ -45,6 +45,26 @@ export default function PurchaseRequisitionsTab() {
     onError: (e: any) => message.error(e?.response?.data?.message || 'Failed to update PR'),
   });
 
+  const approveMutation = useMutation({
+    mutationFn: (id: string) => procurementApi.approveRequisition(id, {}),
+    onSuccess: () => {
+      message.success('Requisition approved — JE created & inbound shipment opened');
+      queryClient.invalidateQueries({ queryKey: ['purchase-requisitions'] });
+      queryClient.invalidateQueries({ queryKey: ['shipments'] });
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+    },
+    onError: (e: any) => message.error(e?.response?.data?.message || 'Failed to approve'),
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: (id: string) => procurementApi.rejectRequisition(id, { rejection_reason: 'Rejected by manager' }),
+    onSuccess: () => {
+      message.success('Requisition rejected');
+      queryClient.invalidateQueries({ queryKey: ['purchase-requisitions'] });
+    },
+    onError: (e: any) => message.error(e?.response?.data?.message || 'Failed to reject'),
+  });
+
   const handleSubmit = (values: any) => {
     const payload = {
       ...values,
@@ -60,11 +80,25 @@ export default function PurchaseRequisitionsTab() {
   };
 
   const columns = [
-    { title: 'PR Number', dataIndex: 'pr_number', key: 'pr_number' },
-    { title: 'Requested By', dataIndex: 'requested_by_name', key: 'requested_by_name' },
-    { title: 'Request Date', dataIndex: 'request_date', key: 'request_date', render: (date: string) => date ? new Date(date).toLocaleDateString() : '-' },
-    { title: 'Priority', dataIndex: 'priority', key: 'priority', render: (priority: string) => <Tag color={priority === 'HIGH' ? 'red' : 'blue'}>{priority}</Tag> },
-    { title: 'Status', dataIndex: 'status', key: 'status', render: (status: string) => <Tag color={status === 'APPROVED' ? 'green' : 'orange'}>{status}</Tag> },
+    { title: 'Req #', dataIndex: 'requisition_number', key: 'requisition_number' },
+    { title: 'Department', dataIndex: 'department', key: 'department', render: (v: string) => v || '-' },
+    { title: 'Purpose', dataIndex: 'purpose', key: 'purpose', ellipsis: true },
+    { title: 'Priority', dataIndex: 'priority', key: 'priority', render: (priority: string) => <Tag color={priority === 'HIGH' || priority === 'high' ? 'red' : 'blue'}>{priority}</Tag> },
+    {
+      title: 'Status', dataIndex: 'status', key: 'status',
+      render: (status: string) => <Tag color={status === 'APPROVED' || status === 'approved' ? 'green' : status === 'REJECTED' || status === 'rejected' ? 'red' : 'orange'}>{status}</Tag>,
+    },
+    {
+      title: 'Items', key: 'items',
+      render: (_: unknown, r: any) => r.items?.length ? `${r.items.length} item(s)` : '-',
+    },
+    {
+      title: 'Est. Total', key: 'total',
+      render: (_: unknown, r: any) => {
+        const total = (r.items || []).reduce((s: number, i: any) => s + Number(i.total_estimated || 0), 0);
+        return total > 0 ? `$${total.toFixed(2)}` : '-';
+      },
+    },
     {
       title: 'Actions',
       key: 'actions',
@@ -85,6 +119,34 @@ export default function PurchaseRequisitionsTab() {
               }, 0);
             }}
           />
+          {(record.status === 'pending_approval' || record.status === 'PENDING_APPROVAL') && (
+            <>
+              <Popconfirm
+                title="Approve this requisition?"
+                description="This will create a Journal Entry and open an inbound shipment."
+                onConfirm={() => approveMutation.mutate(record.id)}
+                okText="Approve"
+                okButtonProps={{ type: 'primary' }}
+              >
+                <Button
+                  type="link"
+                  icon={<CheckOutlined />}
+                  style={{ color: '#52c41a' }}
+                  loading={approveMutation.isPending}
+                >
+                  Approve
+                </Button>
+              </Popconfirm>
+              <Popconfirm
+                title="Reject this requisition?"
+                onConfirm={() => rejectMutation.mutate(record.id)}
+                okText="Reject"
+                okButtonProps={{ danger: true }}
+              >
+                <Button type="link" danger icon={<StopOutlined />}>Reject</Button>
+              </Popconfirm>
+            </>
+          )}
         </Space>
       ),
     }
@@ -107,7 +169,37 @@ export default function PurchaseRequisitionsTab() {
         </Button>
       </div>
 
-      <Table columns={columns} dataSource={data?.data || []} loading={isLoading} rowKey="id" />
+      <Table columns={columns} dataSource={Array.isArray(data) ? data : (data?.data || [])} loading={isLoading} rowKey="id"
+        expandable={{
+          expandedRowRender: (record: any) => {
+            const items = record.items ?? [];
+            if (!items.length) return <p style={{ margin: 0 }}>No items</p>;
+            return (
+              <Table
+                size="small"
+                dataSource={items}
+                rowKey="id"
+                pagination={false}
+                columns={[
+                  { title: 'Product', dataIndex: 'product_name', key: 'product_name' },
+                  { title: 'Description', dataIndex: 'description', key: 'description', ellipsis: true, render: (v: string) => v || '-' },
+                  { title: 'Qty', dataIndex: 'quantity', key: 'quantity' },
+                  { title: 'Unit', dataIndex: 'unit', key: 'unit', render: (v: string) => v || '-' },
+                  {
+                    title: 'Est. Price', dataIndex: 'estimated_price', key: 'estimated_price',
+                    render: (v: number) => v ? `${Number(v).toFixed(2)}` : '-',
+                  },
+                  {
+                    title: 'Total', dataIndex: 'total_estimated', key: 'total_estimated',
+                    render: (v: number) => v ? `${Number(v).toFixed(2)}` : '-',
+                  },
+                ]}
+              />
+            );
+          },
+          rowExpandable: (record: any) => (record.items?.length ?? 0) > 0,
+        }}
+      />
 
       <Modal
         title={editingRecord ? 'Edit Purchase Requisition' : 'Create Purchase Requisition'}

@@ -243,7 +243,7 @@ export class AccountingService {
     }
 
     entry.status = JournalEntryStatus.POSTED;
-    entry.posted_by = data.posted_by;
+    if (data.posted_by) entry.posted_by = data.posted_by;
     entry.posted_at = new Date();
 
     // Update account balances
@@ -394,7 +394,7 @@ export class AccountingService {
         );
 
         // Auto-post it and link back
-        await this.postJournalEntry(je.id, { posted_by: 'system' }, tenantId);
+        await this.postJournalEntry(je.id, {}, tenantId);
         savedAR.journal_entry_id = je.id;
         await this.arRepo.save(savedAR);
       }
@@ -485,7 +485,7 @@ export class AccountingService {
           },
           tenantId,
         );
-        await this.postJournalEntry(je.id, { posted_by: 'system' }, tenantId);
+        await this.postJournalEntry(je.id, {}, tenantId);
       }
     } catch (e) {
       console.warn(
@@ -556,7 +556,7 @@ export class AccountingService {
           },
           tenantId,
         );
-        await this.postJournalEntry(je.id, { posted_by: 'system' }, tenantId);
+        await this.postJournalEntry(je.id, {}, tenantId);
         savedAP.journal_entry_id = je.id;
         await this.apRepo.save(savedAP);
       }
@@ -652,7 +652,7 @@ export class AccountingService {
           },
           tenantId,
         );
-        await this.postJournalEntry(je.id, { posted_by: 'system' }, tenantId);
+        await this.postJournalEntry(je.id, {}, tenantId);
       }
     } catch (e) {
       console.warn(

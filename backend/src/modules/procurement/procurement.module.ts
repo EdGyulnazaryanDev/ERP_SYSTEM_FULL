@@ -12,6 +12,9 @@ import { PurchaseOrderEntity } from './entities/purchase-order.entity';
 import { PurchaseOrderItemEntity } from './entities/purchase-order-item.entity';
 import { GoodsReceiptEntity } from './entities/goods-receipt.entity';
 import { GoodsReceiptItemEntity } from './entities/goods-receipt-item.entity';
+import { ShipmentEntity } from '../transportation/entities/shipment.entity';
+import { ShipmentItemEntity } from '../transportation/entities/shipment-item.entity';
+import { InventoryEntity } from '../inventory/entities/inventory.entity';
 
 @Module({
   imports: [
@@ -26,6 +29,9 @@ import { GoodsReceiptItemEntity } from './entities/goods-receipt-item.entity';
       PurchaseOrderItemEntity,
       GoodsReceiptEntity,
       GoodsReceiptItemEntity,
+      ShipmentEntity,
+      ShipmentItemEntity,
+      InventoryEntity,
     ]),
   ],
   controllers: [ProcurementController],

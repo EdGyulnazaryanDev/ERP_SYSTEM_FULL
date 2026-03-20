@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -18,6 +19,9 @@ import { PurchaseOrderEntity, PurchaseOrderStatus } from './entities/purchase-or
 import { PurchaseOrderItemEntity } from './entities/purchase-order-item.entity';
 import { GoodsReceiptEntity, GoodsReceiptStatus } from './entities/goods-receipt.entity';
 import { GoodsReceiptItemEntity } from './entities/goods-receipt-item.entity';
+import { ShipmentEntity, ShipmentStatus, ShipmentPriority } from '../transportation/entities/shipment.entity';
+import { ShipmentItemEntity } from '../transportation/entities/shipment-item.entity';
+import { InventoryEntity } from '../inventory/entities/inventory.entity';
 import type { CreatePurchaseRequisitionDto, UpdatePurchaseRequisitionDto, ApproveRequisitionDto, RejectRequisitionDto } from './dto/create-purchase-requisition.dto';
 import type { CreateRfqDto, UpdateRfqDto } from './dto/create-rfq.dto';
 import type { CreateVendorQuoteDto, UpdateVendorQuoteDto } from './dto/create-vendor-quote.dto';
@@ -26,6 +30,8 @@ import type { CreateGoodsReceiptDto, UpdateGoodsReceiptDto, ApproveGoodsReceiptD
 
 @Injectable()
 export class ProcurementService {
+  private readonly logger = new Logger(ProcurementService.name);
+
   constructor(
     @InjectRepository(PurchaseRequisitionEntity)
     private requisitionRepo: Repository<PurchaseRequisitionEntity>,
@@ -47,6 +53,12 @@ export class ProcurementService {
     private goodsReceiptRepo: Repository<GoodsReceiptEntity>,
     @InjectRepository(GoodsReceiptItemEntity)
     private goodsReceiptItemRepo: Repository<GoodsReceiptItemEntity>,
+    @InjectRepository(ShipmentEntity)
+    private shipmentRepo: Repository<ShipmentEntity>,
+    @InjectRepository(ShipmentItemEntity)
+    private shipmentItemRepo: Repository<ShipmentItemEntity>,
+    @InjectRepository(InventoryEntity)
+    private inventoryRepo: Repository<InventoryEntity>,
     private eventEmitter: EventEmitter2,
   ) { }
 
@@ -167,10 +179,72 @@ export class ProcurementService {
     }
 
     requisition.status = RequisitionStatus.APPROVED;
-    requisition.approved_by = data.approved_by;
+    if (data.approved_by) requisition.approved_by = data.approved_by;
     requisition.approved_at = new Date();
 
-    return this.requisitionRepo.save(requisition);
+    const saved = await this.requisitionRepo.save(requisition);
+
+    // ── Create inbound PENDING shipment (supplier → warehouse) ──────────────────
+    try {
+      const trackingNumber = `SHP-REQ-${requisition.requisition_number}-${Date.now()}`;
+
+      // Look up supplier info from inventory items
+      let supplierName = 'Supplier';
+      let supplierAddress = 'Supplier — update when confirmed';
+      const firstItem = requisition.items?.[0];
+      if (firstItem?.product_id) {
+        const inv = await this.inventoryRepo.findOne({
+          where: { id: firstItem.product_id, tenant_id: tenantId },
+          relations: ['supplier'],
+        });
+        if (inv?.supplier) {
+          supplierName = inv.supplier.name || supplierName;
+          supplierAddress = inv.supplier.address || inv.supplier.email || supplierAddress;
+        } else if (inv?.supplier_name) {
+          supplierName = inv.supplier_name;
+        }
+      }
+
+      const shipmentItems = (requisition.items || []).map((item) =>
+        this.shipmentItemRepo.create({
+          product_id: item.product_id || undefined,
+          product_name: item.product_name,
+          sku: item.description?.includes('SKU:')
+            ? item.description.replace('SKU:', '').trim()
+            : undefined,
+          quantity: item.quantity,
+          description: `${item.product_name} — qty: ${item.quantity}${item.unit ? ' ' + item.unit : ''}${item.estimated_price ? ' @ ' + Number(item.estimated_price).toFixed(2) : ''}`,
+        }),
+      );
+
+      const shipment = this.shipmentRepo.create({
+        tenant_id: tenantId,
+        tracking_number: trackingNumber,
+        status: ShipmentStatus.PENDING,
+        priority: ShipmentPriority.HIGH,
+        origin_name: supplierName,
+        origin_address: supplierAddress,
+        destination_name: 'Warehouse',
+        destination_address: 'Main Warehouse',
+        notes: `Inbound shipment for approved requisition ${requisition.requisition_number}. ${requisition.purpose || ''}`,
+        tracking_history: [
+          {
+            status: ShipmentStatus.PENDING,
+            timestamp: new Date(),
+            location: supplierName,
+            notes: `Requisition ${requisition.requisition_number} approved — awaiting supplier dispatch`,
+          },
+        ],
+        items: shipmentItems,
+      });
+
+      await this.shipmentRepo.save(shipment);
+      this.logger.log(`[PROCUREMENT] Created inbound shipment ${trackingNumber} for requisition ${requisition.requisition_number} (supplier: ${supplierName})`);
+    } catch (e: any) {
+      this.logger.error(`[PROCUREMENT] Failed to create inbound shipment: ${e.message}`);
+    }
+
+    return saved;
   }
 
   async rejectRequisition(id: string, data: RejectRequisitionDto, tenantId: string): Promise<PurchaseRequisitionEntity> {
