@@ -60,7 +60,8 @@ export class FinancialBrainService {
   async onPaymentReceived(event: PaymentReceivedEvent) {
     this.logger.log(`[BRAIN] Payment received: $${event.amount} for invoice ${event.invoiceNumber}`);
     try {
-      const bankAccount = await this.accountingService['findDefaultAccount'](event.tenantId, 'bank')
+      const bankAccount =
+        await this.accountingService['findDefaultAccount'](event.tenantId, 'bank')
         || await this.accountingService['findDefaultAccount'](event.tenantId, 'cash');
       const arAccount = await this.accountingService['findDefaultAccount'](event.tenantId, 'accounts_receivable');
 
@@ -141,101 +142,79 @@ export class FinancialBrainService {
   // ── Inventory: Stock Moved → JE: Inventory adjustment ───────────────────────
   @OnEvent(FinancialEventType.STOCK_MOVED)
   async onStockMoved(event: StockMovedEvent) {
-      // Only skip if there is truly nothing to record
-      if (event.totalCost === 0 && event.quantity === 0) return;
-      this.logger.log(
-        `[BRAIN] Stock moved: ${event.productName} qty=${event.quantity} cost=${event.totalCost} type=${event.movementType}`,
+    // Skip if no quantity
+    if (!event.quantity || event.quantity === 0) return;
+    // Skip if no cost — can't create a valid double-entry JE with zero amounts
+    if (!event.totalCost || event.totalCost === 0) {
+      this.logger.warn(
+        `[BRAIN] STOCK_MOVED skipped for ${event.productName}: totalCost is 0. Set unit_cost on the inventory item to enable auto JE.`,
       );
-      try {
-        const inventoryAccount = await this.accountingService[
-          'findDefaultAccount'
-        ](event.tenantId, 'inventory');
-        const cogsAccount = await this.accountingService['findDefaultAccount'](
-          event.tenantId,
-          'cost_of_goods_sold',
-        );
-        const apAccount = await this.accountingService['findDefaultAccount'](
-          event.tenantId,
-          'accounts_payable',
-        );
+      return;
+    }
+    this.logger.log(
+      `[BRAIN] Stock moved: ${event.productName} qty=${event.quantity} cost=${event.totalCost} type=${event.movementType}`,
+    );
+    try {
+      const inventoryAccount = await this.accountingService['findDefaultAccount'](event.tenantId, 'inventory');
+      const cogsAccount = await this.accountingService['findDefaultAccount'](event.tenantId, 'cost_of_goods_sold');
+      const apAccount = await this.accountingService['findDefaultAccount'](event.tenantId, 'accounts_payable');
 
-        if (event.movementType === 'OUT' && inventoryAccount && cogsAccount) {
-          // Stock OUT: Debit COGS, Credit Inventory
-          const je = await this.accountingService.createJournalEntry(
-            {
-              entry_date: new Date().toISOString().split('T')[0],
-              entry_type: JournalEntryType.GENERAL,
-              description: `Inventory out: ${event.productName} x${event.quantity}`,
-              reference: event.reference,
-              lines: [
-                {
-                  account_id: cogsAccount.id,
-                  description: `COGS - ${event.productName}`,
-                  debit: event.totalCost,
-                  credit: 0,
-                },
-                {
-                  account_id: inventoryAccount.id,
-                  description: `Inventory - ${event.productName}`,
-                  debit: 0,
-                  credit: event.totalCost,
-                },
-              ],
-            },
-            event.tenantId,
-          );
-          await this.accountingService.postJournalEntry(
-            je.id,
-            { posted_by: 'system' },
-            event.tenantId,
-          );
-          this.logger.log(
-            `[BRAIN] Auto-posted COGS JE for stock OUT: ${event.productName}`,
-          );
-        } else if (
-          event.movementType === 'IN' &&
-          inventoryAccount &&
-          apAccount
-        ) {
-          // Stock IN: Debit Inventory, Credit AP (goods received)
-          const je = await this.accountingService.createJournalEntry(
-            {
-              entry_date: new Date().toISOString().split('T')[0],
-              entry_type: JournalEntryType.GENERAL,
-              description: `Inventory received: ${event.productName} x${event.quantity}`,
-              reference: event.reference,
-              lines: [
-                {
-                  account_id: inventoryAccount.id,
-                  description: `Inventory IN - ${event.productName}`,
-                  debit: event.totalCost,
-                  credit: 0,
-                },
-                {
-                  account_id: apAccount.id,
-                  description: `Payable - ${event.productName}`,
-                  debit: 0,
-                  credit: event.totalCost,
-                },
-              ],
-            },
-            event.tenantId,
-          );
-          await this.accountingService.postJournalEntry(
-            je.id,
-            { posted_by: 'system' },
-            event.tenantId,
-          );
-          this.logger.log(
-            `[BRAIN] Auto-posted Inventory IN JE: ${event.productName}`,
-          );
+      if (event.movementType === 'OUT' && inventoryAccount && cogsAccount) {
+        // Stock OUT: Debit COGS, Credit Inventory
+        const je = await this.accountingService.createJournalEntry({
+          entry_date: new Date().toISOString().split('T')[0],
+          entry_type: JournalEntryType.GENERAL,
+          description: `Inventory out: ${event.productName} x${event.quantity}`,
+          reference: event.reference,
+          lines: [
+            { account_id: cogsAccount.id, description: `COGS - ${event.productName}`, debit: event.totalCost, credit: 0 },
+            { account_id: inventoryAccount.id, description: `Inventory - ${event.productName}`, debit: 0, credit: event.totalCost },
+          ],
+        }, event.tenantId);
+        await this.accountingService.postJournalEntry(je.id, { posted_by: 'system' }, event.tenantId);
+        this.logger.log(`[BRAIN] Auto-posted COGS JE for stock OUT: ${event.productName}`);
+      } else if (event.movementType === 'IN' && inventoryAccount && apAccount) {
+        // Stock IN: Debit Inventory, Credit AP (goods received)
+        const je = await this.accountingService.createJournalEntry({
+          entry_date: new Date().toISOString().split('T')[0],
+          entry_type: JournalEntryType.PURCHASE,
+          description: `Inventory received: ${event.productName} x${event.quantity}`,
+          reference: event.reference,
+          lines: [
+            { account_id: inventoryAccount.id, description: `Inventory IN - ${event.productName}`, debit: event.totalCost, credit: 0 },
+            { account_id: apAccount.id, description: `Payable - ${event.productName}`, debit: 0, credit: event.totalCost },
+          ],
+        }, event.tenantId);
+        await this.accountingService.postJournalEntry(je.id, { posted_by: 'system' }, event.tenantId);
+        this.logger.log(`[BRAIN] Auto-posted Inventory IN JE: ${event.productName}`);
+      } else if (event.movementType === 'ADJUSTMENT' && inventoryAccount) {
+        // Adjustment: use equity/retained earnings as the other side if available, else AP
+        const equityAccount = await this.accountingService['findDefaultAccount'](event.tenantId, 'retained_earnings')
+          || await this.accountingService['findDefaultAccount'](event.tenantId, 'owner_equity')
+          || apAccount;
+        if (equityAccount) {
+          const je = await this.accountingService.createJournalEntry({
+            entry_date: new Date().toISOString().split('T')[0],
+            entry_type: JournalEntryType.GENERAL,
+            description: `Inventory adjustment: ${event.productName} x${event.quantity}`,
+            reference: event.reference,
+            lines: [
+              { account_id: inventoryAccount.id, description: `Inventory adj - ${event.productName}`, debit: event.totalCost, credit: 0 },
+              { account_id: equityAccount.id, description: `Adjustment offset - ${event.productName}`, debit: 0, credit: event.totalCost },
+            ],
+          }, event.tenantId);
+          await this.accountingService.postJournalEntry(je.id, { posted_by: 'system' }, event.tenantId);
+          this.logger.log(`[BRAIN] Auto-posted Inventory ADJUSTMENT JE: ${event.productName}`);
         }
-      } catch (e) {
-        this.logger.error(
-          `[BRAIN] Failed to create JE for stock movement: ${e.message}`,
+      } else {
+        this.logger.warn(
+          `[BRAIN] Missing CoA accounts for STOCK_MOVED ${event.movementType}. Need: inventory${event.movementType === 'OUT' ? ', cost_of_goods_sold' : ', accounts_payable'}`,
         );
       }
+    } catch (e) {
+      this.logger.error(`[BRAIN] Failed to create JE for stock movement: ${e.message}`);
     }
+  }
 
   // ── Logistics: Shipment Delivered → JE: Debit Shipping Expense, Credit AP ───
   @OnEvent(FinancialEventType.SHIPMENT_DELIVERED)

@@ -197,7 +197,17 @@ export class WarehouseService {
     if (movementType) where.movement_type = movementType;
     const data = await this.movementRepo.find({
       where,
+      relations: ['inventory', 'inventory.supplier'],
       order: { movement_date: 'DESC', created_at: 'DESC' },
+    });
+    return { data };
+  }
+
+  async findMovementsByShipment(shipmentId: string, tenantId: string) {
+    const data = await this.movementRepo.find({
+      where: { shipment_id: shipmentId, tenant_id: tenantId },
+      relations: ['inventory', 'inventory.supplier'],
+      order: { movement_date: 'DESC' },
     });
     return { data };
   }
@@ -225,7 +235,7 @@ export class WarehouseService {
     if (!payload.movement_date)
       throw new BadRequestException('movement_date is required');
 
-    // ── Fix 1: validate stock availability for ISSUE movements ──────────────
+    // Look up inventory item — try by inventory row id first, then by product_id
     let inventoryItem: InventoryEntity | null = null;
     if (payload.product_id) {
       inventoryItem = await this.inventoryRepo.findOne({
@@ -238,10 +248,13 @@ export class WarehouseService {
       }
     }
 
-    if (payload.movement_type === MovementType.ISSUE) {
+    // Capture old qty before any changes (needed for ADJUSTMENT delta)
+    const oldQty = inventoryItem ? inventoryItem.quantity : 0;
+
+    if (payload.movement_type === MovementType.ISSUE || payload.movement_type === MovementType.TRANSFER) {
       if (!inventoryItem) {
         throw new BadRequestException(
-          'Cannot issue stock: product not found in inventory. Select a product first.',
+          `Cannot ${payload.movement_type.toLowerCase()} stock: product not found in inventory.`,
         );
       }
       if (inventoryItem.available_quantity < qty) {
@@ -249,16 +262,27 @@ export class WarehouseService {
           `Insufficient stock: available ${inventoryItem.available_quantity}, requested ${qty}`,
         );
       }
-      // Deduct from inventory
       inventoryItem.quantity -= qty;
       inventoryItem.available_quantity = inventoryItem.quantity - inventoryItem.reserved_quantity;
       await this.inventoryRepo.save(inventoryItem);
     } else if (payload.movement_type === MovementType.RECEIPT && inventoryItem) {
-      // Add to inventory on receipt
       inventoryItem.quantity += qty;
       inventoryItem.available_quantity = inventoryItem.quantity - inventoryItem.reserved_quantity;
       await this.inventoryRepo.save(inventoryItem);
+    } else if (payload.movement_type === MovementType.ADJUSTMENT && inventoryItem) {
+      // ADJUSTMENT: qty = new physical count. Sets inventory to that exact value.
+      inventoryItem.quantity = qty;
+      inventoryItem.available_quantity = qty - inventoryItem.reserved_quantity;
+      await this.inventoryRepo.save(inventoryItem);
     }
+
+    const unitCost = inventoryItem ? Number(inventoryItem.unit_cost) : Number(payload.unit_cost || 0);
+    // For ADJUSTMENT: JE amount = |delta| × unit_cost (only the change matters)
+    // For RECEIPT/ISSUE: JE amount = qty × unit_cost
+    const jeQty = payload.movement_type === MovementType.ADJUSTMENT
+      ? Math.abs(qty - oldQty)
+      : qty;
+    const totalCost = unitCost * jeQty;
 
     const movement_number = await this.generateMovementNumber(tenantId);
     const movement = this.movementRepo.create({
@@ -266,24 +290,25 @@ export class WarehouseService {
       tenant_id: tenantId,
       movement_number,
       quantity: qty,
-      // auto-fill product_name from inventory if not provided
+      unit_cost: unitCost,
+      total_cost: totalCost,
+      journal_entry_created: false,
       product_name: payload.product_name || inventoryItem?.product_name,
     });
     const saved = await this.movementRepo.save(movement);
 
-    // ── Fix 2: use real unit_cost so JE is not skipped ───────────────────────
-    const unitCost = inventoryItem ? Number(inventoryItem.unit_cost) : 0;
-    const totalCost = unitCost * qty;
+    // Create transaction + JE only for financially significant movements
+    // TRANSFER is internal — no transaction, no JE
+    if (saved.movement_type !== MovementType.TRANSFER) {
+      await this.createMovementTransaction(saved, tenantId, unitCost, totalCost);
+    }
 
-    // Create transaction record for full audit trail
-    await this.createMovementTransaction(saved, tenantId, unitCost, totalCost);
-
-    // Emit STOCK_MOVED with real cost so FinancialBrainService creates JE
+    // Emit STOCK_MOVED — FinancialBrainService will create JE
     const financialMovementType = this.toFinancialMovementType(saved.movement_type);
-    if (financialMovementType) {
+    if (financialMovementType && totalCost > 0) {
       const event = new StockMovedEvent();
       event.tenantId = tenantId;
-      event.productId = saved.product_id || '';
+      event.productId = inventoryItem?.id || saved.product_id || '';
       event.productName = saved.product_name || 'Unknown product';
       event.quantity = qty;
       event.movementType = financialMovementType;
@@ -291,6 +316,9 @@ export class WarehouseService {
       event.totalCost = totalCost;
       event.reference = saved.movement_number;
       this.eventEmitter.emit(FinancialEventType.STOCK_MOVED, event);
+
+      saved.journal_entry_created = true;
+      await this.movementRepo.save(saved);
     }
 
     return saved;
@@ -376,12 +404,52 @@ export class WarehouseService {
     tenantId: string,
   ) {
     const movement = await this.findOneMovement(id, tenantId);
-    if (payload.quantity !== undefined) {
-      const qty = Number(payload.quantity);
-      if (qty <= 0)
-        throw new BadRequestException('quantity must be a positive number');
-      payload.quantity = qty;
+
+    const newQty = payload.quantity !== undefined ? Number(payload.quantity) : movement.quantity;
+    if (newQty <= 0) throw new BadRequestException('quantity must be a positive number');
+
+    // Reverse the old inventory impact before applying new values
+    if (movement.product_id) {
+      const inv = await this.inventoryRepo.findOne({
+        where: [
+          { id: movement.product_id, tenant_id: tenantId },
+          { product_id: movement.product_id, tenant_id: tenantId },
+        ],
+      });
+
+      if (inv) {
+        // Undo old movement
+        if (movement.movement_type === MovementType.RECEIPT) {
+          inv.quantity -= movement.quantity;
+        } else if (movement.movement_type === MovementType.ISSUE || movement.movement_type === MovementType.TRANSFER) {
+          inv.quantity += movement.quantity;
+        }
+
+        // Apply new movement type/qty
+        const newType = (payload.movement_type || movement.movement_type) as MovementType;
+        if (newType === MovementType.RECEIPT) {
+          inv.quantity += newQty;
+        } else if (newType === MovementType.ISSUE || newType === MovementType.TRANSFER) {
+          if (inv.available_quantity + movement.quantity < newQty) {
+            throw new BadRequestException(
+              `Insufficient stock after reversal: available ${inv.available_quantity + movement.quantity}, requested ${newQty}`,
+            );
+          }
+          inv.quantity -= newQty;
+        }
+
+        inv.available_quantity = inv.quantity - inv.reserved_quantity;
+        await this.inventoryRepo.save(inv);
+
+        // Recalculate costs
+        const unitCost = Number(inv.unit_cost);
+        payload.unit_cost = unitCost;
+        payload.total_cost = unitCost * newQty;
+      }
     }
+
+    payload.quantity = newQty;
+    payload.journal_entry_created = false; // reset — JE was already posted, new one won't fire for edits
     Object.assign(movement, payload);
     return this.movementRepo.save(movement);
   }

@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between } from 'typeorm';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   TransactionEntity,
   TransactionType,
@@ -12,6 +13,12 @@ import {
 } from './entities/transaction.entity';
 import { TransactionItemEntity } from './entities/transaction-item.entity';
 import { InventoryEntity } from '../inventory/entities/inventory.entity';
+import {
+  FinancialEventType,
+  StockMovedEvent,
+  InvoiceCreatedEvent,
+  BillCreatedEvent,
+} from '../accounting/events/financial.events';
 import type { CreateTransactionDto } from './dto/create-transaction.dto';
 
 @Injectable()
@@ -23,6 +30,7 @@ export class TransactionsService {
     private transactionItemRepo: Repository<TransactionItemEntity>,
     @InjectRepository(InventoryEntity)
     private inventoryRepo: Repository<InventoryEntity>,
+    private eventEmitter: EventEmitter2,
   ) {}
 
   async create(
@@ -241,7 +249,70 @@ export class TransactionsService {
     }
 
     transaction.status = TransactionStatus.COMPLETED;
-    return this.transactionRepo.save(transaction);
+    const saved = await this.transactionRepo.save(transaction);
+
+    const dateStr = new Date(transaction.transaction_date).toISOString().split('T')[0];
+
+    // ── SALE completed: emit INVOICE_CREATED + STOCK_MOVED OUT per item ──
+    if (transaction.type === TransactionType.SALE) {
+      const invoiceEvent = new InvoiceCreatedEvent();
+      invoiceEvent.tenantId = tenantId;
+      invoiceEvent.invoiceId = transaction.id;
+      invoiceEvent.invoiceNumber = transaction.transaction_number;
+      invoiceEvent.customerId = transaction.customer_id;
+      invoiceEvent.amount = Number(transaction.total_amount);
+      invoiceEvent.date = dateStr;
+      invoiceEvent.description = `Sale transaction ${transaction.transaction_number}`;
+      this.eventEmitter.emit(FinancialEventType.INVOICE_CREATED, invoiceEvent);
+
+      // COGS: emit STOCK_MOVED OUT for each item
+      for (const item of transaction.items) {
+        const inv = await this.inventoryRepo.findOne({
+          where: { product_id: item.product_id, tenant_id: tenantId },
+        });
+        const unitCost = inv ? Number(inv.unit_cost) : 0;
+        if (unitCost > 0) {
+          const stockEvent = new StockMovedEvent();
+          stockEvent.tenantId = tenantId;
+          stockEvent.productId = item.product_id;
+          stockEvent.productName = item.product_name;
+          stockEvent.quantity = item.quantity;
+          stockEvent.movementType = 'OUT';
+          stockEvent.unitCost = unitCost;
+          stockEvent.totalCost = item.quantity * unitCost;
+          stockEvent.reference = transaction.transaction_number;
+          this.eventEmitter.emit(FinancialEventType.STOCK_MOVED, stockEvent);
+        }
+      }
+    }
+
+    // ── PURCHASE completed: emit BILL_CREATED + STOCK_MOVED IN per item ──
+    if (transaction.type === TransactionType.PURCHASE) {
+      const billEvent = new BillCreatedEvent();
+      billEvent.tenantId = tenantId;
+      billEvent.billId = transaction.id;
+      billEvent.billNumber = transaction.transaction_number;
+      billEvent.supplierId = transaction.supplier_id;
+      billEvent.amount = Number(transaction.total_amount);
+      billEvent.date = dateStr;
+      billEvent.description = `Purchase transaction ${transaction.transaction_number}`;
+      this.eventEmitter.emit(FinancialEventType.BILL_CREATED, billEvent);
+
+      for (const item of transaction.items) {
+        const stockEvent = new StockMovedEvent();
+        stockEvent.tenantId = tenantId;
+        stockEvent.productId = item.product_id;
+        stockEvent.productName = item.product_name;
+        stockEvent.quantity = item.quantity;
+        stockEvent.movementType = 'IN';
+        stockEvent.unitCost = Number(item.unit_price);
+        stockEvent.totalCost = item.quantity * Number(item.unit_price);
+        stockEvent.reference = transaction.transaction_number;
+        this.eventEmitter.emit(FinancialEventType.STOCK_MOVED, stockEvent);
+      }
+    }
+
+    return saved;
   }
 
   async cancel(id: string, tenantId: string): Promise<TransactionEntity> {

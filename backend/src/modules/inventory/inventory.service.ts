@@ -30,6 +30,7 @@ export class InventoryService {
   async findAll(tenantId: string): Promise<InventoryEntity[]> {
     return this.inventoryRepo.find({
       where: { tenant_id: tenantId },
+      relations: ['supplier'],
       order: { product_name: 'ASC' },
     });
   }
@@ -47,6 +48,7 @@ export class InventoryService {
   async findOne(id: string, tenantId: string): Promise<InventoryEntity> {
     const inventory = await this.inventoryRepo.findOne({
       where: { id, tenant_id: tenantId },
+      relations: ['supplier'],
     });
 
     if (!inventory) {
@@ -229,6 +231,39 @@ export class InventoryService {
     } catch (e) {
       this.logger.error(`[AUTO-REORDER] Failed to create requisition: ${e.message}`);
     }
+  }
+
+  async getReorderAlerts(tenantId: string): Promise<any[]> {
+    const items = await this.inventoryRepo.find({
+      where: { tenant_id: tenantId },
+      relations: ['supplier'],
+    });
+
+    return items
+      .filter((item) => item.available_quantity <= item.reorder_level)
+      .map((item) => ({
+        id: item.id,
+        product_name: item.product_name,
+        sku: item.sku,
+        available_quantity: item.available_quantity,
+        reorder_level: item.reorder_level,
+        reorder_quantity: item.reorder_quantity,
+        supplier_id: item.supplier_id,
+        supplier_name: item.supplier?.name || item.supplier_name || null,
+        unit_cost: item.unit_cost,
+        estimated_reorder_cost: item.reorder_quantity * Number(item.unit_cost),
+        status: item.available_quantity <= 0 ? 'out_of_stock' : 'low_stock',
+      }));
+  }
+
+  async manualReorder(id: string, tenantId: string): Promise<any> {
+    const item = await this.findOne(id, tenantId);
+    await this.triggerAutoReorder(item, tenantId);
+    return {
+      message: `Reorder requisition created for ${item.product_name}`,
+      product_name: item.product_name,
+      reorder_quantity: item.reorder_quantity,
+    };
   }
 
   async getStockSummary(tenantId: string): Promise<any> {

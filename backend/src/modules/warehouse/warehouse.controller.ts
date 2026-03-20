@@ -105,6 +105,14 @@ export class WarehouseController {
     return this.warehouseService.findAllMovements(tenantId, movementType);
   }
 
+  @Get('movements/by-shipment/:shipmentId')
+  findMovementsByShipment(
+    @Param('shipmentId') shipmentId: string,
+    @CurrentTenant() tenantId: string,
+  ) {
+    return this.warehouseService.findMovementsByShipment(shipmentId, tenantId);
+  }
+
   @Post('movements')
   createMovement(
     @Body() body: Record<string, unknown>,

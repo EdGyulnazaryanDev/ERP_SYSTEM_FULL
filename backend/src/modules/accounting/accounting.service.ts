@@ -66,7 +66,7 @@ export class AccountingService {
     private fiscalYearRepo: Repository<FiscalYearEntity>,
     @InjectRepository(FiscalPeriodEntity)
     private fiscalPeriodRepo: Repository<FiscalPeriodEntity>,
-  ) { }
+  ) {}
 
   // ==================== CHART OF ACCOUNTS METHODS ====================
 
@@ -90,7 +90,7 @@ export class AccountingService {
 
       return await this.coaRepo.save(account);
     } catch (e) {
-      console.error("SERVICE LEVEL ACCOUNT CREATION ERROR:", e);
+      console.error('SERVICE LEVEL ACCOUNT CREATION ERROR:', e);
       throw e;
     }
   }
@@ -135,9 +135,7 @@ export class AccountingService {
     });
 
     if (hasTransactions > 0) {
-      throw new BadRequestException(
-        'Cannot delete account with transactions',
-      );
+      throw new BadRequestException('Cannot delete account with transactions');
     }
 
     await this.coaRepo.remove(account);
@@ -324,9 +322,14 @@ export class AccountingService {
   private async findDefaultAccount(
     tenantId: string,
     subType: string,
+    p0?: any,
   ): Promise<ChartOfAccountEntity | null> {
     return this.coaRepo.findOne({
-      where: { tenant_id: tenantId, account_sub_type: subType as any, is_active: true },
+      where: {
+        tenant_id: tenantId,
+        account_sub_type: subType as any,
+        is_active: true,
+      },
       order: { account_code: 'ASC' },
     });
   }
@@ -362,20 +365,33 @@ export class AccountingService {
 
       const revenueAccount = data.revenue_account_id
         ? await this.getAccount(data.revenue_account_id, tenantId)
-        : await this.findDefaultAccount(tenantId, 'sales_revenue') ||
-          await this.findDefaultAccount(tenantId, 'service_revenue');
+        : (await this.findDefaultAccount(tenantId, 'sales_revenue')) ||
+          (await this.findDefaultAccount(tenantId, 'service_revenue'));
 
       if (arAccount && revenueAccount) {
-        const je = await this.createJournalEntry({
-          entry_date: data.invoice_date,
-          entry_type: JournalEntryType.SALES,
-          description: `Invoice ${data.invoice_number}${data.description ? ': ' + data.description : ''}`,
-          reference: data.invoice_number,
-          lines: [
-            { account_id: arAccount.id, description: `AR - ${data.invoice_number}`, debit: data.amount, credit: 0 },
-            { account_id: revenueAccount.id, description: `Revenue - ${data.invoice_number}`, debit: 0, credit: data.amount },
-          ],
-        }, tenantId);
+        const je = await this.createJournalEntry(
+          {
+            entry_date: data.invoice_date,
+            entry_type: JournalEntryType.SALES,
+            description: `Invoice ${data.invoice_number}${data.description ? ': ' + data.description : ''}`,
+            reference: data.invoice_number,
+            lines: [
+              {
+                account_id: arAccount.id,
+                description: `AR - ${data.invoice_number}`,
+                debit: data.amount,
+                credit: 0,
+              },
+              {
+                account_id: revenueAccount.id,
+                description: `Revenue - ${data.invoice_number}`,
+                debit: 0,
+                credit: data.amount,
+              },
+            ],
+          },
+          tenantId,
+        );
 
         // Auto-post it and link back
         await this.postJournalEntry(je.id, { posted_by: 'system' }, tenantId);
@@ -416,8 +432,7 @@ export class AccountingService {
   ): Promise<AccountReceivableEntity> {
     const ar = await this.getAR(id, tenantId);
 
-    const newPaidAmount =
-      Number(ar.paid_amount) + Number(data.payment_amount);
+    const newPaidAmount = Number(ar.paid_amount) + Number(data.payment_amount);
 
     if (newPaidAmount > Number(ar.total_amount)) {
       throw new BadRequestException('Payment exceeds invoice amount');
@@ -438,26 +453,45 @@ export class AccountingService {
     try {
       const bankAccount = data.bank_account_id
         ? await this.getAccount(data.bank_account_id, tenantId)
-        : await this.findDefaultAccount(tenantId, 'bank') ||
-          await this.findDefaultAccount(tenantId, 'cash');
+        : (await this.findDefaultAccount(tenantId, 'bank')) ||
+          (await this.findDefaultAccount(tenantId, 'cash'));
 
-      const arAccount = await this.findDefaultAccount(tenantId, 'accounts_receivable');
+      const arAccount = await this.findDefaultAccount(
+        tenantId,
+        'accounts_receivable',
+      );
 
       if (bankAccount && arAccount) {
-        const je = await this.createJournalEntry({
-          entry_date: data.payment_date,
-          entry_type: JournalEntryType.RECEIPT,
-          description: `Payment received for invoice ${ar.invoice_number}`,
-          reference: data.reference || ar.invoice_number,
-          lines: [
-            { account_id: bankAccount.id, description: `Payment - ${ar.invoice_number}`, debit: data.payment_amount, credit: 0 },
-            { account_id: arAccount.id, description: `AR cleared - ${ar.invoice_number}`, debit: 0, credit: data.payment_amount },
-          ],
-        }, tenantId);
+        const je = await this.createJournalEntry(
+          {
+            entry_date: data.payment_date,
+            entry_type: JournalEntryType.RECEIPT,
+            description: `Payment received for invoice ${ar.invoice_number}`,
+            reference: data.reference || ar.invoice_number,
+            lines: [
+              {
+                account_id: bankAccount.id,
+                description: `Payment - ${ar.invoice_number}`,
+                debit: data.payment_amount,
+                credit: 0,
+              },
+              {
+                account_id: arAccount.id,
+                description: `AR cleared - ${ar.invoice_number}`,
+                debit: 0,
+                credit: data.payment_amount,
+              },
+            ],
+          },
+          tenantId,
+        );
         await this.postJournalEntry(je.id, { posted_by: 'system' }, tenantId);
       }
     } catch (e) {
-      console.warn('Could not auto-create journal entry for AR payment:', e.message);
+      console.warn(
+        'Could not auto-create journal entry for AR payment:',
+        e.message,
+      );
     }
 
     return savedAR;
@@ -491,24 +525,37 @@ export class AccountingService {
     try {
       const expenseAccount = data.expense_account_id
         ? await this.getAccount(data.expense_account_id, tenantId)
-        : await this.findDefaultAccount(tenantId, 'operating_expense') ||
-          await this.findDefaultAccount(tenantId, 'administrative_expense');
+        : (await this.findDefaultAccount(tenantId, 'operating_expense')) ||
+          (await this.findDefaultAccount(tenantId, 'administrative_expense'));
 
       const apAccount = data.ap_account_id
         ? await this.getAccount(data.ap_account_id, tenantId)
         : await this.findDefaultAccount(tenantId, 'accounts_payable');
 
       if (expenseAccount && apAccount) {
-        const je = await this.createJournalEntry({
-          entry_date: data.bill_date,
-          entry_type: JournalEntryType.PURCHASE,
-          description: `Bill ${data.bill_number}${data.description ? ': ' + data.description : ''}`,
-          reference: data.bill_number,
-          lines: [
-            { account_id: expenseAccount.id, description: `Expense - ${data.bill_number}`, debit: data.amount, credit: 0 },
-            { account_id: apAccount.id, description: `AP - ${data.bill_number}`, debit: 0, credit: data.amount },
-          ],
-        }, tenantId);
+        const je = await this.createJournalEntry(
+          {
+            entry_date: data.bill_date,
+            entry_type: JournalEntryType.PURCHASE,
+            description: `Bill ${data.bill_number}${data.description ? ': ' + data.description : ''}`,
+            reference: data.bill_number,
+            lines: [
+              {
+                account_id: expenseAccount.id,
+                description: `Expense - ${data.bill_number}`,
+                debit: data.amount,
+                credit: 0,
+              },
+              {
+                account_id: apAccount.id,
+                description: `AP - ${data.bill_number}`,
+                debit: 0,
+                credit: data.amount,
+              },
+            ],
+          },
+          tenantId,
+        );
         await this.postJournalEntry(je.id, { posted_by: 'system' }, tenantId);
         savedAP.journal_entry_id = je.id;
         await this.apRepo.save(savedAP);
@@ -548,8 +595,7 @@ export class AccountingService {
   ): Promise<AccountPayableEntity> {
     const ap = await this.getAP(id, tenantId);
 
-    const newPaidAmount =
-      Number(ap.paid_amount) + Number(data.payment_amount);
+    const newPaidAmount = Number(ap.paid_amount) + Number(data.payment_amount);
 
     if (newPaidAmount > Number(ap.total_amount)) {
       throw new BadRequestException('Payment exceeds bill amount');
@@ -574,26 +620,45 @@ export class AccountingService {
 
       const bankAccount = data.bank_account_id
         ? await this.getAccount(data.bank_account_id, tenantId)
-        : await this.findDefaultAccount(tenantId, 'bank') ||
-          await this.findDefaultAccount(tenantId, 'cash');
+        : (await this.findDefaultAccount(tenantId, 'bank')) ||
+          (await this.findDefaultAccount(tenantId, 'cash'));
 
-      const apCoaAccount = await this.findDefaultAccount(tenantId, 'accounts_payable');
+      const apCoaAccount = await this.findDefaultAccount(
+        tenantId,
+        'accounts_payable',
+      );
 
       if (apCoaAccount && bankAccount) {
-        const je = await this.createJournalEntry({
-          entry_date: data.payment_date,
-          entry_type: JournalEntryType.PAYMENT,
-          description: `Payment for bill ${ap.bill_number}`,
-          reference: data.reference || ap.bill_number,
-          lines: [
-            { account_id: apCoaAccount.id, description: `AP cleared - ${ap.bill_number}`, debit: data.payment_amount, credit: 0 },
-            { account_id: bankAccount.id, description: `Payment - ${ap.bill_number}`, debit: 0, credit: data.payment_amount },
-          ],
-        }, tenantId);
+        const je = await this.createJournalEntry(
+          {
+            entry_date: data.payment_date,
+            entry_type: JournalEntryType.PAYMENT,
+            description: `Payment for bill ${ap.bill_number}`,
+            reference: data.reference || ap.bill_number,
+            lines: [
+              {
+                account_id: apCoaAccount.id,
+                description: `AP cleared - ${ap.bill_number}`,
+                debit: data.payment_amount,
+                credit: 0,
+              },
+              {
+                account_id: bankAccount.id,
+                description: `Payment - ${ap.bill_number}`,
+                debit: 0,
+                credit: data.payment_amount,
+              },
+            ],
+          },
+          tenantId,
+        );
         await this.postJournalEntry(je.id, { posted_by: 'system' }, tenantId);
       }
     } catch (e) {
-      console.warn('Could not auto-create journal entry for AP payment:', e.message);
+      console.warn(
+        'Could not auto-create journal entry for AP payment:',
+        e.message,
+      );
     }
 
     return savedAP;

@@ -128,4 +128,14 @@ export class InventoryController {
   ) {
     return this.inventoryService.adjustStock(id, body.quantity, body.movement_type, tenantId, body.reference);
   }
+
+  @Get('reorder/alerts')
+  getReorderAlerts(@CurrentTenant() tenantId: string) {
+    return this.inventoryService.getReorderAlerts(tenantId);
+  }
+
+  @Post(':id/trigger-reorder')
+  triggerReorder(@Param('id') id: string, @CurrentTenant() tenantId: string) {
+    return this.inventoryService.manualReorder(id, tenantId);
+  }
 }

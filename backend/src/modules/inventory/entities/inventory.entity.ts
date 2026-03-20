@@ -5,7 +5,10 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   Index,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
+import { SupplierEntity } from '../../suppliers/supplier.entity';
 
 @Entity('inventory')
 @Index(['tenant_id', 'sku'], { unique: true })
@@ -49,6 +52,10 @@ export class InventoryEntity {
 
   @Column({ type: 'uuid', nullable: true })
   supplier_id: string;
+
+  @ManyToOne(() => SupplierEntity, { nullable: true, eager: false, createForeignKeyConstraints: false })
+  @JoinColumn({ name: 'supplier_id' })
+  supplier: SupplierEntity;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
   supplier_name: string;
