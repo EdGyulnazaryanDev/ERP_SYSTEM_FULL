@@ -34,6 +34,7 @@ export default function AccountsReceivableTab() {
   const [form] = Form.useForm();
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
+
   const { data, isLoading } = useQuery({
     queryKey: ['accounts-receivable'],
     queryFn: () => accountingApi.getAccountsReceivable().then(res => res.data),
@@ -65,6 +66,11 @@ export default function AccountsReceivableTab() {
   const filtered = statusFilter ? rawList.filter(r => r.status === statusFilter) : rawList;
   const overdueCount = rawList.filter(r => r.status === 'overdue').length;
   const totalBalance = rawList.reduce((s, r) => s + Number(r.balance_amount || 0), 0);
+  const totalInvoiced = rawList.reduce((s, r) => s + Number(r.total_amount || 0), 0);
+  const totalCollected = rawList.reduce((s, r) => s + Number(r.paid_amount || 0), 0);
+  const totalOverdue = rawList.filter(r => r.status === 'overdue').reduce((s, r) => s + Number(r.balance_amount || 0), 0);
+
+  const fmt = (v: number) => `$${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   const columns = [
     {
@@ -74,7 +80,7 @@ export default function AccountsReceivableTab() {
     {
       title: 'Customer', key: 'customer',
       render: (_: any, r: any) => (
-        <span style={{ fontWeight: 500 }}>{r.customer_name || r.customer?.company_name || r.customer?.first_name || r.customer_id || '—'}</span>
+        <span style={{ fontWeight: 500 }}>{r.customer?.company_name || r.customer?.first_name || r.customer_id || '—'}</span>
       ),
     },
     {
@@ -109,7 +115,7 @@ export default function AccountsReceivableTab() {
       },
     },
     {
-      title: 'Status', dataIndex: 'status', key: 'status', width: 120,
+      title: 'Status', dataIndex: 'status', key: 'status', width: 130,
       render: (s: string) => <StatusPill status={s} />,
     },
   ];
@@ -129,23 +135,19 @@ export default function AccountsReceivableTab() {
     <div>
       {/* Summary strip */}
       {rawList.length > 0 && (
-        <div style={{
-          display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap',
-        }}>
+        <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
           {[
-            { label: 'Total Invoiced', value: rawList.reduce((s, r) => s + Number(r.total_amount || 0), 0), color: '#1677ff' },
-            { label: 'Total Collected', value: rawList.reduce((s, r) => s + Number(r.paid_amount || 0), 0), color: '#52c41a' },
-            { label: 'Outstanding', value: totalBalance, color: totalBalance > 0 ? '#fa8c16' : '#52c41a' },
-            { label: 'Overdue', value: rawList.filter(r => r.status === 'overdue').reduce((s, r) => s + Number(r.balance_amount || 0), 0), color: '#ff4d4f' },
+            { label: 'Total Invoiced',  value: totalInvoiced,  color: '#1677ff' },
+            { label: 'Total Collected', value: totalCollected, color: '#52c41a' },
+            { label: 'Outstanding',     value: totalBalance,   color: totalBalance > 0 ? '#fa8c16' : '#52c41a' },
+            { label: 'Overdue',         value: totalOverdue,   color: '#ff4d4f' },
           ].map(({ label, value, color }) => (
             <div key={label} style={{
               flex: '1 1 140px', padding: '10px 16px', borderRadius: 10,
               background: `${color}08`, border: `1px solid ${color}22`,
             }}>
               <div style={{ fontSize: 11, color: '#8c8c8c' }}>{label}</div>
-              <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 16, color }}>
-                ${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
+              <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 16, color }}>{fmt(value)}</div>
             </div>
           ))}
         </div>
@@ -153,7 +155,7 @@ export default function AccountsReceivableTab() {
 
       {overdueCount > 0 && (
         <Alert
-          message={`${overdueCount} overdue invoice(s) — total outstanding: $${totalBalance.toFixed(2)}`}
+          message={`${overdueCount} overdue invoice(s) — total outstanding: ${fmt(totalBalance)}`}
           type="warning" showIcon style={{ marginBottom: 16, borderRadius: 8 }}
         />
       )}
@@ -179,6 +181,7 @@ export default function AccountsReceivableTab() {
           </Button>
         </Space>
       </div>
+
       <Table columns={columns} dataSource={filtered} loading={isLoading} rowKey="id" size="small"
         pagination={{ pageSize: 15, showTotal: (t, r) => `${r[0]}–${r[1]} of ${t}` }}
         rowClassName={(r: any) => r.status === 'overdue' ? 'row-overdue' : r.status === 'paid' ? 'row-paid' : ''}
