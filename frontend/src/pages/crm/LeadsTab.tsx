@@ -4,6 +4,7 @@ import { PlusOutlined, EditOutlined, DeleteOutlined, SwapOutlined, SearchOutline
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { crmApi } from '@/api/crm';
 import dayjs from 'dayjs';
+import { useAccessControl } from '@/hooks/useAccessControl';
 
 const STATUS_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
   new:         { color: '#1677ff', bg: '#e6f4ff', label: 'New' },
@@ -32,11 +33,15 @@ function StatusPill({ status }: { status: string }) {
 
 export default function LeadsTab() {
   const queryClient = useQueryClient();
+  const { canPerform } = useAccessControl();
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [editingLead, setEditingLead] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [form] = Form.useForm();
+  const canCreateLeads = canPerform('crm', 'create');
+  const canEditLeads = canPerform('crm', 'edit');
+  const canDeleteLeads = canPerform('crm', 'delete');
 
   const { data, isLoading } = useQuery({
     queryKey: ['leads'],
@@ -112,15 +117,17 @@ export default function LeadsTab() {
       title: 'Actions', key: 'actions', width: 120,
       render: (_: any, record: any) => (
         <Space size={4}>
-          <Button type="link" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)} />
-          {record.status !== 'won' && (
+          {canEditLeads && <Button type="link" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)} />}
+          {canEditLeads && record.status !== 'won' && (
             <Popconfirm title="Convert to customer?" onConfirm={() => convertMutation.mutate(record.id)}>
               <Button type="link" size="small" icon={<SwapOutlined />} title="Convert to Customer" />
             </Popconfirm>
           )}
-          <Popconfirm title="Delete this lead?" onConfirm={() => deleteMutation.mutate(record.id)} okText="Yes" cancelText="No">
-            <Button type="link" size="small" danger icon={<DeleteOutlined />} />
-          </Popconfirm>
+          {canDeleteLeads && (
+            <Popconfirm title="Delete this lead?" onConfirm={() => deleteMutation.mutate(record.id)} okText="Yes" cancelText="No">
+              <Button type="link" size="small" danger icon={<DeleteOutlined />} />
+            </Popconfirm>
+          )}
         </Space>
       ),
     },
@@ -143,7 +150,7 @@ export default function LeadsTab() {
           </Select>
           <span style={{ color: '#8c8c8c', fontSize: 13 }}>{filtered.length} leads</span>
         </Space>
-        <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 8 }} onClick={handleAdd}>Add Lead</Button>
+        {canCreateLeads && <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 8 }} onClick={handleAdd}>Add Lead</Button>}
       </div>
 
       <Table
@@ -160,16 +167,17 @@ export default function LeadsTab() {
         }}
       />
 
-      <Modal
-        title={editingLead ? 'Edit Lead' : 'Add Lead'}
-        open={isModalVisible}
-        forceRender
-        onOk={handleModalOk}
-        onCancel={() => { setIsModalVisible(false); form.resetFields(); }}
-        confirmLoading={createMutation.isPending || updateMutation.isPending}
-        width={800}
-      >
-        <Form form={form} layout="vertical" className="grid grid-cols-2 gap-x-4">
+      {(canCreateLeads || canEditLeads) && (
+        <Modal
+          title={editingLead ? 'Edit Lead' : 'Add Lead'}
+          open={isModalVisible}
+          forceRender
+          onOk={handleModalOk}
+          onCancel={() => { setIsModalVisible(false); form.resetFields(); }}
+          confirmLoading={createMutation.isPending || updateMutation.isPending}
+          width={800}
+        >
+          <Form form={form} layout="vertical" className="grid grid-cols-2 gap-x-4">
           <Form.Item name="lead_code" label="Lead Code" rules={[{ required: true }]}><Input /></Form.Item>
           <Form.Item name="company_name" label="Company Name" rules={[{ required: true }]}><Input /></Form.Item>
           <Form.Item name="contact_person" label="Contact Person" rules={[{ required: true }]}><Input /></Form.Item>
@@ -186,8 +194,9 @@ export default function LeadsTab() {
           <Form.Item name="expected_revenue" label="Expected Revenue"><InputNumber className="w-full" min={0} precision={2} /></Form.Item>
           <Form.Item name="probability" label="Probability (%)"><InputNumber className="w-full" min={0} max={100} /></Form.Item>
           <Form.Item name="next_follow_up" label="Next Follow Up"><DatePicker className="w-full" /></Form.Item>
-        </Form>
-      </Modal>
+          </Form>
+        </Modal>
+      )}
 
       <style>{`
         .row-won td { background: #f6ffed !important; }

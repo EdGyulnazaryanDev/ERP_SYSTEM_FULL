@@ -13,7 +13,7 @@ import { CourierEntity } from './entities/courier.entity';
 import { DeliveryRouteEntity, RouteStatus } from './entities/delivery-route.entity';
 import { InventoryEntity } from '../inventory/entities/inventory.entity';
 import type { CreateShipmentDto } from './dto/create-shipment.dto';
-import { FinancialEventType, ShipmentDeliveredEvent, StockMovedEvent, BillCreatedEvent } from '../accounting/events/financial.events';
+import { FinancialEventType, ShipmentDeliveredEvent, StockMovedEvent } from '../accounting/events/financial.events';
 
 @Injectable()
 export class TransportationService {
@@ -173,6 +173,7 @@ export class TransportationService {
     location?: string,
   ): Promise<ShipmentEntity> {
     const shipment = await this.findOneShipment(id, tenantId);
+    const wasDelivered = shipment.status === ShipmentStatus.DELIVERED;
 
     shipment.status = status;
 
@@ -187,97 +188,10 @@ export class TransportationService {
     ];
 
     if (status === ShipmentStatus.DELIVERED) {
-      shipment.actual_delivery_date = new Date();
+      shipment.actual_delivery_date = shipment.actual_delivery_date || new Date();
 
-      if (shipment.courier_id) {
-        await this.updateCourierStats(shipment.courier_id);
-      }
-
-      // ── Emit shipping cost JE (always) ──────────────────────────────────────
-      const shippingCost = Number(shipment.shipping_cost || 0) + Number(shipment.insurance_cost || 0);
-      if (shippingCost > 0) {
-        const shippingEvent = new ShipmentDeliveredEvent();
-        shippingEvent.tenantId = tenantId;
-        shippingEvent.shipmentId = shipment.id;
-        shippingEvent.trackingNumber = shipment.tracking_number;
-        shippingEvent.shippingCost = shippingCost;
-        shippingEvent.date = new Date().toISOString().split('T')[0];
-        this.eventEmitter.emit(FinancialEventType.SHIPMENT_DELIVERED, shippingEvent);
-      }
-
-      // ── Inbound shipment (Supplier → Warehouse): update inventory + emit JE ─
-      // Identified by origin_name containing 'Supplier' or tracking starting with SHP-REQ
-      const isInbound =
-        shipment.origin_name?.toLowerCase().includes('supplier') ||
-        shipment.tracking_number?.startsWith('SHP-REQ');
-
-      if (isInbound && shipment.items?.length) {
-        let totalBillAmount = 0;
-
-        for (const item of shipment.items) {
-          if (!item.product_id) continue;
-
-          try {
-            // Find inventory by id or product_id
-            let inv = await this.inventoryRepo.findOne({
-              where: { id: item.product_id, tenant_id: tenantId },
-            });
-            if (!inv) {
-              inv = await this.inventoryRepo.findOne({
-                where: { product_id: item.product_id, tenant_id: tenantId },
-              });
-            }
-
-            if (inv) {
-              const qty = Number(item.quantity);
-              inv.quantity += qty;
-              inv.available_quantity = inv.quantity - inv.reserved_quantity;
-              await this.inventoryRepo.save(inv);
-
-              const unitCost = Number(inv.unit_cost);
-              const totalCost = qty * unitCost;
-              totalBillAmount += totalCost;
-
-              // Emit STOCK_MOVED IN → FinancialBrainService creates Inventory IN JE
-              if (totalCost > 0) {
-                const stockEvent = new StockMovedEvent();
-                stockEvent.tenantId = tenantId;
-                stockEvent.productId = inv.id;
-                stockEvent.productName = inv.product_name;
-                stockEvent.quantity = qty;
-                stockEvent.movementType = 'IN';
-                stockEvent.unitCost = unitCost;
-                stockEvent.totalCost = totalCost;
-                stockEvent.reference = shipment.tracking_number;
-                this.eventEmitter.emit(FinancialEventType.STOCK_MOVED, stockEvent);
-              }
-
-              this.logger.log(
-                `[DELIVERY] Inventory updated: ${inv.product_name} +${qty} → new qty ${inv.quantity} (shipment ${shipment.tracking_number})`,
-              );
-            } else {
-              this.logger.warn(
-                `[DELIVERY] Product ${item.product_id} not found in inventory — skipping stock update`,
-              );
-            }
-          } catch (e: any) {
-            this.logger.error(`[DELIVERY] Failed to update inventory for item ${item.product_id}: ${e.message}`);
-          }
-        }
-
-        // Emit BILL_CREATED for the AP liability (goods received from supplier)
-        if (totalBillAmount > 0) {
-          const billEvent = new BillCreatedEvent();
-          billEvent.tenantId = tenantId;
-          billEvent.billId = shipment.id;
-          billEvent.billNumber = shipment.tracking_number;
-          billEvent.supplierId = '';
-          billEvent.amount = totalBillAmount;
-          billEvent.date = new Date().toISOString().split('T')[0];
-          billEvent.description = `Goods received — inbound shipment ${shipment.tracking_number}`;
-          this.eventEmitter.emit(FinancialEventType.BILL_CREATED, billEvent);
-          this.logger.log(`[DELIVERY] BILL_CREATED emitted for inbound shipment ${shipment.tracking_number} — AP ${totalBillAmount}`);
-        }
+      if (!wasDelivered) {
+        await this.processDeliveredShipment(shipment, tenantId);
       }
     }
 
@@ -295,15 +209,109 @@ export class TransportationService {
     },
   ): Promise<ShipmentEntity> {
     const shipment = await this.findOneShipment(id, tenantId);
+    const wasDelivered = shipment.status === ShipmentStatus.DELIVERED;
 
     shipment.delivered_to = data.delivered_to;
     if (data.signature) shipment.delivery_signature = data.signature;
     if (data.photos) shipment.delivery_photos = data.photos;
     if (data.notes) shipment.delivery_notes = data.notes;
     shipment.status = ShipmentStatus.DELIVERED;
-    shipment.actual_delivery_date = new Date();
+    shipment.actual_delivery_date = shipment.actual_delivery_date || new Date();
+
+    if (!wasDelivered) {
+      shipment.tracking_history = [
+        ...(shipment.tracking_history || []),
+        {
+          status: ShipmentStatus.DELIVERED,
+          timestamp: new Date(),
+          location: shipment.destination_address,
+          notes: data.notes || 'Proof of delivery recorded',
+        },
+      ];
+
+      await this.processDeliveredShipment(shipment, tenantId);
+    }
 
     return this.shipmentRepo.save(shipment);
+  }
+
+  private async processDeliveredShipment(
+    shipment: ShipmentEntity,
+    tenantId: string,
+  ): Promise<void> {
+    if (shipment.courier_id) {
+      await this.updateCourierStats(shipment.courier_id);
+    }
+
+    const shippingCost =
+      Number(shipment.shipping_cost || 0) + Number(shipment.insurance_cost || 0);
+    if (shippingCost > 0) {
+      const shippingEvent = new ShipmentDeliveredEvent();
+      shippingEvent.tenantId = tenantId;
+      shippingEvent.shipmentId = shipment.id;
+      shippingEvent.trackingNumber = shipment.tracking_number;
+      shippingEvent.shippingCost = shippingCost;
+      shippingEvent.date = new Date().toISOString().split('T')[0];
+      this.eventEmitter.emit(FinancialEventType.SHIPMENT_DELIVERED, shippingEvent);
+    }
+
+    const isInbound =
+      shipment.origin_name?.toLowerCase().includes('supplier') ||
+      shipment.tracking_number?.startsWith('SHP-REQ');
+
+    if (!isInbound || !shipment.items?.length) {
+      return;
+    }
+
+    for (const item of shipment.items) {
+      if (!item.product_id) continue;
+
+      try {
+        let inv = await this.inventoryRepo.findOne({
+          where: { id: item.product_id, tenant_id: tenantId },
+        });
+        if (!inv) {
+          inv = await this.inventoryRepo.findOne({
+            where: { product_id: item.product_id, tenant_id: tenantId },
+          });
+        }
+
+        if (inv) {
+          const qty = Number(item.quantity);
+          inv.quantity += qty;
+          inv.available_quantity = inv.quantity - inv.reserved_quantity;
+          await this.inventoryRepo.save(inv);
+
+          const unitCost = Number(inv.unit_cost);
+          const totalCost = qty * unitCost;
+
+          if (totalCost > 0) {
+            const stockEvent = new StockMovedEvent();
+            stockEvent.tenantId = tenantId;
+            stockEvent.productId = inv.id;
+            stockEvent.productName = inv.product_name;
+            stockEvent.quantity = qty;
+            stockEvent.movementType = 'IN';
+            stockEvent.unitCost = unitCost;
+            stockEvent.totalCost = totalCost;
+            stockEvent.reference = shipment.tracking_number;
+            this.eventEmitter.emit(FinancialEventType.STOCK_MOVED, stockEvent);
+          }
+
+          this.logger.log(
+            `[DELIVERY] Inventory updated: ${inv.product_name} +${qty} → new qty ${inv.quantity} (shipment ${shipment.tracking_number})`,
+          );
+        } else {
+          this.logger.warn(
+            `[DELIVERY] Product ${item.product_id} not found in inventory — skipping stock update`,
+          );
+        }
+      } catch (e: any) {
+        this.logger.error(
+          `[DELIVERY] Failed to update inventory for item ${item.product_id}: ${e.message}`,
+        );
+      }
+    }
   }
 
   // Couriers

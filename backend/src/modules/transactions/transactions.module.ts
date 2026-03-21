@@ -8,6 +8,7 @@ import { ExcelService } from './excel.service';
 import { TransactionEntity } from './entities/transaction.entity';
 import { TransactionItemEntity } from './entities/transaction-item.entity';
 import { InventoryEntity } from '../inventory/entities/inventory.entity';
+import { AccountingModule } from '../accounting/accounting.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { InventoryEntity } from '../inventory/entities/inventory.entity';
       TransactionItemEntity,
       InventoryEntity,
     ]),
+    AccountingModule,
     MulterModule.register({
       limits: {
         fileSize: 5 * 1024 * 1024, // 5MB

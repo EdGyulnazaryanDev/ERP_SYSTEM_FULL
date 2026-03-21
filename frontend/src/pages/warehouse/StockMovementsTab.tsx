@@ -10,6 +10,7 @@ import apiClient from '@/api/client';
 import { inventoryApi, type Inventory } from '@/api/inventory';
 import dayjs from 'dayjs';
 import type { StockMovement, MovementType } from './types';
+import { useAccessControl } from '@/hooks/useAccessControl';
 
 interface Courier { id: string; name: string; code: string; status: string; }
 interface FormValues {
@@ -66,12 +67,16 @@ const fetchCouriers = (): Promise<Courier[]> =>
 
 export default function StockMovementsTab() {
   const queryClient = useQueryClient();
+  const { canPerform } = useAccessControl();
   const [form] = Form.useForm<FormValues>();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editing, setEditing] = useState<StockMovement | null>(null);
   const [filterType, setFilterType] = useState<MovementType | undefined>();
   const [movementType, setMovementType] = useState<MovementType | undefined>();
   const [search, setSearch] = useState('');
+  const canCreateMovements = canPerform('warehouse', 'create');
+  const canEditMovements = canPerform('warehouse', 'edit');
+  const canDeleteMovements = canPerform('warehouse', 'delete');
 
   const { data = [], isLoading } = useQuery({
     queryKey: ['stock-movements', filterType],
@@ -230,15 +235,19 @@ export default function StockMovementsTab() {
       title: '', key: 'actions', width: 80, align: 'center' as const,
       render: (_: unknown, record: StockMovement) => (
         <Space size={4}>
-          <Tooltip title="Edit">
-            <Button type="text" size="small" icon={<EditOutlined />} onClick={() => openEdit(record)} />
-          </Tooltip>
-          <Popconfirm title="Delete movement?" onConfirm={() => deleteMutation.mutate(record.id)}
-            okText="Delete" okButtonProps={{ danger: true }}>
-            <Tooltip title="Delete">
-              <Button type="text" size="small" danger icon={<DeleteOutlined />} />
+          {canEditMovements && (
+            <Tooltip title="Edit">
+              <Button type="text" size="small" icon={<EditOutlined />} onClick={() => openEdit(record)} />
             </Tooltip>
-          </Popconfirm>
+          )}
+          {canDeleteMovements && (
+            <Popconfirm title="Delete movement?" onConfirm={() => deleteMutation.mutate(record.id)}
+              okText="Delete" okButtonProps={{ danger: true }}>
+              <Tooltip title="Delete">
+                <Button type="text" size="small" danger icon={<DeleteOutlined />} />
+              </Tooltip>
+            </Popconfirm>
+          )}
         </Space>
       ),
     },
@@ -284,10 +293,12 @@ export default function StockMovementsTab() {
             style={{ width: 240 }} size="small" allowClear
           />
         </Space>
-        <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 8 }}
-          onClick={() => { setEditing(null); setMovementType(undefined); setIsModalOpen(true); form.resetFields(); }}>
-          Record Movement
-        </Button>
+        {canCreateMovements && (
+          <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 8 }}
+            onClick={() => { setEditing(null); setMovementType(undefined); setIsModalOpen(true); form.resetFields(); }}>
+            Record Movement
+          </Button>
+        )}
       </div>
 
       <Table
@@ -301,9 +312,10 @@ export default function StockMovementsTab() {
         }}
       />
 
-      <Modal title={editing ? '✏️ Edit Movement' : '📦 Record Movement'}
-        open={isModalOpen} forceRender onCancel={closeModal} footer={null}>
-        <Form form={form} layout="vertical" onFinish={handleSubmit}>
+      {(canCreateMovements || canEditMovements) && (
+        <Modal title={editing ? '✏️ Edit Movement' : '📦 Record Movement'}
+          open={isModalOpen} forceRender onCancel={closeModal} footer={null}>
+          <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item name="product_id" label="Product">
             <Select showSearch allowClear placeholder="Select product from inventory"
               optionFilterProp="label" onChange={handleProductSelect}
@@ -361,8 +373,9 @@ export default function StockMovementsTab() {
               </Button>
             </Space>
           </Form.Item>
-        </Form>
-      </Modal>
+          </Form>
+        </Modal>
+      )}
 
       <style>{`
         .row-receipt td { background: #f6ffed !important; }

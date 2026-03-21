@@ -16,6 +16,9 @@ import { SuggestionService } from './services/suggestion.service';
 import { MatchingService } from './services/matching.service';
 import { RuleEngineService } from './services/rule-engine.service';
 import { DashboardService } from './services/dashboard.service';
+import { RequireFeature } from '../subscriptions/decorators/require-feature.decorator';
+import { RequireFeatureGuard } from '../subscriptions/guards/require-feature.guard';
+import { PlanFeature } from '../subscriptions/subscription.constants';
 import {
   CreateChartOfAccountDto,
   UpdateChartOfAccountDto,
@@ -37,7 +40,8 @@ import {
 } from './dto/create-bank-account.dto';
 
 @Controller('accounting')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RequireFeatureGuard)
+@RequireFeature(PlanFeature.ACCOUNTING)
 export class AccountingController {
   constructor(
     private readonly accountingService: AccountingService,

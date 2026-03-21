@@ -215,6 +215,17 @@ export class AccountingService {
     });
   }
 
+  async findJournalEntriesByReference(
+    reference: string,
+    tenantId: string,
+  ): Promise<JournalEntryEntity[]> {
+    return this.journalEntryRepo.find({
+      where: { tenant_id: tenantId, reference },
+      relations: ['lines', 'lines.account'],
+      order: { created_at: 'ASC' },
+    });
+  }
+
   async getJournalEntry(
     id: string,
     tenantId: string,

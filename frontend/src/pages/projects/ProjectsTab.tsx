@@ -4,6 +4,7 @@ import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined } from '@ant
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '@/api/client';
 import dayjs from 'dayjs';
+import { useAccessControl } from '@/hooks/useAccessControl';
 
 const STATUS_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
   planning:    { color: '#8c8c8c', bg: '#fafafa',   label: 'Planning' },
@@ -37,11 +38,15 @@ function StatusPill({ status }: { status: string }) {
 
 export default function ProjectsTab() {
   const queryClient = useQueryClient();
+  const { canPerform } = useAccessControl();
   const [form] = Form.useForm();
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [editingRecord, setEditingRecord] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
+  const canCreateProjects = canPerform('projects', 'create');
+  const canEditProjects = canPerform('projects', 'edit');
+  const canDeleteProjects = canPerform('projects', 'delete');
 
   const { data, isLoading } = useQuery({
     queryKey: ['projects'],
@@ -110,11 +115,13 @@ export default function ProjectsTab() {
       title: 'Actions', key: 'actions', width: 90,
       render: (_: any, record: any) => (
         <Space size={4}>
-          <Button type="link" size="small" icon={<EditOutlined />} onClick={() => {
-            setEditingRecord(record); setIsModalVisible(true);
-            setTimeout(() => form.setFieldsValue({ project_name: record.project_name, project_manager_id: record.project_manager_id, status: record.status, priority: record.priority, start_date: record.start_date ? dayjs(record.start_date) : null, end_date: record.end_date ? dayjs(record.end_date) : null, estimated_budget: record.estimated_budget, progress_percentage: record.progress_percentage, description: record.description }), 0);
-          }} />
-          <Button type="link" size="small" danger icon={<DeleteOutlined />} onClick={() => deleteMutation.mutate(record.id)} />
+          {canEditProjects && (
+            <Button type="link" size="small" icon={<EditOutlined />} onClick={() => {
+              setEditingRecord(record); setIsModalVisible(true);
+              setTimeout(() => form.setFieldsValue({ project_name: record.project_name, project_manager_id: record.project_manager_id, status: record.status, priority: record.priority, start_date: record.start_date ? dayjs(record.start_date) : null, end_date: record.end_date ? dayjs(record.end_date) : null, estimated_budget: record.estimated_budget, progress_percentage: record.progress_percentage, description: record.description }), 0);
+            }} />
+          )}
+          {canDeleteProjects && <Button type="link" size="small" danger icon={<DeleteOutlined />} onClick={() => deleteMutation.mutate(record.id)} />}
         </Space>
       ),
     },
@@ -130,7 +137,7 @@ export default function ProjectsTab() {
           </Select>
           <span style={{ color: '#8c8c8c', fontSize: 13 }}>{filtered.length} projects</span>
         </Space>
-        <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 8 }} onClick={() => { setEditingRecord(null); setIsModalVisible(true); form.resetFields(); }}>New Project</Button>
+        {canCreateProjects && <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 8 }} onClick={() => { setEditingRecord(null); setIsModalVisible(true); form.resetFields(); }}>New Project</Button>}
       </div>
 
       <Table
@@ -147,11 +154,12 @@ export default function ProjectsTab() {
         }}
       />
 
-      <Modal title={editingRecord ? 'Edit Project' : 'New Project'} open={isModalVisible}
-        onCancel={() => { setIsModalVisible(false); setEditingRecord(null); form.resetFields(); }}
-        footer={null} width={600}
-      >
-        <Form form={form} layout="vertical" onFinish={handleSubmit}>
+      {(canCreateProjects || canEditProjects) && (
+        <Modal title={editingRecord ? 'Edit Project' : 'New Project'} open={isModalVisible}
+          onCancel={() => { setIsModalVisible(false); setEditingRecord(null); form.resetFields(); }}
+          footer={null} width={600}
+        >
+          <Form form={form} layout="vertical" onFinish={handleSubmit}>
           {!editingRecord && <Form.Item name="project_code" label="Project Code"><Input placeholder="e.g. PRJ-001 (auto-generated if empty)" /></Form.Item>}
           <Form.Item name="project_name" label="Project Name" rules={[{ required: true }]}><Input /></Form.Item>
           <Form.Item name="project_manager_id" label="Project Manager" rules={[{ required: true }]}>
@@ -180,8 +188,9 @@ export default function ProjectsTab() {
               <Button type="primary" htmlType="submit" loading={createMutation.isPending || updateMutation.isPending}>{editingRecord ? 'Update' : 'Create'}</Button>
             </Space>
           </Form.Item>
-        </Form>
-      </Modal>
+          </Form>
+        </Modal>
+      )}
 
       <style>{`
         .row-completed td { background: #f6ffed !important; }

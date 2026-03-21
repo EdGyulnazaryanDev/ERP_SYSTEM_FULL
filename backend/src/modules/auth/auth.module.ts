@@ -14,6 +14,7 @@ import { UserRole } from '../roles/user-role.entity';
 import { PassportModule } from '@nestjs/passport';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { SeedersModule } from '../../database/seeders/seeders.module';
+import { ComplianceAuditModule } from '../compliance-audit/compliance-audit.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { SeedersModule } from '../../database/seeders/seeders.module';
     PassportModule,
     ConfigModule,
     SeedersModule,
+    ComplianceAuditModule,
 
     JwtModule.registerAsync({
       inject: [ConfigService],

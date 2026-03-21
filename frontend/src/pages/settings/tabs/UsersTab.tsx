@@ -4,6 +4,7 @@ import { SafetyOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { userService } from '@/services';
 import { roleService, type Role } from '@/services/RoleService';
+import { useAccessControl } from '@/hooks/useAccessControl';
 import type { TransferProps } from 'antd';
 
 interface User {
@@ -16,6 +17,7 @@ interface User {
 
 export default function UsersTab() {
   const queryClient = useQueryClient();
+  const { canPerform } = useAccessControl();
   const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
@@ -83,6 +85,8 @@ export default function UsersTab() {
     }
   };
 
+  const canManageUserRoles = canPerform('users', 'edit');
+
   const columns = [
     {
       title: 'Email',
@@ -110,13 +114,15 @@ export default function UsersTab() {
       key: 'actions',
       render: (_: unknown, record: User) => (
         <Space>
-          <Button
-            type="link"
-            icon={<SafetyOutlined />}
-            onClick={() => openRoleModal(record)}
-          >
-            Manage Roles
-          </Button>
+          {canManageUserRoles && (
+            <Button
+              type="link"
+              icon={<SafetyOutlined />}
+              onClick={() => openRoleModal(record)}
+            >
+              Manage Roles
+            </Button>
+          )}
         </Space>
       ),
     },
@@ -139,39 +145,41 @@ export default function UsersTab() {
       </Card>
 
       {/* Roles Modal */}
-      <Modal
-        title={`Manage Roles - ${selectedUser?.email}`}
-        open={isRoleModalOpen}
-        onCancel={() => setIsRoleModalOpen(false)}
-        onOk={handleAssignRoles}
-        okText="Save Roles"
-        width={800}
-        confirmLoading={assignRolesMutation.isPending}
-      >
-        <Transfer
-          dataSource={roles?.map((r: Role) => ({
-            key: r.id,
-            title: r.name,
-            description: r.description || '',
-            disabled: r.is_system,
-          }))}
-          titles={['Available', 'Assigned']}
-          targetKeys={selectedRoles}
-          onChange={handleRoleChange}
-          render={(item) => (
-            <div>
-              <div>{item.title}</div>
-              {item.description && (
-                <div className="text-xs text-gray-500">{item.description}</div>
-              )}
-            </div>
-          )}
-          listStyle={{
-            width: 350,
-            height: 400,
-          }}
-        />
-      </Modal>
+      {canManageUserRoles && (
+        <Modal
+          title={`Manage Roles - ${selectedUser?.email}`}
+          open={isRoleModalOpen}
+          onCancel={() => setIsRoleModalOpen(false)}
+          onOk={handleAssignRoles}
+          okText="Save Roles"
+          width={800}
+          confirmLoading={assignRolesMutation.isPending}
+        >
+          <Transfer
+            dataSource={roles?.map((r: Role) => ({
+              key: r.id,
+              title: r.name,
+              description: r.description || '',
+              disabled: r.is_system,
+            }))}
+            titles={['Available', 'Assigned']}
+            targetKeys={selectedRoles}
+            onChange={handleRoleChange}
+            render={(item) => (
+              <div>
+                <div>{item.title}</div>
+                {item.description && (
+                  <div className="text-xs text-gray-500">{item.description}</div>
+                )}
+              </div>
+            )}
+            listStyle={{
+              width: 350,
+              height: 400,
+            }}
+          />
+        </Modal>
+      )}
     </div>
   );
 }

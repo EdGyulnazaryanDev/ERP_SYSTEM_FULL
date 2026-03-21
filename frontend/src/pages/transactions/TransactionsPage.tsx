@@ -15,6 +15,7 @@ import {
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import dayjs, { Dayjs } from 'dayjs';
 import apiClient from '@/api/client';
+import { useAccessControl } from '@/hooks/useAccessControl';
 
 interface TransactionItem {
   product_id: string;
@@ -73,6 +74,7 @@ const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'
 
 export default function TransactionsPage() {
   const qc = useQueryClient();
+  const { canPerform } = useAccessControl();
   const [dateRange, setDateRange] = useState<[Dayjs, Dayjs]>([
     dayjs().subtract(30, 'days'), dayjs(),
   ]);
@@ -228,6 +230,10 @@ export default function TransactionsPage() {
 
   const txType = Form.useWatch('type', form);
   const isSale = txType === 'sale';
+  const canCreateTransactions = canPerform('transactions', 'create');
+  const canEditTransactions = canPerform('transactions', 'edit');
+  const canDeleteTransactions = canPerform('transactions', 'delete');
+  const canExportTransactions = canPerform('transactions', 'export');
 
   // ── table columns ─────────────────────────────────────────────────────────
   const columns = [
@@ -289,24 +295,30 @@ export default function TransactionsPage() {
           </Tooltip>
           {r.status === 'draft' && (
             <>
-              <Tooltip title="Edit">
-                <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
-              </Tooltip>
-              <Tooltip title="Complete — updates inventory & accounting">
-                <Popconfirm title="Complete this transaction?" onConfirm={() => completeMut.mutate(r.id)}>
-                  <Button size="small" type="primary" icon={<CheckOutlined />} />
-                </Popconfirm>
-              </Tooltip>
-              <Tooltip title="Cancel">
-                <Popconfirm title="Cancel this transaction?" onConfirm={() => cancelMut.mutate(r.id)}>
-                  <Button size="small" danger icon={<StopOutlined />} />
-                </Popconfirm>
-              </Tooltip>
-              <Tooltip title="Delete">
-                <Popconfirm title="Delete this transaction?" onConfirm={() => deleteMut.mutate(r.id)}>
-                  <Button size="small" danger icon={<DeleteOutlined />} />
-                </Popconfirm>
-              </Tooltip>
+              {canEditTransactions && (
+                <>
+                  <Tooltip title="Edit">
+                    <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
+                  </Tooltip>
+                  <Tooltip title="Complete — updates inventory & accounting">
+                    <Popconfirm title="Complete this transaction?" onConfirm={() => completeMut.mutate(r.id)}>
+                      <Button size="small" type="primary" icon={<CheckOutlined />} />
+                    </Popconfirm>
+                  </Tooltip>
+                  <Tooltip title="Cancel">
+                    <Popconfirm title="Cancel this transaction?" onConfirm={() => cancelMut.mutate(r.id)}>
+                      <Button size="small" danger icon={<StopOutlined />} />
+                    </Popconfirm>
+                  </Tooltip>
+                </>
+              )}
+              {canDeleteTransactions && (
+                <Tooltip title="Delete">
+                  <Popconfirm title="Delete this transaction?" onConfirm={() => deleteMut.mutate(r.id)}>
+                    <Button size="small" danger icon={<DeleteOutlined />} />
+                  </Popconfirm>
+                </Tooltip>
+              )}
             </>
           )}
           {r.status === 'completed' && <Tag color="success">Completed</Tag>}
@@ -340,8 +352,8 @@ export default function TransactionsPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <h1 style={{ fontSize: 24, fontWeight: 'bold', margin: 0 }}>Transactions & Analytics</h1>
         <Space>
-          <Button icon={<DownloadOutlined />} onClick={handleExport}>Export Excel</Button>
-          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>New Transaction</Button>
+          {canExportTransactions && <Button icon={<DownloadOutlined />} onClick={handleExport}>Export Excel</Button>}
+          {canCreateTransactions && <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>New Transaction</Button>}
         </Space>
       </div>
 
@@ -515,16 +527,17 @@ export default function TransactionsPage() {
       </Drawer>
 
       {/* Create / Edit Modal */}
-      <Modal
-        title={editingTx ? `Edit ${editingTx.transaction_number}` : 'New Transaction'}
-        open={modalOpen}
-        onCancel={() => { setModalOpen(false); setEditingTx(null); form.resetFields(); }}
-        onOk={handleSubmit}
-        confirmLoading={createMut.isPending || updateMut.isPending}
-        width={820}
-        okText={editingTx ? 'Save' : 'Create'}
-      >
-        <Form form={form} layout="vertical" size="small">
+      {(canCreateTransactions || canEditTransactions) && (
+        <Modal
+          title={editingTx ? `Edit ${editingTx.transaction_number}` : 'New Transaction'}
+          open={modalOpen}
+          onCancel={() => { setModalOpen(false); setEditingTx(null); form.resetFields(); }}
+          onOk={handleSubmit}
+          confirmLoading={createMut.isPending || updateMut.isPending}
+          width={820}
+          okText={editingTx ? 'Save' : 'Create'}
+        >
+          <Form form={form} layout="vertical" size="small">
           <Row gutter={12}>
             <Col span={8}>
               <Form.Item name="type" label="Type" rules={[{ required: true }]}>
@@ -659,8 +672,9 @@ export default function TransactionsPage() {
               </>
             )}
           </Form.List>
-        </Form>
-      </Modal>
+          </Form>
+        </Modal>
+      )}
     </div>
   );
 }

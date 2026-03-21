@@ -42,6 +42,7 @@ const ROUTES = [
     { name: 'Payments', path: '/payments' },
     { name: 'Communication', path: '/communication' },
     { name: 'Compliance', path: '/compliance' },
+    { name: 'BI & Reports', path: '/bi' },
     { name: 'Services', path: '/services' },
 ];
 

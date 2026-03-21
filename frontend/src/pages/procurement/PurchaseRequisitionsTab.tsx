@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { procurementApi } from '@/api/procurement';
 import { hrApi } from '@/api/hr';
 import dayjs from 'dayjs';
+import { useAccessControl } from '@/hooks/useAccessControl';
 
 const STATUS_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
   draft:            { color: '#8c8c8c', bg: '#fafafa',   label: 'Draft' },
@@ -40,11 +41,14 @@ function StatusPill({ status }: { status: string }) {
 
 export default function PurchaseRequisitionsTab() {
   const queryClient = useQueryClient();
+  const { canPerform } = useAccessControl();
   const [form] = Form.useForm();
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [editingRecord, setEditingRecord] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
+  const canCreateRequisitions = canPerform('procurement', 'create');
+  const canEditRequisitions = canPerform('procurement', 'edit');
 
   const { data, isLoading } = useQuery({
     queryKey: ['purchase-requisitions'],
@@ -123,11 +127,13 @@ export default function PurchaseRequisitionsTab() {
         const isPending = ['pending_approval', 'pending_approval', 'pending'].includes((record.status || '').toLowerCase());
         return (
           <Space size={4}>
-            <Button type="link" size="small" icon={<EditOutlined />} onClick={() => {
-              setEditingRecord(record); setIsModalVisible(true);
-              setTimeout(() => form.setFieldsValue({ ...record, request_date: record.request_date ? dayjs(record.request_date) : null, required_date: record.required_date ? dayjs(record.required_date) : null }), 0);
-            }} />
-            {isPending && (
+            {canEditRequisitions && (
+              <Button type="link" size="small" icon={<EditOutlined />} onClick={() => {
+                setEditingRecord(record); setIsModalVisible(true);
+                setTimeout(() => form.setFieldsValue({ ...record, request_date: record.request_date ? dayjs(record.request_date) : null, required_date: record.required_date ? dayjs(record.required_date) : null }), 0);
+              }} />
+            )}
+            {canEditRequisitions && isPending && (
               <>
                 <Popconfirm title="Approve this requisition?" description="This will create a JE and open an inbound shipment."
                   onConfirm={() => approveMutation.mutate(record.id)} okText="Approve" okButtonProps={{ type: 'primary' }}>
@@ -161,10 +167,12 @@ export default function PurchaseRequisitionsTab() {
           </Select>
           <span style={{ color: '#8c8c8c', fontSize: 13 }}>{filtered.length} requisitions</span>
         </Space>
-        <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 8 }}
-          onClick={() => { setEditingRecord(null); setIsModalVisible(true); setTimeout(() => form.resetFields(), 0); }}>
-          Create Requisition
-        </Button>
+        {canCreateRequisitions && (
+          <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 8 }}
+            onClick={() => { setEditingRecord(null); setIsModalVisible(true); setTimeout(() => form.resetFields(), 0); }}>
+            Create Requisition
+          </Button>
+        )}
       </div>
 
       <Table
@@ -211,14 +219,15 @@ export default function PurchaseRequisitionsTab() {
         }}
       />
 
-      <Modal
-        title={editingRecord ? 'Edit Purchase Requisition' : 'Create Purchase Requisition'}
-        open={isModalVisible}
-        forceRender
-        onCancel={() => { setIsModalVisible(false); setEditingRecord(null); setTimeout(() => form.resetFields(), 0); }}
-        footer={null}
-      >
-        <Form form={form} layout="vertical" onFinish={handleSubmit}>
+      {(canCreateRequisitions || canEditRequisitions) && (
+        <Modal
+          title={editingRecord ? 'Edit Purchase Requisition' : 'Create Purchase Requisition'}
+          open={isModalVisible}
+          forceRender
+          onCancel={() => { setIsModalVisible(false); setEditingRecord(null); setTimeout(() => form.resetFields(), 0); }}
+          footer={null}
+        >
+          <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item name="requested_by_id" label="Requested By" rules={[{ required: true }]}>
             <Select placeholder="Select Employee">
               {employeeList.map((emp: any) => (
@@ -259,8 +268,9 @@ export default function PurchaseRequisitionsTab() {
               </Button>
             </Space>
           </Form.Item>
-        </Form>
-      </Modal>
+          </Form>
+        </Modal>
+      )}
 
       <style>{`
         .row-approved td { background: #f6ffed !important; }

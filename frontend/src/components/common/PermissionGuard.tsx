@@ -13,10 +13,13 @@ export default function PermissionGuard({
   fallback = null,
 }: PermissionGuardProps) {
   const { user } = useAuthStore();
+  const normalizedRole = user?.role?.trim().toLowerCase().replace(/[\s_-]+/g, '');
 
   // Check if user has the required permission
-  const hasPermission = user?.role === 'admin' || 
-    user?.role === requiredPermission;
+  const hasPermission =
+    normalizedRole === 'admin'
+    || normalizedRole === 'superadmin'
+    || user?.role === requiredPermission;
 
   if (!hasPermission) {
     return <>{fallback}</>;

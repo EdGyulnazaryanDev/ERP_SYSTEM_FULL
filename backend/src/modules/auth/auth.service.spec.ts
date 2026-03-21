@@ -9,6 +9,7 @@ import { User } from '../users/user.entity';
 import { Role } from '../roles/role.entity';
 import { UserRole } from '../roles/user-role.entity';
 import { DefaultRbacSeeder } from '../../database/seeders/default-rbac.seeder';
+import { ComplianceAuditService } from '../compliance-audit/compliance-audit.service';
 import { UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 
@@ -96,6 +97,12 @@ describe('AuthService', () => {
           useValue: {
             seed: jest.fn(),
             getDefaultAdminRole: jest.fn(),
+          },
+        },
+        {
+          provide: ComplianceAuditService,
+          useValue: {
+            createAuditLog: jest.fn().mockResolvedValue(undefined),
           },
         },
       ],
@@ -202,7 +209,7 @@ describe('AuthService', () => {
       
       jest.spyOn(userRepo, 'update').mockResolvedValue({} as any);
 
-      const result = await service.logout(userId);
+      const result = await service.logout(userId, 'tenant-1');
 
       expect(result).toEqual({ message: 'Logged out successfully' });
       expect(userRepo.update).toHaveBeenCalledWith(userId, { refreshToken: null });

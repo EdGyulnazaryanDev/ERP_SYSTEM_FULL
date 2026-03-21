@@ -30,7 +30,7 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Post('logout')
   logout(@CurrentUser() user: JwtUser) {
-    return this.authService.logout(user.sub);
+    return this.authService.logout(user.sub, user.tenantId);
   }
 
   @Post('refresh')

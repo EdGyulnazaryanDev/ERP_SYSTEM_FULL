@@ -63,4 +63,7 @@ export const rbacApi = {
   
   assignPermissions: (roleId: string, permissionIds: string[]) =>
     apiClient.post(`/rbac/roles/${roleId}/permissions`, { permissionIds }),
+
+  getUserRoles: (userId: string) =>
+    apiClient.get<Role[]>(`/roles/users/${userId}`),
 };

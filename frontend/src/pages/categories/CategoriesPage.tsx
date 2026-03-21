@@ -22,6 +22,7 @@ import {
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { categoriesApi, type Category, type CreateCategoryDto } from '@/api/categories';
+import { useAccessControl } from '@/hooks/useAccessControl';
 
 const colorOptions = [
   { label: 'Blue', value: '#1890ff' },
@@ -37,9 +38,13 @@ const colorOptions = [
 export default function CategoriesPage() {
   const [form] = Form.useForm();
   const queryClient = useQueryClient();
+  const { canPerform } = useAccessControl();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [viewMode, setViewMode] = useState<'list' | 'tree'>('list');
+  const canCreateCategories = canPerform('categories', 'create');
+  const canEditCategories = canPerform('categories', 'edit');
+  const canDeleteCategories = canPerform('categories', 'delete');
 
   const { data: categories, isLoading } = useQuery({
     queryKey: ['categories'],
@@ -216,24 +221,28 @@ export default function CategoriesPage() {
       key: 'actions',
       render: (_: any, record: Category) => (
         <Space>
-          <Button
-            type="link"
-            size="small"
-            icon={<EditOutlined />}
-            onClick={() => openModal(record)}
-          >
-            Edit
-          </Button>
-          <Button
-            type="link"
-            size="small"
-            danger
-            icon={<DeleteOutlined />}
-            onClick={() => handleDelete(record)}
-            loading={deleteMutation.isPending}
-          >
-            Delete
-          </Button>
+          {canEditCategories && (
+            <Button
+              type="link"
+              size="small"
+              icon={<EditOutlined />}
+              onClick={() => openModal(record)}
+            >
+              Edit
+            </Button>
+          )}
+          {canDeleteCategories && (
+            <Button
+              type="link"
+              size="small"
+              danger
+              icon={<DeleteOutlined />}
+              onClick={() => handleDelete(record)}
+              loading={deleteMutation.isPending}
+            >
+              Delete
+            </Button>
+          )}
         </Space>
       ),
     },
@@ -255,23 +264,27 @@ export default function CategoriesPage() {
             </Tag>
           </Space>
           <Space>
-            <Button
-              type="link"
-              size="small"
-              icon={<EditOutlined />}
-              onClick={() => openModal(item)}
-            >
-              Edit
-            </Button>
-            <Button
-              type="link"
-              size="small"
-              danger
-              icon={<DeleteOutlined />}
-              onClick={() => handleDelete(item)}
-            >
-              Delete
-            </Button>
+            {canEditCategories && (
+              <Button
+                type="link"
+                size="small"
+                icon={<EditOutlined />}
+                onClick={() => openModal(item)}
+              >
+                Edit
+              </Button>
+            )}
+            {canDeleteCategories && (
+              <Button
+                type="link"
+                size="small"
+                danger
+                icon={<DeleteOutlined />}
+                onClick={() => handleDelete(item)}
+              >
+                Delete
+              </Button>
+            )}
           </Space>
         </div>
       ),
@@ -302,13 +315,15 @@ export default function CategoriesPage() {
               Tree View
             </Button>
           </Button.Group>
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => openModal()}
-          >
-            Create Category
-          </Button>
+          {canCreateCategories && (
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => openModal()}
+            >
+              Create Category
+            </Button>
+          )}
         </Space>
       </div>
 
@@ -350,14 +365,15 @@ export default function CategoriesPage() {
       </Card>
 
       {/* Create/Edit Modal */}
-      <Modal
-        title={editingCategory ? 'Edit Category' : 'Create Category'}
-        open={isModalOpen}
-        onCancel={closeModal}
-        footer={null}
-        width={600}
-      >
-        <Form form={form} layout="vertical" onFinish={handleSubmit}>
+      {(canCreateCategories || canEditCategories) && (
+        <Modal
+          title={editingCategory ? 'Edit Category' : 'Create Category'}
+          open={isModalOpen}
+          onCancel={closeModal}
+          footer={null}
+          width={600}
+        >
+          <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item
             label="Name"
             name="name"
@@ -415,8 +431,9 @@ export default function CategoriesPage() {
               <Button onClick={closeModal}>Cancel</Button>
             </Space>
           </Form.Item>
-        </Form>
-      </Modal>
+          </Form>
+        </Modal>
+      )}
     </div>
   );
 }

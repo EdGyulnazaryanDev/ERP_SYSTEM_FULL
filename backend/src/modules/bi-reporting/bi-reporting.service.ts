@@ -199,7 +199,14 @@ export class BiReportingService {
         config: widget.config,
       };
     } catch (error) {
-      throw new BadRequestException(`Failed to fetch widget data: ${error.message}`);
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException(
+        `Failed to fetch widget data: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
     }
   }
 
@@ -317,13 +324,21 @@ export class BiReportingService {
       report.row_count = result.length;
       report.status = ReportStatus.COMPLETED;
       report.generated_at = new Date();
-      
+
       // In production, generate actual file and store
       report.file_path = `/reports/${reportId}.${report.format}`;
       report.file_url = `/api/reports/download/${reportId}`;
       report.file_size = JSON.stringify(result).length;
 
       await this.savedReportRepo.save(report);
+
+      await this.logExport(
+        report.template?.name ?? 'report',
+        report.format,
+        result.length,
+        report.generated_by,
+        tenantId,
+      );
     } catch (error) {
       report.status = ReportStatus.FAILED;
       report.error_message = error.message;
@@ -359,17 +374,153 @@ export class BiReportingService {
 
   async executeQuery(data: ExecuteQueryDto, tenantId: string): Promise<any[]> {
     try {
-      // Add tenant filter to query if not present
-      let query = data.query;
-      const params = { ...data.parameters, tenant_id: tenantId };
+      let sql = data.query.trim().replace(/;+\s*$/g, '');
+      if (!sql) {
+        throw new BadRequestException('Query is empty');
+      }
 
-      // Execute raw query with parameters
-      const result = await this.dataSource.query(query, Object.values(params));
+      this.assertReadOnlyReportingSql(sql);
 
-      return result;
+      let maxPlaceholder = this.getMaxPgPlaceholderIndex(sql);
+      if (maxPlaceholder === 0) {
+        sql = this.injectTenantFilter(sql);
+        maxPlaceholder = this.getMaxPgPlaceholderIndex(sql);
+      } else {
+        if (!/\$1\b/.test(sql)) {
+          throw new BadRequestException(
+            'When using bind parameters, $1 must be your tenant id (e.g. WHERE tenant_id = $1).',
+          );
+        }
+      }
+
+      if (maxPlaceholder < 1) {
+        throw new BadRequestException(
+          'Could not prepare a tenant-safe query. Include tenant_id = $1 or omit placeholders for auto-filter.',
+        );
+      }
+
+      const params = this.buildQueryParameters(
+        maxPlaceholder,
+        tenantId,
+        data.parameters,
+      );
+
+      const raw = await this.dataSource.query(sql, params);
+      return this.serializeQueryRows(raw);
     } catch (error) {
-      throw new BadRequestException(`Query execution failed: ${error.message}`);
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException(
+        `Query execution failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
     }
+  }
+
+  /** Only allow read-style statements (single statement). */
+  private assertReadOnlyReportingSql(sql: string): void {
+    const stripped = sql
+      .replace(/\/\*[\s\S]*?\*\//g, ' ')
+      .replace(/--[^\n]*/g, ' ');
+    const head = stripped.trim().toLowerCase();
+    if (!/^(select|with|explain)\b/.test(head)) {
+      throw new BadRequestException(
+        'Only SELECT, WITH, or EXPLAIN queries are allowed in the BI query lab.',
+      );
+    }
+    if (/;\s*\S/.test(sql)) {
+      throw new BadRequestException('Multiple SQL statements are not allowed.');
+    }
+    const forbidden =
+      /\b(insert|update|delete|truncate|alter|drop|create|grant|revoke|copy\s+\(|into\s+outfile)\b/i;
+    if (forbidden.test(stripped)) {
+      throw new BadRequestException(
+        'Destructive or DDL keywords are not allowed in reporting queries.',
+      );
+    }
+  }
+
+  /**
+   * When the query has no $n placeholders, append tenant scoping.
+   * Skips if tenant_id filter already appears.
+   */
+  private injectTenantFilter(sql: string): string {
+    const s = sql.trim();
+    if (/\btenant_id\s*=/i.test(s)) {
+      return s;
+    }
+    const hasWhere = /\bwhere\b/i.test(s);
+    const insertBefore =
+      /\b(order\s+by|group\s+by|limit|offset|having)\b/i;
+    const m = s.match(insertBefore);
+    const clause = hasWhere ? ' AND tenant_id = $1' : ' WHERE tenant_id = $1';
+    if (m && m.index !== undefined) {
+      return s.slice(0, m.index).trim() + clause + ' ' + s.slice(m.index);
+    }
+    return s + clause;
+  }
+
+  private serializeQueryRows(rows: unknown): any[] {
+    if (!Array.isArray(rows)) {
+      return [];
+    }
+    return rows.map((row) => {
+      if (row === null || typeof row !== 'object') {
+        return row;
+      }
+      const out: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(row as Record<string, unknown>)) {
+        if (typeof v === 'bigint') {
+          out[k] = v.toString();
+        } else if (v instanceof Date) {
+          out[k] = v.toISOString();
+        } else {
+          out[k] = v;
+        }
+      }
+      return out;
+    });
+  }
+
+  /** Highest $n used in the query (PostgreSQL-style placeholders). */
+  private getMaxPgPlaceholderIndex(sql: string): number {
+    let max = 0;
+    const re = /\$(\d+)/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(sql)) !== null) {
+      const n = parseInt(m[1], 10);
+      if (n > max) max = n;
+    }
+    return max;
+  }
+
+  /** $1 is always tenant_id; $2… filled from optional parameters. */
+  private buildQueryParameters(
+    maxPlaceholder: number,
+    tenantId: string,
+    parameters: unknown,
+  ): unknown[] {
+    const params: unknown[] = [];
+    for (let i = 1; i <= maxPlaceholder; i++) {
+      if (i === 1) {
+        params.push(tenantId);
+        continue;
+      }
+      let val: unknown;
+      if (Array.isArray(parameters)) {
+        val = parameters[i - 2];
+      } else if (parameters && typeof parameters === 'object') {
+        const o = parameters as Record<string, unknown>;
+        val =
+          o[String(i)] ??
+          o[`$${i}`] ??
+          o[`p${i}`];
+      }
+      params.push(val ?? null);
+    }
+    return params;
   }
 
   // ==================== ANALYTICS METHODS ====================
@@ -457,18 +608,29 @@ export class BiReportingService {
     }
   }
 
-  private buildTrendQuery(metric: string, period: string): string {
-    const interval = period === 'daily' ? '1 day' : period === 'weekly' ? '1 week' : '1 month';
-    
+  private buildTrendQuery(_metric: string, period: string): string {
+    const trunc =
+      period === 'daily'
+        ? 'day'
+        : period === 'weekly'
+          ? 'week'
+          : 'month';
+    const lookback =
+      period === 'daily'
+        ? '30 days'
+        : period === 'weekly'
+          ? '84 days'
+          : '24 months';
+
     return `
       SELECT 
-        DATE_TRUNC('${period}', created_at) as period,
-        COUNT(*) as count,
-        SUM(total_amount) as total
+        DATE_TRUNC('${trunc}', created_at) AS period,
+        COUNT(*)::int AS count,
+        COALESCE(SUM(total_amount), 0)::numeric AS total
       FROM transactions
       WHERE tenant_id = $1
-        AND created_at >= NOW() - INTERVAL '${interval}' * 30
-      GROUP BY period
+        AND created_at >= NOW() - INTERVAL '${lookback}'
+      GROUP BY DATE_TRUNC('${trunc}', created_at)
       ORDER BY period ASC
     `;
   }

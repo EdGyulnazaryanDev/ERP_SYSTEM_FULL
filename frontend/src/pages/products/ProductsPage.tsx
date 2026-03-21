@@ -2,18 +2,19 @@ import { useState, useMemo } from 'react';
 import {
   Table, Button, Space, Modal, Form, Input, InputNumber,
   Select, Switch, Tooltip, Tag, message, Row, Col, Card,
-  Alert, List, AutoComplete, Dropdown,
+  Alert, List, AutoComplete, Dropdown, Segmented,
 } from 'antd';
 import {
   PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined,
   WarningOutlined, DollarOutlined, ShoppingCartOutlined, CopyOutlined,
   CheckCircleOutlined, MoreOutlined,
-  AppstoreOutlined, StopOutlined, RiseOutlined,
+  AppstoreOutlined, StopOutlined, RiseOutlined, DownloadOutlined,
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { productsApi, type Product } from '@/api/products';
 import { categoriesApi } from '@/api/categories';
 import { ProductService } from '@/services/ProductService';
+import { useAccessControl } from '@/hooks/useAccessControl';
 
 // ── Stat Card ────────────────────────────────────────────────────────────────
 function StatCard({
@@ -61,11 +62,14 @@ function StatCard({
 
 export default function ProductsPage() {
   const queryClient = useQueryClient();
+  const { canPerform } = useAccessControl();
   const [form] = Form.useForm();
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
   const [activeStatFilter, setActiveStatFilter] = useState<string | null>(null);
+  const [productLens, setProductLens] = useState<'all' | 'lowMargin' | 'attention' | 'unsourced'>('all');
+  const [tableDensity, setTableDensity] = useState<'small' | 'middle'>('small');
   const [filters, setFilters] = useState({
     page: 1,
     limit: 50,
@@ -156,11 +160,25 @@ export default function ProductsPage() {
 
   // Low stock filter is client-side only
   const filteredProducts = useMemo(() => {
+    let next = allProducts;
+
     if (activeStatFilter === 'lowStock') {
-      return allProducts.filter(p => p.quantity_in_stock <= p.reorder_level);
+      next = next.filter((product) => Number(product.quantity_in_stock) <= Number(product.reorder_level));
     }
-    return allProducts;
-  }, [allProducts, activeStatFilter]);
+
+    if (productLens === 'lowMargin') {
+      next = next.filter((product) => ProductService.calculateMargin(product.selling_price, product.cost_price) < 15);
+    } else if (productLens === 'attention') {
+      next = next.filter((product) =>
+        Number(product.quantity_in_stock) <= Number(product.reorder_level)
+        || ProductService.calculateMargin(product.selling_price, product.cost_price) <= 0,
+      );
+    } else if (productLens === 'unsourced') {
+      next = next.filter((product) => !product.supplier?.trim());
+    }
+
+    return next;
+  }, [allProducts, activeStatFilter, productLens]);
 
   const pushRecentProduct = (p: Product) => {
     try {
@@ -283,6 +301,85 @@ export default function ProductsPage() {
     const { created_at, updated_at, ...rest } = product as any;
     handleOpenModal();
     form.setFieldsValue({ ...rest, sku: `${product.sku}-COPY-${Date.now()}`.slice(0, 100), name: `${product.name} (Copy)` });
+  };
+
+  const canCreateProducts = canPerform('products', 'create');
+  const canEditProducts = canPerform('products', 'edit');
+  const canDeleteProducts = canPerform('products', 'delete');
+  const canExportProducts = canPerform('products', 'export');
+
+  const productInsights = useMemo(() => {
+    const avgMargin = allProducts.length
+      ? allProducts.reduce(
+        (sum, product) => sum + ProductService.calculateMargin(product.selling_price, product.cost_price),
+        0,
+      ) / allProducts.length
+      : 0;
+    const unsourcedCount = allProducts.filter((product) => !product.supplier?.trim()).length;
+    const outOfStockCount = allProducts.filter((product) => Number(product.quantity_in_stock) === 0).length;
+    const categoryCount = new Map<string, number>();
+    allProducts.forEach((product) => {
+      if (product.category) {
+        categoryCount.set(product.category, (categoryCount.get(product.category) ?? 0) + 1);
+      }
+    });
+    const topCategory = [...categoryCount.entries()].sort((a, b) => b[1] - a[1])[0];
+
+    return {
+      avgMargin,
+      unsourcedCount,
+      outOfStockCount,
+      topCategory,
+      negativeMarginCount: allProducts.filter(
+        (product) => ProductService.calculateMargin(product.selling_price, product.cost_price) <= 0,
+      ).length,
+    };
+  }, [allProducts]);
+
+  const resetWorkspace = () => {
+    setProductLens('all');
+    setActiveStatFilter(null);
+    setFilters({
+      page: 1,
+      limit: 50,
+      category: undefined,
+      supplier: undefined,
+      is_active: undefined,
+      search: undefined,
+    });
+  };
+
+  const exportProductsCsv = () => {
+    const rows = filteredProducts.map((product) => ({
+      sku: product.sku,
+      name: product.name,
+      category: product.category ?? '',
+      supplier: product.supplier ?? '',
+      cost_price: Number(product.cost_price ?? 0).toFixed(2),
+      selling_price: Number(product.selling_price ?? 0).toFixed(2),
+      quantity_in_stock: Number(product.quantity_in_stock ?? 0),
+      reorder_level: Number(product.reorder_level ?? 0),
+      margin_percent: ProductService.calculateMargin(product.selling_price, product.cost_price).toFixed(2),
+      status: product.is_active ? 'active' : 'inactive',
+    }));
+
+    if (!rows.length) {
+      message.warning('No products available to export');
+      return;
+    }
+
+    const header = Object.keys(rows[0]);
+    const csv = [
+      header.join(','),
+      ...rows.map((row) => header.map((key) => JSON.stringify(String(row[key as keyof typeof row] ?? ''))).join(',')),
+    ].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `products-workspace-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    window.URL.revokeObjectURL(url);
   };
 
   // ── Columns ────────────────────────────────────────────────────────────────
@@ -420,13 +517,24 @@ export default function ProductsPage() {
       align: 'center' as const,
       render: (_: unknown, record: Product) => {
         const menuItems = [
-          { key: 'edit', label: 'Edit', icon: <EditOutlined />, onClick: () => handleOpenModal(record) },
-          { key: 'dup', label: 'Duplicate', icon: <CopyOutlined />, onClick: () => handleDuplicateProduct(record) },
-          { type: 'divider' as const },
-          { key: 'del', label: 'Delete', icon: <DeleteOutlined />, danger: true, onClick: () => handleDelete(record) },
-        ];
+          canEditProducts
+            ? { key: 'edit', label: 'Edit', icon: <EditOutlined />, onClick: () => handleOpenModal(record) }
+            : null,
+          canCreateProducts
+            ? { key: 'dup', label: 'Duplicate', icon: <CopyOutlined />, onClick: () => handleDuplicateProduct(record) }
+            : null,
+          canEditProducts && canDeleteProducts ? { type: 'divider' as const } : null,
+          canDeleteProducts
+            ? { key: 'del', label: 'Delete', icon: <DeleteOutlined />, danger: true, onClick: () => handleDelete(record) }
+            : null,
+        ].filter(Boolean);
+
+        if (!menuItems.length) {
+          return null;
+        }
+
         return (
-          <Dropdown menu={{ items: menuItems }} trigger={['click']}>
+          <Dropdown menu={{ items: menuItems as NonNullable<typeof menuItems[number]>[] }} trigger={['click']}>
             <Button size="small" icon={<MoreOutlined />} />
           </Dropdown>
         );
@@ -458,15 +566,17 @@ export default function ProductsPage() {
           >
             Refresh
           </Button>
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            size="large"
-            style={{ borderRadius: 8 }}
-            onClick={() => handleOpenModal()}
-          >
-            Add Product
-          </Button>
+          {canCreateProducts && (
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              size="large"
+              style={{ borderRadius: 8 }}
+              onClick={() => handleOpenModal()}
+            >
+              Add Product
+            </Button>
+          )}
         </Space>
       </div>
 
@@ -512,8 +622,92 @@ export default function ProductsPage() {
         </Col>
       </Row>
 
+      <Row gutter={12} style={{ marginBottom: 20 }}>
+        <Col xs={24} lg={16}>
+          <Card
+            style={{ borderRadius: 12, border: '1px solid #d6e4ff', background: 'linear-gradient(135deg, #f7fbff 0%, #eef6ff 100%)' }}
+            styles={{ body: { padding: '16px 18px' } }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: '#1a1a2e' }}>Product Control Tower</div>
+                <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>
+                  Focus on margin leaks, stock risk, and supplier gaps without leaving the page.
+                </div>
+              </div>
+              <Space wrap>
+                <Segmented
+                  value={productLens}
+                  onChange={(value) => setProductLens(value as typeof productLens)}
+                  options={[
+                    { label: 'All', value: 'all' },
+                    { label: 'Low Margin', value: 'lowMargin' },
+                    { label: 'Attention', value: 'attention' },
+                    { label: 'No Supplier', value: 'unsourced' },
+                  ]}
+                />
+                <Segmented
+                  value={tableDensity}
+                  onChange={(value) => setTableDensity(value as typeof tableDensity)}
+                  options={[
+                    { label: 'Compact', value: 'small' },
+                    { label: 'Comfort', value: 'middle' },
+                  ]}
+                />
+                <Button onClick={resetWorkspace}>Reset</Button>
+                {canExportProducts && (
+                  <Button icon={<DownloadOutlined />} onClick={exportProductsCsv}>
+                    Export CSV
+                  </Button>
+                )}
+              </Space>
+            </div>
+          </Card>
+        </Col>
+        <Col xs={24} lg={8}>
+          <Card style={{ borderRadius: 12 }} styles={{ body: { padding: '16px 18px' } }}>
+            <div style={{ display: 'grid', gap: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                <span style={{ color: '#6b7280', fontSize: 12 }}>Average margin</span>
+                <strong style={{ color: productInsights.avgMargin >= 20 ? '#52c41a' : productInsights.avgMargin > 0 ? '#1677ff' : '#ff4d4f' }}>
+                  {productInsights.avgMargin.toFixed(1)}%
+                </strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                <span style={{ color: '#6b7280', fontSize: 12 }}>Top category</span>
+                <strong>{productInsights.topCategory ? `${productInsights.topCategory[0]} (${productInsights.topCategory[1]})` : '—'}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                <span style={{ color: '#6b7280', fontSize: 12 }}>Missing supplier</span>
+                <strong>{productInsights.unsourcedCount}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                <span style={{ color: '#6b7280', fontSize: 12 }}>Negative margin items</span>
+                <strong style={{ color: productInsights.negativeMarginCount ? '#ff4d4f' : '#52c41a' }}>
+                  {productInsights.negativeMarginCount}
+                </strong>
+              </div>
+            </div>
+          </Card>
+        </Col>
+      </Row>
+
+      {(productInsights.unsourcedCount > 0 || productInsights.negativeMarginCount > 0 || productInsights.outOfStockCount > 0) && (
+        <Alert
+          style={{ marginBottom: 16, borderRadius: 10 }}
+          type={productInsights.negativeMarginCount > 0 ? 'warning' : 'info'}
+          showIcon
+          message="Catalog watchlist"
+          description={[
+            productInsights.negativeMarginCount > 0 ? `${productInsights.negativeMarginCount} products are selling at or below cost.` : null,
+            productInsights.unsourcedCount > 0 ? `${productInsights.unsourcedCount} products have no supplier assigned.` : null,
+            productInsights.outOfStockCount > 0 ? `${productInsights.outOfStockCount} products are out of stock.` : null,
+          ].filter(Boolean).join(' ')}
+        />
+      )}
+
       {/* Bulk delete alert */}
-      {selectedRowKeys.length > 0 && (
+      {canDeleteProducts && selectedRowKeys.length > 0 && (
         <Alert
           message={`${selectedRowKeys.length} product(s) selected`}
           type="info"
@@ -585,7 +779,7 @@ export default function ProductsPage() {
           dataSource={filteredProducts}
           loading={productsLoading}
           rowKey="id"
-          size="small"
+          size={tableDensity}
           scroll={{ x: 1100 }}
           pagination={{
             current: filters.page,
@@ -597,10 +791,10 @@ export default function ProductsPage() {
             showTotal: (total, range) => `${range[0]}–${range[1]} of ${total} products`,
             style: { padding: '12px 20px' },
           }}
-          rowSelection={{
+          rowSelection={canDeleteProducts ? {
             selectedRowKeys,
             onChange: (keys) => setSelectedRowKeys(keys as string[]),
-          }}
+          } : undefined}
           rowClassName={(record: Product) => {
             if (!record.is_active) return 'row-inactive';
             if (record.quantity_in_stock === 0) return 'row-out-of-stock';
@@ -622,8 +816,12 @@ export default function ProductsPage() {
             renderItem={(p) => (
               <List.Item
                 actions={[
-                  <Button key="view" type="link" size="small" onClick={() => handleOpenModal(p)}>Edit</Button>,
-                  <Button key="dup" type="link" size="small" onClick={() => handleDuplicateProduct(p)}>Duplicate</Button>,
+                  ...(canEditProducts
+                    ? [<Button key="view" type="link" size="small" onClick={() => handleOpenModal(p)}>Edit</Button>]
+                    : []),
+                  ...(canCreateProducts
+                    ? [<Button key="dup" type="link" size="small" onClick={() => handleDuplicateProduct(p)}>Duplicate</Button>]
+                    : []),
                 ]}
               >
                 <div>
@@ -644,99 +842,101 @@ export default function ProductsPage() {
       `}</style>
 
       {/* Product Form Modal */}
-      <Modal
-        title={
-          <Space>
-            {editingProduct ? <EditOutlined /> : <PlusOutlined />}
-            {editingProduct ? 'Edit Product' : 'Add New Product'}
-          </Space>
-        }
-        open={isModalVisible}
-        onCancel={handleCloseModal}
-        footer={null}
-        width={600}
-        forceRender
-      >
-        <Form form={form} layout="vertical" onFinish={handleSubmit} autoComplete="off">
-          <Form.Item name="name" label="Product Name" rules={[{ required: true, message: 'Required' }]}>
-            <Input placeholder="Enter product name" />
-          </Form.Item>
-          <Form.Item name="sku" label="SKU" rules={[{ required: true }, { max: 100 }]}>
-            <Input placeholder="Enter product SKU" />
-          </Form.Item>
-          <Form.Item name="description" label="Description">
-            <Input.TextArea placeholder="Enter product description" rows={3} />
-          </Form.Item>
-          <Form.Item name="category" label="Category" rules={[{ required: true, message: 'Required' }]}>
-            <AutoComplete
-              placeholder="Select or enter category"
-              options={(mergedCategories || []).map((cat: string) => ({ value: cat }))}
-              filterOption={(input, opt) => opt!.value.toUpperCase().includes(input.toUpperCase())}
-            />
-          </Form.Item>
-          <Form.Item name="supplier" label="Supplier" rules={[{ required: true, message: 'Required' }]}>
-            <AutoComplete
-              placeholder="Select or enter supplier"
-              options={(mergedSuppliers || []).map((s) => ({ value: s }))}
-              filterOption={(input, opt) => typeof opt?.value === 'string' && opt.value.toUpperCase().includes(input.toUpperCase())}
-            />
-          </Form.Item>
-          <Row gutter={16}>
-            <Col xs={24} sm={12}>
-              <Form.Item name="cost_price" label="Cost Price" rules={[{ required: true }, { type: 'number', min: 0 }]}>
-                <InputNumber placeholder="0.00" step={0.01} min={0} precision={2} className="w-full" style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={12}>
-              <Form.Item name="selling_price" label="Selling Price" rules={[{ required: true }, { type: 'number', min: 0 }]}>
-                <InputNumber placeholder="0.00" step={0.01} min={0} precision={2} className="w-full" style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Row gutter={16}>
-            <Col xs={24} sm={12}>
-              <Form.Item name="quantity_in_stock" label="Quantity in Stock" rules={[{ type: 'number', min: 0 }]}>
-                <InputNumber placeholder="0" step={1} min={0} style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={12}>
-              <Form.Item name="reorder_level" label="Reorder Level" rules={[{ type: 'number', min: 0 }]}>
-                <InputNumber placeholder="10" step={1} min={0} style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Row gutter={16}>
-            <Col xs={24} sm={12}>
-              <Form.Item name="tax_rate" label="Tax Rate (%)" rules={[{ type: 'number', min: 0, max: 100 }]}>
-                <InputNumber placeholder="0" step={0.01} min={0} max={100} precision={2} style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={12}>
-              <Form.Item name="unit_of_measure" label="Unit of Measure">
-                <Input placeholder="e.g., pcs, kg, ltr" />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Form.Item name="image_url" label="Image URL">
-            <Input placeholder="https://example.com/image.jpg" />
-          </Form.Item>
-          <Form.Item name="is_active" label="Active" valuePropName="checked">
-            <Switch />
-          </Form.Item>
-          <Form.Item style={{ marginBottom: 0 }}>
-            <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
-              <Button onClick={handleCloseModal}>Cancel</Button>
-              <Button
-                type="primary"
-                htmlType="submit"
-                loading={createMutation.isPending || updateMutation.isPending}
-              >
-                {editingProduct ? 'Update' : 'Create'}
-              </Button>
+      {(canCreateProducts || canEditProducts) && (
+        <Modal
+          title={
+            <Space>
+              {editingProduct ? <EditOutlined /> : <PlusOutlined />}
+              {editingProduct ? 'Edit Product' : 'Add New Product'}
             </Space>
-          </Form.Item>
-        </Form>
-      </Modal>
+          }
+          open={isModalVisible}
+          onCancel={handleCloseModal}
+          footer={null}
+          width={600}
+          forceRender
+        >
+          <Form form={form} layout="vertical" onFinish={handleSubmit} autoComplete="off">
+            <Form.Item name="name" label="Product Name" rules={[{ required: true, message: 'Required' }]}>
+              <Input placeholder="Enter product name" />
+            </Form.Item>
+            <Form.Item name="sku" label="SKU" rules={[{ required: true }, { max: 100 }]}>
+              <Input placeholder="Enter product SKU" />
+            </Form.Item>
+            <Form.Item name="description" label="Description">
+              <Input.TextArea placeholder="Enter product description" rows={3} />
+            </Form.Item>
+            <Form.Item name="category" label="Category" rules={[{ required: true, message: 'Required' }]}>
+              <AutoComplete
+                placeholder="Select or enter category"
+                options={(mergedCategories || []).map((cat: string) => ({ value: cat }))}
+                filterOption={(input, opt) => opt!.value.toUpperCase().includes(input.toUpperCase())}
+              />
+            </Form.Item>
+            <Form.Item name="supplier" label="Supplier" rules={[{ required: true, message: 'Required' }]}>
+              <AutoComplete
+                placeholder="Select or enter supplier"
+                options={(mergedSuppliers || []).map((s) => ({ value: s }))}
+                filterOption={(input, opt) => typeof opt?.value === 'string' && opt.value.toUpperCase().includes(input.toUpperCase())}
+              />
+            </Form.Item>
+            <Row gutter={16}>
+              <Col xs={24} sm={12}>
+                <Form.Item name="cost_price" label="Cost Price" rules={[{ required: true }, { type: 'number', min: 0 }]}>
+                  <InputNumber placeholder="0.00" step={0.01} min={0} precision={2} className="w-full" style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+              <Col xs={24} sm={12}>
+                <Form.Item name="selling_price" label="Selling Price" rules={[{ required: true }, { type: 'number', min: 0 }]}>
+                  <InputNumber placeholder="0.00" step={0.01} min={0} precision={2} className="w-full" style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+            </Row>
+            <Row gutter={16}>
+              <Col xs={24} sm={12}>
+                <Form.Item name="quantity_in_stock" label="Quantity in Stock" rules={[{ type: 'number', min: 0 }]}>
+                  <InputNumber placeholder="0" step={1} min={0} style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+              <Col xs={24} sm={12}>
+                <Form.Item name="reorder_level" label="Reorder Level" rules={[{ type: 'number', min: 0 }]}>
+                  <InputNumber placeholder="10" step={1} min={0} style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+            </Row>
+            <Row gutter={16}>
+              <Col xs={24} sm={12}>
+                <Form.Item name="tax_rate" label="Tax Rate (%)" rules={[{ type: 'number', min: 0, max: 100 }]}>
+                  <InputNumber placeholder="0" step={0.01} min={0} max={100} precision={2} style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+              <Col xs={24} sm={12}>
+                <Form.Item name="unit_of_measure" label="Unit of Measure">
+                  <Input placeholder="e.g., pcs, kg, ltr" />
+                </Form.Item>
+              </Col>
+            </Row>
+            <Form.Item name="image_url" label="Image URL">
+              <Input placeholder="https://example.com/image.jpg" />
+            </Form.Item>
+            <Form.Item name="is_active" label="Active" valuePropName="checked">
+              <Switch />
+            </Form.Item>
+            <Form.Item style={{ marginBottom: 0 }}>
+              <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
+                <Button onClick={handleCloseModal}>Cancel</Button>
+                <Button
+                  type="primary"
+                  htmlType="submit"
+                  loading={createMutation.isPending || updateMutation.isPending}
+                >
+                  {editingProduct ? 'Update' : 'Create'}
+                </Button>
+              </Space>
+            </Form.Item>
+          </Form>
+        </Modal>
+      )}
     </div>
   );
 }

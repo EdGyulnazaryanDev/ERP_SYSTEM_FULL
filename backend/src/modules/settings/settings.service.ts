@@ -3,17 +3,51 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { PageAccessEntity } from './entities/page-access.entity';
 import { UserRole } from '../roles/user-role.entity';
+import { PlanFeature } from '../subscriptions/subscription.constants';
 
 export const DEFAULT_PAGES = [
-  { key: 'dashboard', name: 'Dashboard', path: '/' },
-  { key: 'products', name: 'Products', path: '/products' },
-  { key: 'categories', name: 'Categories', path: '/categories' },
-  { key: 'inventory', name: 'Inventory', path: '/inventory' },
-  { key: 'transactions', name: 'Transactions', path: '/transactions' },
-  { key: 'finance', name: 'Finance', path: '/finance' },
-  { key: 'modules', name: 'Modules', path: '/modules' },
-  { key: 'rbac', name: 'RBAC', path: '/rbac' },
-  { key: 'settings', name: 'Settings', path: '/settings' },
+  { key: 'dashboard', name: 'Dashboard', path: '/', category: 'Core' },
+  { key: 'products', name: 'Products & Services', path: '/products', category: 'Operations' },
+  { key: 'suppliers', name: 'Suppliers', path: '/suppliers', category: 'Operations' },
+  { key: 'categories', name: 'Categories', path: '/categories', category: 'Operations' },
+  { key: 'inventory', name: 'Inventory', path: '/inventory', category: 'Operations' },
+  { key: 'transactions', name: 'Transactions', path: '/transactions', category: 'Operations' },
+  {
+    key: 'accounting',
+    name: 'Accounting',
+    path: '/accounting',
+    category: 'Finance',
+    requiredFeature: PlanFeature.ACCOUNTING,
+  },
+  { key: 'payments', name: 'Payments', path: '/payments', category: 'Finance' },
+  { key: 'crm', name: 'CRM', path: '/crm', category: 'Sales' },
+  { key: 'hr', name: 'Human Resources', path: '/hr', category: 'People' },
+  { key: 'procurement', name: 'Procurement', path: '/procurement', category: 'Operations' },
+  {
+    key: 'warehouse',
+    name: 'Warehouse',
+    path: '/warehouse',
+    category: 'Operations',
+    requiredFeature: PlanFeature.WAREHOUSE,
+  },
+  { key: 'transportation', name: 'Transportation', path: '/transportation', category: 'Logistics' },
+  { key: 'projects', name: 'Projects', path: '/projects', category: 'Execution' },
+  { key: 'manufacturing', name: 'Manufacturing', path: '/manufacturing', category: 'Operations' },
+  { key: 'equipment', name: 'Assets', path: '/equipment', category: 'Operations' },
+  { key: 'services', name: 'Services', path: '/services', category: 'Operations' },
+  { key: 'communication', name: 'Communication', path: '/communication', category: 'Collaboration' },
+  { key: 'compliance', name: 'Compliance', path: '/compliance', category: 'Governance' },
+  {
+    key: 'bi',
+    name: 'BI & Reports',
+    path: '/bi',
+    category: 'Analytics',
+    requiredFeature: PlanFeature.REPORTS,
+  },
+  { key: 'users', name: 'Users', path: '/users', category: 'Administration' },
+  { key: 'modules', name: 'Modules', path: '/modules', category: 'Administration' },
+  { key: 'rbac', name: 'RBAC', path: '/rbac', category: 'Administration' },
+  { key: 'settings', name: 'Settings', path: '/settings', category: 'Administration' },
 ];
 
 @Injectable()
@@ -83,6 +117,33 @@ export class SettingsService {
 
     const roleIds = userRoles.map((ur) => ur.role_id);
     return this.getPageAccessForUser(roleIds, tenantId);
+  }
+
+  getPageCatalog() {
+    return DEFAULT_PAGES;
+  }
+
+  async getPageAccessMatrixForRole(roleId: string, tenantId: string) {
+    const accessList = await this.getPageAccessForRole(roleId, tenantId);
+    const accessMap = new Map(accessList.map((access) => [access.page_key, access]));
+
+    return DEFAULT_PAGES.map((page) => {
+      const access = accessMap.get(page.key);
+
+      return {
+        page_key: page.key,
+        page_name: page.name,
+        page_path: page.path,
+        category: page.category,
+        required_feature: page.requiredFeature ?? null,
+        can_view: access?.can_view ?? true,
+        can_create: access?.can_create ?? false,
+        can_edit: access?.can_edit ?? false,
+        can_delete: access?.can_delete ?? false,
+        can_export: access?.can_export ?? false,
+        custom_permissions: access?.custom_permissions ?? null,
+      };
+    });
   }
 
   async setPageAccess(

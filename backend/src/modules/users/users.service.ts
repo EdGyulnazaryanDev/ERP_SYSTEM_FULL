@@ -11,18 +11,24 @@ import * as bcrypt from 'bcrypt';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { PaginatedResponse } from './types';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 
 @Injectable()
 export class UsersService extends BaseTenantService<User> {
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    private readonly subscriptionsService: SubscriptionsService,
   ) {
     super(userRepository);
   }
 
   // Create user
   async create(createDto: CreateUserDto, tenantId: string): Promise<User> {
+    if (createDto.is_active !== false) {
+      await this.subscriptionsService.assertCanAddUser(tenantId);
+    }
+
     // Check if user with email already exists
     const existing = await this.userRepository.findOne({
       where: { email: createDto.email, tenantId },

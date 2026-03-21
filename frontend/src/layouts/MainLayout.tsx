@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
-import { Layout, Menu, Avatar, Dropdown, theme } from 'antd';
+import { Layout, Menu, Avatar, Dropdown, Spin, theme } from 'antd';
 import {
   DashboardOutlined,
   AppstoreOutlined,
@@ -26,8 +26,10 @@ import {
   MessageOutlined,
   AuditOutlined,
   CreditCardOutlined,
+  BarChartOutlined,
 } from '@ant-design/icons';
 import { useAuthStore } from '@/store/authStore';
+import { useAccessControl } from '@/hooks/useAccessControl';
 
 const { Header, Sider, Content } = Layout;
 
@@ -35,6 +37,7 @@ export default function MainLayout() {
   const [collapsed, setCollapsed] = useState(false);
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
+  const { canAccessPage, isLoading } = useAccessControl();
   const {
     token: { colorBgContainer, borderRadiusLG },
   } = theme.useToken();
@@ -42,26 +45,31 @@ export default function MainLayout() {
   const menuItems = [
     {
       key: '/',
+      pageKey: 'dashboard',
       icon: <DashboardOutlined />,
       label: 'Dashboard',
     },
     {
       key: '/products',
+      pageKey: 'products',
       icon: <ShoppingCartOutlined />,
       label: 'Products & Services',
     },
     {
       key: '/categories',
+      pageKey: 'categories',
       icon: <FolderOutlined />,
       label: 'Categories',
     },
     {
       key: '/inventory',
+      pageKey: 'inventory',
       icon: <InboxOutlined />,
       label: 'Inventory',
     },
     {
       key: 'transactions-menu',
+      pageKey: 'transactions',
       icon: <TransactionOutlined />,
       label: 'Transactions',
       children: [
@@ -77,26 +85,31 @@ export default function MainLayout() {
     },
     {
       key: '/accounting',
+      pageKey: 'accounting',
       icon: <DollarOutlined />,
       label: 'Accounting',
     },
     {
       key: '/payments',
+      pageKey: 'payments',
       icon: <CreditCardOutlined />,
       label: 'Payments',
     },
     {
       key: '/crm',
+      pageKey: 'crm',
       icon: <CustomerServiceOutlined />,
       label: 'CRM',
     },
     {
       key: '/hr',
+      pageKey: 'hr',
       icon: <TeamOutlined />,
       label: 'Human Resources',
     },
     {
       key: 'procurement-menu',
+      pageKey: 'procurement',
       icon: <ShoppingOutlined />,
       label: 'Procurement',
       children: [
@@ -108,11 +121,13 @@ export default function MainLayout() {
     },
     {
       key: '/warehouse',
+      pageKey: 'warehouse',
       icon: <HomeOutlined />,
       label: 'Warehouse',
     },
     {
       key: 'transportation-menu',
+      pageKey: 'transportation',
       icon: <CarOutlined />,
       label: 'Transportation',
       children: [
@@ -132,60 +147,89 @@ export default function MainLayout() {
     },
     {
       key: '/projects',
+      pageKey: 'projects',
       icon: <ProjectOutlined />,
       label: 'Projects',
     },
     {
       key: '/manufacturing',
+      pageKey: 'manufacturing',
       icon: <ToolOutlined />,
       label: 'Manufacturing',
     },
     {
-      key: '/assets',
+      key: '/equipment',
+      pageKey: 'equipment',
       icon: <FileProtectOutlined />,
       label: 'Assets',
     },
     {
       key: '/services',
+      pageKey: 'services',
       icon: <CustomerServiceOutlined />,
       label: 'Services',
     },
     {
       key: '/communication',
+      pageKey: 'communication',
       icon: <MessageOutlined />,
       label: 'Communication',
     },
     {
       key: '/compliance',
+      pageKey: 'compliance',
       icon: <AuditOutlined />,
       label: 'Compliance',
     },
     {
+      key: '/bi',
+      pageKey: 'bi',
+      icon: <BarChartOutlined />,
+      label: 'BI & Reports',
+    },
+    {
       key: '/users',
+      pageKey: 'users',
       icon: <UserOutlined />,
       label: 'Users',
     },
     {
       key: '/suppliers',
+      pageKey: 'suppliers',
       icon: <UserOutlined />,
       label: 'Suppliers',
     },
     {
       key: '/modules',
+      pageKey: 'modules',
       icon: <AppstoreOutlined />,
       label: 'Modules',
     },
     {
       key: '/rbac',
+      pageKey: 'rbac',
       icon: <SafetyOutlined />,
       label: 'RBAC',
     },
     {
       key: '/settings',
+      pageKey: 'settings',
       icon: <SettingOutlined />,
       label: 'Settings',
     },
   ];
+
+  const visibleMenuItems = menuItems.filter((item) =>
+    item.pageKey ? canAccessPage(item.pageKey) : true,
+  );
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Spin size="large" />
+      </div>
+    );
+  }
 
   const userMenuItems = [
     {
@@ -217,7 +261,7 @@ export default function MainLayout() {
           theme="dark"
           mode="inline"
           defaultSelectedKeys={['/']}
-          items={menuItems}
+          items={visibleMenuItems}
           onClick={({ key }) => navigate(key)}
         />
       </Sider>

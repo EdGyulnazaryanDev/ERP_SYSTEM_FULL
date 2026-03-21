@@ -8,6 +8,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { ColumnsType } from 'antd/es/table';
 import apiClient from '@/api/client';
 import type { Warehouse } from './types';
+import { useAccessControl } from '@/hooks/useAccessControl';
 
 type FormValues = Omit<Warehouse, 'id' | 'created_at' | 'updated_at'>;
 
@@ -37,10 +38,14 @@ function StatusPill({ active }: { active: boolean }) {
 
 export default function WarehousesTab() {
   const queryClient = useQueryClient();
+  const { canPerform } = useAccessControl();
   const [form] = Form.useForm<FormValues>();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editing, setEditing] = useState<Warehouse | null>(null);
   const [search, setSearch] = useState('');
+  const canCreateWarehouses = canPerform('warehouse', 'create');
+  const canEditWarehouses = canPerform('warehouse', 'edit');
+  const canDeleteWarehouses = canPerform('warehouse', 'delete');
 
   const { data = [], isLoading } = useQuery({ queryKey: ['warehouses'], queryFn: fetchWarehouses });
 
@@ -142,19 +147,23 @@ export default function WarehousesTab() {
       title: '', key: 'actions', width: 80, align: 'center' as const,
       render: (_: unknown, record: Warehouse) => (
         <Space size={4}>
-          <Tooltip title="Edit">
-            <Button type="text" size="small" icon={<EditOutlined />} onClick={() => openEdit(record)} />
-          </Tooltip>
-          <Popconfirm
-            title="Delete warehouse?"
-            description="This will fail if the warehouse has bins."
-            onConfirm={() => deleteMutation.mutate(record.id)}
-            okText="Delete" okButtonProps={{ danger: true }}
-          >
-            <Tooltip title="Delete">
-              <Button type="text" size="small" danger icon={<DeleteOutlined />} />
+          {canEditWarehouses && (
+            <Tooltip title="Edit">
+              <Button type="text" size="small" icon={<EditOutlined />} onClick={() => openEdit(record)} />
             </Tooltip>
-          </Popconfirm>
+          )}
+          {canDeleteWarehouses && (
+            <Popconfirm
+              title="Delete warehouse?"
+              description="This will fail if the warehouse has bins."
+              onConfirm={() => deleteMutation.mutate(record.id)}
+              okText="Delete" okButtonProps={{ danger: true }}
+            >
+              <Tooltip title="Delete">
+                <Button type="text" size="small" danger icon={<DeleteOutlined />} />
+              </Tooltip>
+            </Popconfirm>
+          )}
         </Space>
       ),
     },
@@ -174,10 +183,12 @@ export default function WarehousesTab() {
             style={{ width: 260 }} size="small" allowClear
           />
         </Space>
-        <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 8 }}
-          onClick={() => { setEditing(null); setIsModalOpen(true); form.resetFields(); }}>
-          Add Warehouse
-        </Button>
+        {canCreateWarehouses && (
+          <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 8 }}
+            onClick={() => { setEditing(null); setIsModalOpen(true); form.resetFields(); }}>
+            Add Warehouse
+          </Button>
+        )}
       </div>
 
       <Table
@@ -186,9 +197,10 @@ export default function WarehousesTab() {
         rowClassName={(r: Warehouse) => r.is_active === false ? 'row-inactive' : ''}
       />
 
-      <Modal title={editing ? '✏️ Edit Warehouse' : '🏭 Add Warehouse'}
-        open={isModalOpen} forceRender onCancel={closeModal} footer={null}>
-        <Form form={form} layout="vertical" onFinish={handleSubmit}>
+      {(canCreateWarehouses || canEditWarehouses) && (
+        <Modal title={editing ? '✏️ Edit Warehouse' : '🏭 Add Warehouse'}
+          open={isModalOpen} forceRender onCancel={closeModal} footer={null}>
+          <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item name="warehouse_code" label="Warehouse Code" rules={[{ required: true }]}>
             <Input placeholder="e.g. WH-01" />
           </Form.Item>
@@ -216,8 +228,9 @@ export default function WarehousesTab() {
               </Button>
             </Space>
           </Form.Item>
-        </Form>
-      </Modal>
+          </Form>
+        </Modal>
+      )}
 
       <style>{`
         .row-inactive td { background: #fafafa !important; color: #bfbfbf; }

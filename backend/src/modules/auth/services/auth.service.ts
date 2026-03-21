@@ -12,6 +12,9 @@ import { RegisterDto } from '../dto/register.dto';
 import { ConfigService } from '@nestjs/config';
 import { JwtPayload } from '../interfaces/jwt-payload.interface';
 import { DefaultRbacSeeder } from '../../../database/seeders/default-rbac.seeder';
+import { ComplianceAuditService } from '../../compliance-audit/compliance-audit.service';
+import { AuditAction, AuditSeverity } from '../../compliance-audit/entities/audit-log.entity';
+import { SubscriptionsService } from '../../subscriptions/subscriptions.service';
 
 @Injectable()
 export class AuthService {
@@ -31,6 +34,8 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly rbacSeeder: DefaultRbacSeeder,
+    private readonly complianceAuditService: ComplianceAuditService,
+    private readonly subscriptionsService: SubscriptionsService,
   ) {}
 
   async login(dto: LoginDto) {
@@ -39,7 +44,36 @@ export class AuthService {
     if (!user) throw new UnauthorizedException();
 
     const isMatch = await bcrypt.compare(dto.password, user.password);
-    if (!isMatch) throw new UnauthorizedException();
+    if (!isMatch) {
+      await this.complianceAuditService
+        .createAuditLog(
+          {
+            action: AuditAction.LOGIN,
+            entity_type: 'auth',
+            entity_id: user.id,
+            description: 'Failed login attempt (invalid password)',
+            severity: AuditSeverity.MEDIUM,
+          },
+          user.id,
+          user.tenantId,
+        )
+        .catch(() => undefined);
+      throw new UnauthorizedException();
+    }
+
+    await this.complianceAuditService
+      .createAuditLog(
+        {
+          action: AuditAction.LOGIN,
+          entity_type: 'auth',
+          entity_id: user.id,
+          description: 'Successful login',
+          severity: AuditSeverity.LOW,
+        },
+        user.id,
+        user.tenantId,
+      )
+      .catch(() => undefined);
 
     const tokens = await this.generateTokens(
       user.id,
@@ -58,6 +92,8 @@ export class AuthService {
     const tenant: Tenant = await this.tenantRepo.save({
       name: dto.companyName,
     });
+
+    await this.subscriptionsService.createDefaultSubscriptionForTenant(tenant.id);
 
     // Seed default RBAC for new tenant
     await this.rbacSeeder.seed(tenant.id);
@@ -90,10 +126,24 @@ export class AuthService {
     return tokens;
   }
 
-  async logout(userId: string) {
+  async logout(userId: string, tenantId: string) {
     await this.userRepo.update(userId, {
       refreshToken: null,
     });
+
+    await this.complianceAuditService
+      .createAuditLog(
+        {
+          action: AuditAction.LOGOUT,
+          entity_type: 'auth',
+          entity_id: userId,
+          description: 'User logged out',
+          severity: AuditSeverity.LOW,
+        },
+        userId,
+        tenantId,
+      )
+      .catch(() => undefined);
 
     return { message: 'Logged out successfully' };
   }

@@ -4,16 +4,17 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Table, Button, Card, Space, Tag, Input, Select, Row, Col,
   message, Popconfirm, Alert, Badge, Modal, InputNumber, Tabs, Tooltip,
-  Progress,
+  Progress, Segmented,
 } from 'antd';
 import {
   PlusOutlined, EditOutlined, DeleteOutlined, WarningOutlined,
   InboxOutlined, ReloadOutlined, ShoppingCartOutlined, CheckCircleOutlined,
   StopOutlined, DollarOutlined, DatabaseOutlined,
-  EnvironmentOutlined, ClockCircleOutlined,
+  EnvironmentOutlined, ClockCircleOutlined, DownloadOutlined,
 } from '@ant-design/icons';
 import { inventoryApi, type Inventory } from '@/api/inventory';
 import apiClient from '@/api/client';
+import { useAccessControl } from '@/hooks/useAccessControl';
 
 const { Search } = Input;
 
@@ -84,14 +85,21 @@ function StockPill({ qty, reorderLevel }: { qty: number; reorderLevel: number })
 export default function InventoryPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { canPerform } = useAccessControl();
   const [searchText, setSearchText] = useState('');
   const [locationFilter, setLocationFilter] = useState<string>();
   const [activeStatFilter, setActiveStatFilter] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('inventory');
+  const [inventoryLens, setInventoryLens] = useState<'all' | 'risk' | 'reserved' | 'value'>('all');
+  const [tableDensity, setTableDensity] = useState<'small' | 'middle'>('small');
   const [reorderModal, setReorderModal] = useState<{
     id: string; product_name: string; reorder_quantity: number; unit_cost: number; supplier_name?: string;
   } | null>(null);
   const [reorderQty, setReorderQty] = useState<number>(50);
+  const canCreateInventory = canPerform('inventory', 'create');
+  const canEditInventory = canPerform('inventory', 'edit');
+  const canDeleteInventory = canPerform('inventory', 'delete');
+  const canExportInventory = canPerform('inventory', 'export');
 
   const toNum = (v: unknown) => { const n = Number(v); return isNaN(n) ? 0 : n; };
   const fmt = (v: unknown) => `$${toNum(v).toFixed(2)}`;
@@ -160,6 +168,13 @@ export default function InventoryPage() {
     let list = safeItems;
     if (activeStatFilter === 'outOfStock') list = list.filter(i => toNum(i.quantity) === 0);
     else if (activeStatFilter === 'lowStock') list = list.filter(i => toNum(i.quantity) > 0 && toNum(i.quantity) <= toNum(i.reorder_level));
+    if (inventoryLens === 'risk') {
+      list = list.filter((item) => toNum(item.quantity) === 0 || toNum(item.quantity) <= toNum(item.reorder_level));
+    } else if (inventoryLens === 'reserved') {
+      list = list.filter((item) => toNum(item.reserved_quantity) > 0);
+    } else if (inventoryLens === 'value') {
+      list = [...list].sort((a, b) => (toNum(b.quantity) * toNum(b.unit_cost)) - (toNum(a.quantity) * toNum(a.unit_cost)));
+    }
     return list.filter((item: Inventory) => {
       const matchSearch =
         (item.product_name || '').toLowerCase().includes(searchText.toLowerCase()) ||
@@ -167,7 +182,63 @@ export default function InventoryPage() {
       const matchLoc = !locationFilter || item.location === locationFilter;
       return matchSearch && matchLoc;
     });
-  }, [safeItems, searchText, locationFilter, activeStatFilter]);
+  }, [safeItems, searchText, locationFilter, activeStatFilter, inventoryLens]);
+
+  const inventoryInsights = useMemo(() => {
+    const totalReserved = safeItems.reduce((sum, item) => sum + toNum(item.reserved_quantity), 0);
+    const inventoryValue = safeItems.reduce((sum, item) => sum + (toNum(item.quantity) * toNum(item.unit_cost)), 0);
+    const availableValue = safeItems.reduce((sum, item) => sum + (toNum(item.available_quantity) * toNum(item.unit_cost)), 0);
+    const highValueItem = [...safeItems]
+      .sort((a, b) => (toNum(b.quantity) * toNum(b.unit_cost)) - (toNum(a.quantity) * toNum(a.unit_cost)))[0];
+    return {
+      totalReserved,
+      blockedValue: Math.max(inventoryValue - availableValue, 0),
+      availableValue,
+      highValueItem,
+    };
+  }, [safeItems]);
+
+  const resetWorkspace = () => {
+    setSearchText('');
+    setLocationFilter(undefined);
+    setActiveStatFilter(null);
+    setInventoryLens('all');
+    setActiveTab('inventory');
+  };
+
+  const exportInventoryCsv = () => {
+    const rows = filteredItems.map((item) => ({
+      sku: item.sku ?? '',
+      product_name: item.product_name ?? '',
+      location: item.location ?? '',
+      quantity: toNum(item.quantity),
+      available_quantity: toNum(item.available_quantity),
+      reserved_quantity: toNum(item.reserved_quantity),
+      reorder_level: toNum(item.reorder_level),
+      unit_cost: toNum(item.unit_cost).toFixed(2),
+      unit_price: toNum(item.unit_price).toFixed(2),
+      total_value: (toNum(item.quantity) * toNum(item.unit_cost)).toFixed(2),
+      supplier_name: item.supplier_name ?? '',
+    }));
+
+    if (!rows.length) {
+      message.warning('No inventory rows available to export');
+      return;
+    }
+
+    const header = Object.keys(rows[0]);
+    const csv = [
+      header.join(','),
+      ...rows.map((row) => header.map((key) => JSON.stringify(String(row[key as keyof typeof row] ?? ''))).join(',')),
+    ].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `inventory-workspace-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    window.URL.revokeObjectURL(url);
+  };
 
   const toggleStatFilter = (key: string) => {
     if (activeStatFilter === key) setActiveStatFilter(null);
@@ -290,15 +361,19 @@ export default function InventoryPage() {
       align: 'center' as const,
       render: (_: unknown, record: Inventory) => (
         <Space size={4}>
-          <Tooltip title="Edit">
-            <Button
-              type="link" size="small" icon={<EditOutlined />}
-              onClick={() => navigate(`/inventory/${record.id}/edit`)}
-            />
-          </Tooltip>
-          <Popconfirm title="Delete this item?" onConfirm={() => handleDelete(record.id)} okText="Yes" cancelText="No">
-            <Button type="link" size="small" danger icon={<DeleteOutlined />} />
-          </Popconfirm>
+          {canEditInventory && (
+            <Tooltip title="Edit">
+              <Button
+                type="link" size="small" icon={<EditOutlined />}
+                onClick={() => navigate(`/inventory/${record.id}/edit`)}
+              />
+            </Tooltip>
+          )}
+          {canDeleteInventory && (
+            <Popconfirm title="Delete this item?" onConfirm={() => handleDelete(record.id)} okText="Yes" cancelText="No">
+              <Button type="link" size="small" danger icon={<DeleteOutlined />} />
+            </Popconfirm>
+          )}
         </Space>
       ),
     },
@@ -381,7 +456,7 @@ export default function InventoryPage() {
           <p style={{ color: '#666', marginBottom: 24 }}>{(error as Error)?.message}</p>
           <Space>
             <Button type="primary" icon={<ReloadOutlined />} onClick={() => queryClient.invalidateQueries({ queryKey: ['inventory'] })}>Retry</Button>
-            <Button onClick={() => navigate('/inventory/create')}>Add First Item</Button>
+            {canCreateInventory && <Button onClick={() => navigate('/inventory/create')}>Add First Item</Button>}
           </Space>
         </Card>
       </div>
@@ -417,13 +492,15 @@ export default function InventoryPage() {
           >
             Refresh
           </Button>
-          <Button
-            type="primary" icon={<PlusOutlined />} size="large"
-            style={{ borderRadius: 8 }}
-            onClick={() => navigate('/inventory/create')}
-          >
-            Add Item
-          </Button>
+          {canCreateInventory && (
+            <Button
+              type="primary" icon={<PlusOutlined />} size="large"
+              style={{ borderRadius: 8 }}
+              onClick={() => navigate('/inventory/create')}
+            >
+              Add Item
+            </Button>
+          )}
         </Space>
       </div>
 
@@ -468,6 +545,92 @@ export default function InventoryPage() {
         </Col>
       </Row>
 
+      <Row gutter={12} style={{ marginBottom: 20 }}>
+        <Col xs={24} lg={16}>
+          <Card
+            style={{ borderRadius: 12, border: '1px solid #d9f7be', background: 'linear-gradient(135deg, #fbfff7 0%, #f4ffeb 100%)' }}
+            styles={{ body: { padding: '16px 18px' } }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: '#1a1a2e' }}>Inventory Operations Desk</div>
+                <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>
+                  Switch between stock risk, reserved inventory, and highest-value positions instantly.
+                </div>
+              </div>
+              <Space wrap>
+                <Segmented
+                  value={inventoryLens}
+                  onChange={(value) => setInventoryLens(value as typeof inventoryLens)}
+                  options={[
+                    { label: 'All', value: 'all' },
+                    { label: 'Risk', value: 'risk' },
+                    { label: 'Reserved', value: 'reserved' },
+                    { label: 'Highest Value', value: 'value' },
+                  ]}
+                />
+                <Segmented
+                  value={tableDensity}
+                  onChange={(value) => setTableDensity(value as typeof tableDensity)}
+                  options={[
+                    { label: 'Compact', value: 'small' },
+                    { label: 'Comfort', value: 'middle' },
+                  ]}
+                />
+                <Button onClick={resetWorkspace}>Reset</Button>
+                {canExportInventory && (
+                  <Button icon={<DownloadOutlined />} onClick={exportInventoryCsv}>
+                    Export CSV
+                  </Button>
+                )}
+              </Space>
+            </div>
+          </Card>
+        </Col>
+        <Col xs={24} lg={8}>
+          <Card style={{ borderRadius: 12 }} styles={{ body: { padding: '16px 18px' } }}>
+            <div style={{ display: 'grid', gap: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                <span style={{ color: '#6b7280', fontSize: 12 }}>Reserved units</span>
+                <strong>{inventoryInsights.totalReserved}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                <span style={{ color: '#6b7280', fontSize: 12 }}>Blocked value</span>
+                <strong style={{ color: inventoryInsights.blockedValue > 0 ? '#fa8c16' : '#52c41a' }}>
+                  {fmt(inventoryInsights.blockedValue)}
+                </strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                <span style={{ color: '#6b7280', fontSize: 12 }}>Available value</span>
+                <strong>{fmt(inventoryInsights.availableValue)}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                <span style={{ color: '#6b7280', fontSize: 12 }}>Largest position</span>
+                <strong>
+                  {inventoryInsights.highValueItem
+                    ? `${inventoryInsights.highValueItem.product_name} (${fmt(toNum(inventoryInsights.highValueItem.quantity) * toNum(inventoryInsights.highValueItem.unit_cost))})`
+                    : '—'}
+                </strong>
+              </div>
+            </div>
+          </Card>
+        </Col>
+      </Row>
+
+      {(toNum(summary?.outOfStockItems) > 0 || toNum(summary?.lowStockItems) > 0 || inventoryInsights.totalReserved > 0) && (
+        <Alert
+          style={{ marginBottom: 16, borderRadius: 10 }}
+          type={toNum(summary?.outOfStockItems) > 0 ? 'warning' : 'info'}
+          showIcon
+          message="Inventory watchlist"
+          description={[
+            toNum(summary?.outOfStockItems) > 0 ? `${toNum(summary?.outOfStockItems)} items are fully out of stock.` : null,
+            toNum(summary?.lowStockItems) > 0 ? `${toNum(summary?.lowStockItems)} items are below reorder level.` : null,
+            inventoryInsights.totalReserved > 0 ? `${inventoryInsights.totalReserved} units are currently reserved.` : null,
+          ].filter(Boolean).join(' ')}
+        />
+      )}
+
       {/* Main card with tabs */}
       <Card
         style={{ borderRadius: 12, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}
@@ -488,12 +651,14 @@ export default function InventoryPage() {
                   queryClient.invalidateQueries({ queryKey: ['inventory-summary'] });
                 }}
               />
-              <Button
-                type="primary" size="small" icon={<PlusOutlined />}
-                onClick={() => navigate('/inventory/create')}
-              >
-                Add Item
-              </Button>
+              {canCreateInventory && (
+                <Button
+                  type="primary" size="small" icon={<PlusOutlined />}
+                  onClick={() => navigate('/inventory/create')}
+                >
+                  Add Item
+                </Button>
+              )}
             </Space>
           }
           items={[
@@ -557,7 +722,7 @@ export default function InventoryPage() {
                       message="No inventory items yet"
                       type="info" showIcon
                       style={{ margin: '16px 0', borderRadius: 8 }}
-                      action={<Button type="primary" size="small" onClick={() => navigate('/inventory/create')}>Add First Item</Button>}
+                      action={canCreateInventory ? <Button type="primary" size="small" onClick={() => navigate('/inventory/create')}>Add First Item</Button> : undefined}
                     />
                   )}
 
@@ -566,7 +731,7 @@ export default function InventoryPage() {
                     dataSource={filteredItems}
                     rowKey="id"
                     loading={isLoading}
-                    size="small"
+                    size={tableDensity}
                     scroll={{ x: 1300 }}
                     pagination={{
                       pageSize: 15,
@@ -615,7 +780,7 @@ export default function InventoryPage() {
                     columns={reorderColumns}
                     dataSource={reorderAlerts as { id: string; product_name: string; reorder_quantity: number; unit_cost: number; supplier_name?: string }[]}
                     rowKey="id"
-                    size="small"
+                    size={tableDensity}
                     pagination={{ pageSize: 20, showTotal: (t) => `${t} items need attention` }}
                     scroll={{ x: 1000 }}
                     rowClassName={() => 'row-low-stock'}

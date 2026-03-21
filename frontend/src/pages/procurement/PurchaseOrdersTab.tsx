@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { procurementApi } from '@/api/procurement';
 import apiClient from '@/api/client';
 import dayjs from 'dayjs';
+import { useAccessControl } from '@/hooks/useAccessControl';
 
 const STATUS_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
   draft:            { color: '#8c8c8c', bg: '#fafafa',   label: 'Draft' },
@@ -34,11 +35,14 @@ function StatusPill({ status }: { status: string }) {
 
 export default function PurchaseOrdersTab() {
   const queryClient = useQueryClient();
+  const { canPerform } = useAccessControl();
   const [form] = Form.useForm();
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [editingRecord, setEditingRecord] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
+  const canCreatePurchaseOrders = canPerform('procurement', 'create');
+  const canEditPurchaseOrders = canPerform('procurement', 'edit');
 
   const { data, isLoading } = useQuery({
     queryKey: ['purchase-orders'],
@@ -99,11 +103,13 @@ export default function PurchaseOrdersTab() {
         const isPending = ['pending_approval', 'pending', 'draft'].includes((record.status || '').toLowerCase());
         return (
           <Space size={4}>
-            <Button type="link" size="small" icon={<EditOutlined />} onClick={() => {
-              setEditingRecord(record); setIsModalVisible(true);
-              setTimeout(() => form.setFieldsValue({ ...record, order_date: record.order_date ? dayjs(record.order_date) : null }), 0);
-            }} />
-            {isPending && (
+            {canEditPurchaseOrders && (
+              <Button type="link" size="small" icon={<EditOutlined />} onClick={() => {
+                setEditingRecord(record); setIsModalVisible(true);
+                setTimeout(() => form.setFieldsValue({ ...record, order_date: record.order_date ? dayjs(record.order_date) : null }), 0);
+              }} />
+            )}
+            {canEditPurchaseOrders && isPending && (
               <Popconfirm
                 title="Approve this Purchase Order?"
                 description="This will mark the PO as approved."
@@ -140,10 +146,12 @@ export default function PurchaseOrdersTab() {
           <Tooltip title="Refresh">
             <Button icon={<ReloadOutlined />} size="small" onClick={invalidate} />
           </Tooltip>
-          <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 8 }}
-            onClick={() => { setEditingRecord(null); setIsModalVisible(true); setTimeout(() => form.resetFields(), 0); }}>
-            Create PO
-          </Button>
+          {canCreatePurchaseOrders && (
+            <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 8 }}
+              onClick={() => { setEditingRecord(null); setIsModalVisible(true); setTimeout(() => form.resetFields(), 0); }}>
+              Create PO
+            </Button>
+          )}
         </Space>
       </div>
 
@@ -162,14 +170,15 @@ export default function PurchaseOrdersTab() {
         }}
       />
 
-      <Modal
-        title={editingRecord ? 'Edit Purchase Order' : 'Create Purchase Order'}
-        open={isModalVisible}
-        forceRender
-        onCancel={() => { setIsModalVisible(false); setEditingRecord(null); setTimeout(() => form.resetFields(), 0); }}
-        footer={null}
-      >
-        <Form form={form} layout="vertical" onFinish={handleSubmit}>
+      {(canCreatePurchaseOrders || canEditPurchaseOrders) && (
+        <Modal
+          title={editingRecord ? 'Edit Purchase Order' : 'Create Purchase Order'}
+          open={isModalVisible}
+          forceRender
+          onCancel={() => { setIsModalVisible(false); setEditingRecord(null); setTimeout(() => form.resetFields(), 0); }}
+          footer={null}
+        >
+          <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item name="vendor_id" label="Vendor">
             <Select placeholder="Select Vendor" allowClear showSearch optionFilterProp="children">
               {vendorList.map((v: any) => <Select.Option key={v.id} value={v.id}>{v.name}</Select.Option>)}
@@ -200,8 +209,9 @@ export default function PurchaseOrdersTab() {
               </Button>
             </Space>
           </Form.Item>
-        </Form>
-      </Modal>
+          </Form>
+        </Modal>
+      )}
 
       <style>{`
         .row-approved td { background: #f6ffed !important; }

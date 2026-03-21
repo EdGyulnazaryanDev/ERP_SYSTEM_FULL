@@ -17,9 +17,10 @@ import {
   FinancialEventType,
   StockMovedEvent,
   InvoiceCreatedEvent,
-  BillCreatedEvent,
 } from '../accounting/events/financial.events';
 import type { CreateTransactionDto } from './dto/create-transaction.dto';
+import { AccountingService } from '../accounting/accounting.service';
+import { JournalEntryStatus } from '../accounting/entities/journal-entry.entity';
 
 @Injectable()
 export class TransactionsService {
@@ -31,6 +32,7 @@ export class TransactionsService {
     @InjectRepository(InventoryEntity)
     private inventoryRepo: Repository<InventoryEntity>,
     private eventEmitter: EventEmitter2,
+    private accountingService: AccountingService,
   ) {}
 
   async create(
@@ -286,16 +288,6 @@ export class TransactionsService {
 
     // ── PURCHASE completed: emit BILL_CREATED + STOCK_MOVED IN per item ──
     if (transaction.type === TransactionType.PURCHASE) {
-      const billEvent = new BillCreatedEvent();
-      billEvent.tenantId = tenantId;
-      billEvent.billId = transaction.id;
-      billEvent.billNumber = transaction.transaction_number;
-      billEvent.supplierId = transaction.supplier_id;
-      billEvent.amount = Number(transaction.total_amount);
-      billEvent.date = dateStr;
-      billEvent.description = `Purchase transaction ${transaction.transaction_number}`;
-      this.eventEmitter.emit(FinancialEventType.BILL_CREATED, billEvent);
-
       for (const item of transaction.items) {
         const stockEvent = new StockMovedEvent();
         stockEvent.tenantId = tenantId;
@@ -319,13 +311,15 @@ export class TransactionsService {
     if (transaction.status === TransactionStatus.COMPLETED) {
       // Reverse inventory changes
       for (const item of transaction.items) {
-        await this.updateInventory(
+        await this.reverseInventory(
           tenantId,
           item.product_id,
-          -item.quantity,
+          item.quantity,
           transaction.type,
         );
       }
+
+      await this.reverseTransactionJournalEntries(transaction, tenantId);
     }
 
     transaction.status = TransactionStatus.CANCELLED;
@@ -511,6 +505,73 @@ export class TransactionsService {
     }
 
     await this.inventoryRepo.save(inventory);
+  }
+
+  private async reverseInventory(
+    tenantId: string,
+    productId: string,
+    quantity: number,
+    transactionType: TransactionType,
+  ): Promise<void> {
+    const inventory = await this.findInventoryByProductRef(tenantId, productId);
+
+    if (!inventory) {
+      throw new NotFoundException(
+        `Inventory not found for product ${productId}`,
+      );
+    }
+
+    let adjustment = 0;
+    if (transactionType === TransactionType.SALE) {
+      adjustment = quantity;
+    } else if (transactionType === TransactionType.PURCHASE) {
+      adjustment = -quantity;
+    } else if (transactionType === TransactionType.RETURN) {
+      adjustment = -quantity;
+    } else if (transactionType === TransactionType.ADJUSTMENT) {
+      adjustment = -quantity;
+    }
+
+    inventory.quantity += adjustment;
+    inventory.available_quantity =
+      inventory.quantity - inventory.reserved_quantity;
+
+    if (inventory.available_quantity < 0) {
+      throw new BadRequestException(
+        `Cannot cancel transaction; insufficient stock remains for ${inventory.product_name}`,
+      );
+    }
+
+    await this.inventoryRepo.save(inventory);
+  }
+
+  private async reverseTransactionJournalEntries(
+    transaction: TransactionEntity,
+    tenantId: string,
+  ): Promise<void> {
+    const entries = await this.accountingService.findJournalEntriesByReference(
+      transaction.transaction_number,
+      tenantId,
+    );
+
+    for (const entry of entries) {
+      if (
+        entry.status !== JournalEntryStatus.POSTED ||
+        entry.reversed_entry_id
+      ) {
+        continue;
+      }
+
+      await this.accountingService.reverseJournalEntry(
+        entry.id,
+        {
+          reversal_date: new Date().toISOString().split('T')[0],
+          reason: `Transaction ${transaction.transaction_number} cancelled`,
+          reversed_by: '00000000-0000-0000-0000-000000000000',
+        },
+        tenantId,
+      );
+    }
   }
 
   private async generateTransactionNumber(

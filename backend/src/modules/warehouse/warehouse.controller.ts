@@ -14,8 +14,12 @@ import { WarehouseService } from './warehouse.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentTenant } from '../../common/decorators/current-tenant.decorator';
 import { MovementType } from './entities/stock-movement.entity';
+import { RequireFeature } from '../subscriptions/decorators/require-feature.decorator';
+import { RequireFeatureGuard } from '../subscriptions/guards/require-feature.guard';
+import { PlanFeature } from '../subscriptions/subscription.constants';
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RequireFeatureGuard)
+@RequireFeature(PlanFeature.WAREHOUSE)
 @Controller('warehouse')
 export class WarehouseController {
   constructor(private readonly warehouseService: WarehouseService) {}

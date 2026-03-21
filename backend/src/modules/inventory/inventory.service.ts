@@ -160,13 +160,19 @@ export class InventoryService {
     const saved = await this.inventoryRepo.save(item);
 
     // Emit financial event for accounting
-    const totalCost = Math.abs(quantity) * Number(item.unit_cost);
+    const adjustmentQty =
+      movementType === 'ADJUSTMENT'
+        ? Math.abs(item.quantity - prevQty)
+        : Math.abs(quantity);
+    const effectiveMovementType =
+      movementType === 'ADJUSTMENT' && item.quantity < prevQty ? 'OUT' : movementType;
+    const totalCost = adjustmentQty * Number(item.unit_cost);
     const event = new StockMovedEvent();
     event.tenantId = tenantId;
     event.productId = item.product_id || item.id;
     event.productName = item.product_name;
-    event.quantity = Math.abs(quantity);
-    event.movementType = movementType;
+    event.quantity = adjustmentQty;
+    event.movementType = effectiveMovementType;
     event.unitCost = Number(item.unit_cost);
     event.totalCost = totalCost;
     event.reference = reference;

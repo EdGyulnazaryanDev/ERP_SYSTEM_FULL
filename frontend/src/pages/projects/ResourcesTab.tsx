@@ -4,6 +4,7 @@ import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, UserOutline
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '@/api/client';
 import dayjs from 'dayjs';
+import { useAccessControl } from '@/hooks/useAccessControl';
 
 const RESOURCE_ROLES = [
   { value: 'project_manager', label: 'Project Manager' },
@@ -29,10 +30,14 @@ const ROLE_COLORS: Record<string, string> = {
 
 export default function ResourcesTab() {
   const queryClient = useQueryClient();
+  const { canPerform } = useAccessControl();
   const [form] = Form.useForm();
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [editingRecord, setEditingRecord] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const canCreateResources = canPerform('projects', 'create');
+  const canEditResources = canPerform('projects', 'edit');
+  const canDeleteResources = canPerform('projects', 'delete');
 
   const { data, isLoading } = useQuery({ queryKey: ['project-resources'], queryFn: () => apiClient.get('/project-management/resources').then(res => res.data) });
   const { data: projects } = useQuery({ queryKey: ['projects'], queryFn: () => apiClient.get('/project-management/projects').then(res => res.data) });
@@ -102,11 +107,13 @@ export default function ResourcesTab() {
       title: 'Actions', key: 'actions', width: 90,
       render: (_: any, record: any) => (
         <Space size={4}>
-          <Button type="link" size="small" icon={<EditOutlined />} onClick={() => {
-            setEditingRecord(record); setIsModalVisible(true);
-            setTimeout(() => form.setFieldsValue({ project_id: record.project_id, employee_id: record.employee_id, role: record.role, allocation_percentage: record.allocation_percentage, allocation_start_date: record.allocation_start_date ? dayjs(record.allocation_start_date) : null, allocation_end_date: record.allocation_end_date ? dayjs(record.allocation_end_date) : null, hourly_rate: record.hourly_rate }), 0);
-          }} />
-          <Button type="link" size="small" danger icon={<DeleteOutlined />} onClick={() => deleteMutation.mutate(record.id)} />
+          {canEditResources && (
+            <Button type="link" size="small" icon={<EditOutlined />} onClick={() => {
+              setEditingRecord(record); setIsModalVisible(true);
+              setTimeout(() => form.setFieldsValue({ project_id: record.project_id, employee_id: record.employee_id, role: record.role, allocation_percentage: record.allocation_percentage, allocation_start_date: record.allocation_start_date ? dayjs(record.allocation_start_date) : null, allocation_end_date: record.allocation_end_date ? dayjs(record.allocation_end_date) : null, hourly_rate: record.hourly_rate }), 0);
+            }} />
+          )}
+          {canDeleteResources && <Button type="link" size="small" danger icon={<DeleteOutlined />} onClick={() => deleteMutation.mutate(record.id)} />}
         </Space>
       ),
     },
@@ -119,16 +126,17 @@ export default function ResourcesTab() {
           <Input placeholder="Search resources..." prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />} value={searchQuery} onChange={e => setSearchQuery(e.target.value)} allowClear style={{ width: 220, borderRadius: 8 }} />
           <span style={{ color: '#8c8c8c', fontSize: 13 }}>{filtered.length} resources</span>
         </Space>
-        <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 8 }} onClick={() => { setEditingRecord(null); setIsModalVisible(true); form.resetFields(); }}>Assign Resource</Button>
+        {canCreateResources && <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 8 }} onClick={() => { setEditingRecord(null); setIsModalVisible(true); form.resetFields(); }}>Assign Resource</Button>}
       </div>
 
       <Table columns={columns} dataSource={filtered} loading={isLoading} rowKey="id" size="small" pagination={{ pageSize: 10, showTotal: (t, r) => `${r[0]}-${r[1]} of ${t}` }} />
 
-      <Modal title={editingRecord ? 'Edit Resource' : 'Assign Resource'} open={isModalVisible}
-        onCancel={() => { setIsModalVisible(false); setEditingRecord(null); form.resetFields(); }}
-        footer={null}
-      >
-        <Form form={form} layout="vertical" onFinish={handleSubmit}>
+      {(canCreateResources || canEditResources) && (
+        <Modal title={editingRecord ? 'Edit Resource' : 'Assign Resource'} open={isModalVisible}
+          onCancel={() => { setIsModalVisible(false); setEditingRecord(null); form.resetFields(); }}
+          footer={null}
+        >
+          <Form form={form} layout="vertical" onFinish={handleSubmit}>
           {!editingRecord && (
             <Form.Item name="project_id" label="Project" rules={[{ required: true }]}>
               <Select placeholder="Select project" showSearch optionFilterProp="children">
@@ -160,8 +168,9 @@ export default function ResourcesTab() {
               <Button type="primary" htmlType="submit" loading={createMutation.isPending || updateMutation.isPending}>{editingRecord ? 'Update' : 'Assign'}</Button>
             </Space>
           </Form.Item>
-        </Form>
-      </Modal>
+          </Form>
+        </Modal>
+      )}
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined } from '@ant
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { crmApi } from '@/api/crm';
 import dayjs from 'dayjs';
+import { useAccessControl } from '@/hooks/useAccessControl';
 
 const STAGE_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
   prospecting:  { color: '#8c8c8c', bg: '#fafafa',   label: 'Prospecting' },
@@ -31,11 +32,15 @@ function StagePill({ stage }: { stage: string }) {
 
 export default function OpportunitiesTab() {
   const queryClient = useQueryClient();
+  const { canPerform } = useAccessControl();
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [editingOpportunity, setEditingOpportunity] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [stageFilter, setStageFilter] = useState<string>('');
   const [form] = Form.useForm();
+  const canCreateOpportunities = canPerform('crm', 'create');
+  const canEditOpportunities = canPerform('crm', 'edit');
+  const canDeleteOpportunities = canPerform('crm', 'delete');
 
   const { data: opportunitiesRes, isLoading } = useQuery({
     queryKey: ['opportunities'],
@@ -116,10 +121,12 @@ export default function OpportunitiesTab() {
       title: 'Actions', key: 'actions', width: 90,
       render: (_: any, record: any) => (
         <Space size={4}>
-          <Button type="link" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)} />
-          <Popconfirm title="Delete this opportunity?" onConfirm={() => deleteMutation.mutate(record.id)} okText="Yes" cancelText="No">
-            <Button type="link" size="small" danger icon={<DeleteOutlined />} />
-          </Popconfirm>
+          {canEditOpportunities && <Button type="link" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)} />}
+          {canDeleteOpportunities && (
+            <Popconfirm title="Delete this opportunity?" onConfirm={() => deleteMutation.mutate(record.id)} okText="Yes" cancelText="No">
+              <Button type="link" size="small" danger icon={<DeleteOutlined />} />
+            </Popconfirm>
+          )}
         </Space>
       ),
     },
@@ -142,7 +149,7 @@ export default function OpportunitiesTab() {
           </Select>
           <span style={{ color: '#8c8c8c', fontSize: 13 }}>{filtered.length} opportunities</span>
         </Space>
-        <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 8 }} onClick={handleAdd}>Add Opportunity</Button>
+        {canCreateOpportunities && <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 8 }} onClick={handleAdd}>Add Opportunity</Button>}
       </div>
 
       <Table
@@ -159,16 +166,17 @@ export default function OpportunitiesTab() {
         }}
       />
 
-      <Modal
-        title={editingOpportunity ? 'Edit Opportunity' : 'Add Opportunity'}
-        open={isModalVisible}
-        forceRender
-        onOk={handleModalOk}
-        onCancel={() => { setIsModalVisible(false); form.resetFields(); }}
-        confirmLoading={createMutation.isPending || updateMutation.isPending}
-        width={800}
-      >
-        <Form form={form} layout="vertical" className="grid grid-cols-2 gap-x-4">
+      {(canCreateOpportunities || canEditOpportunities) && (
+        <Modal
+          title={editingOpportunity ? 'Edit Opportunity' : 'Add Opportunity'}
+          open={isModalVisible}
+          forceRender
+          onOk={handleModalOk}
+          onCancel={() => { setIsModalVisible(false); form.resetFields(); }}
+          confirmLoading={createMutation.isPending || updateMutation.isPending}
+          width={800}
+        >
+          <Form form={form} layout="vertical" className="grid grid-cols-2 gap-x-4">
           <Form.Item name="opportunity_code" label="Opportunity Code" rules={[{ required: true }]}><Input disabled={!!editingOpportunity} /></Form.Item>
           <Form.Item name="name" label="Opportunity Name" rules={[{ required: true }]}><Input /></Form.Item>
           <Form.Item name="customer_id" label="Customer" rules={[{ required: true }]}>
@@ -181,8 +189,9 @@ export default function OpportunitiesTab() {
           <Form.Item name="probability" label="Probability (%)"><InputNumber className="w-full" min={0} max={100} /></Form.Item>
           <Form.Item name="expected_close_date" label="Expected Close Date"><DatePicker className="w-full" /></Form.Item>
           <Form.Item name="description" label="Description" className="col-span-2"><Input.TextArea rows={3} /></Form.Item>
-        </Form>
-      </Modal>
+          </Form>
+        </Modal>
+      )}
 
       <style>{`
         .row-won td { background: #f6ffed !important; }

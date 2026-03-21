@@ -1,8 +1,14 @@
 import { Tabs } from 'antd';
-import { TeamOutlined, SafetyOutlined, SettingOutlined } from '@ant-design/icons';
+import {
+  TeamOutlined,
+  SafetyOutlined,
+  SettingOutlined,
+  ControlOutlined,
+} from '@ant-design/icons';
 import RolesTab from './tabs/RolesTab';
 import PermissionsTab from './tabs/PermissionsTab';
 import UsersTab from './tabs/UsersTab';
+import AccessGovernanceTab from './tabs/AccessGovernanceTab';
 
 export default function SettingsPage() {
   const items = [
@@ -35,6 +41,16 @@ export default function SettingsPage() {
         </span>
       ),
       children: <UsersTab />,
+    },
+    {
+      key: 'access-governance',
+      label: (
+        <span>
+          <ControlOutlined />
+          Access Governance
+        </span>
+      ),
+      children: <AccessGovernanceTab />,
     },
   ];
 
