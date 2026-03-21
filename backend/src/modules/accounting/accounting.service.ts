@@ -406,11 +406,42 @@ export class AccountingService {
     return savedAR;
   }
 
-  async getARList(tenantId: string): Promise<AccountReceivableEntity[]> {
-    return this.arRepo.find({
-      where: { tenant_id: tenantId },
-      order: { invoice_date: 'DESC' },
-    });
+  async getARList(tenantId: string): Promise<any[]> {
+    const rows = await this.arRepo
+      .createQueryBuilder('ar')
+      .leftJoin('customers', 'c', 'c.id = ar.customer_id')
+      .addSelect([
+        'ar.id', 'ar.invoice_number', 'ar.customer_id',
+        'ar.invoice_date', 'ar.due_date',
+        'ar.total_amount', 'ar.paid_amount', 'ar.balance_amount',
+        'ar.status', 'ar.reference', 'ar.description',
+        'ar.journal_entry_id', 'ar.created_at', 'ar.updated_at',
+      ])
+      .addSelect(
+        `COALESCE(NULLIF(c.company_name, ''), c.contact_person)`,
+        'customer_name',
+      )
+      .where('ar.tenant_id = :tenantId', { tenantId })
+      .orderBy('ar.invoice_date', 'DESC')
+      .getRawMany();
+
+    return rows.map(r => ({
+      id: r.ar_id,
+      invoice_number: r.ar_invoice_number,
+      customer_id: r.ar_customer_id,
+      customer_name: (r.customer_name || '').trim() || r.ar_customer_id,
+      invoice_date: r.ar_invoice_date,
+      due_date: r.ar_due_date,
+      total_amount: r.ar_total_amount,
+      paid_amount: r.ar_paid_amount,
+      balance_amount: r.ar_balance_amount,
+      status: r.ar_status,
+      reference: r.ar_reference,
+      description: r.ar_description,
+      journal_entry_id: r.ar_journal_entry_id,
+      created_at: r.ar_created_at,
+      updated_at: r.ar_updated_at,
+    }));
   }
 
   async getAR(id: string, tenantId: string): Promise<AccountReceivableEntity> {
@@ -567,12 +598,38 @@ export class AccountingService {
     return savedAP;
   }
 
-  async getAPList(tenantId: string): Promise<AccountPayableEntity[]> {
-    return this.apRepo.find({
-      where: { tenant_id: tenantId },
-      relations: ['supplier'],
-      order: { bill_date: 'DESC' },
-    });
+  async getAPList(tenantId: string): Promise<any[]> {
+    const rows = await this.apRepo
+      .createQueryBuilder('ap')
+      .leftJoin('suppliers', 's', 's.id = ap.vendor_id')
+      .addSelect([
+        'ap.id', 'ap.bill_number', 'ap.vendor_id',
+        'ap.bill_date', 'ap.due_date',
+        'ap.total_amount', 'ap.paid_amount', 'ap.balance_amount',
+        'ap.status', 'ap.description', 'ap.journal_entry_id',
+        'ap.created_at', 'ap.updated_at',
+      ])
+      .addSelect('s.name', 'supplier_name')
+      .where('ap.tenant_id = :tenantId', { tenantId })
+      .orderBy('ap.bill_date', 'DESC')
+      .getRawMany();
+
+    return rows.map(r => ({
+      id: r.ap_id,
+      bill_number: r.ap_bill_number,
+      vendor_id: r.ap_vendor_id,
+      supplier_name: (r.supplier_name || '').trim() || r.ap_vendor_id,
+      bill_date: r.ap_bill_date,
+      due_date: r.ap_due_date,
+      total_amount: r.ap_total_amount,
+      paid_amount: r.ap_paid_amount,
+      balance_amount: r.ap_balance_amount,
+      status: r.ap_status,
+      description: r.ap_description,
+      journal_entry_id: r.ap_journal_entry_id,
+      created_at: r.ap_created_at,
+      updated_at: r.ap_updated_at,
+    }));
   }
 
   async getAP(id: string, tenantId: string): Promise<AccountPayableEntity> {
