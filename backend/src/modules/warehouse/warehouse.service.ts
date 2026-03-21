@@ -270,6 +270,30 @@ export class WarehouseService {
           `Insufficient stock: available ${inventoryItem.available_quantity}, requested ${qty}`,
         );
       }
+
+      // TRANSFER: validate destination warehouse capacity
+      if (payload.movement_type === MovementType.TRANSFER && payload.to_location) {
+        const destWarehouse = await this.warehouseRepo.findOne({
+          where: [
+            { warehouse_name: payload.to_location, tenant_id: tenantId },
+            { warehouse_code: payload.to_location, tenant_id: tenantId },
+          ],
+        });
+        if (destWarehouse && destWarehouse.capacity != null) {
+          // Count current stock already at destination
+          const destInventory = await this.inventoryRepo.find({
+            where: { location: payload.to_location, tenant_id: tenantId },
+          });
+          const currentDestQty = destInventory.reduce((sum, i) => sum + Number(i.quantity), 0);
+          if (currentDestQty + qty > destWarehouse.capacity) {
+            throw new BadRequestException(
+              `Destination warehouse "${destWarehouse.warehouse_name}" capacity exceeded: ` +
+              `capacity ${destWarehouse.capacity}, current stock ${currentDestQty}, ` +
+              `transfer qty ${qty} (would reach ${currentDestQty + qty})`,
+            );
+          }
+        }
+      }
       inventoryItem.quantity -= qty;
       inventoryItem.available_quantity = inventoryItem.quantity - inventoryItem.reserved_quantity;
       await this.inventoryRepo.save(inventoryItem);
@@ -511,6 +535,7 @@ export class WarehouseService {
         origin_address: movement.from_location || 'Internal',
         destination_name: movement.to_location || 'Destination',
         destination_address: movement.to_location || 'Internal',
+        courier_id: movement.courier_id || undefined,
         notes: `Auto-created from stock transfer ${movement.movement_number}. Ref: ${movement.reference_document || '—'}`,
         shipping_cost: 0,
         insurance_cost: 0,
@@ -526,7 +551,7 @@ export class WarehouseService {
         items: [item],
       });
 
-      const saved = await this.shipmentRepo.save(shipment);
+      const saved = await this.shipmentRepo.save(shipment) as unknown as { id: string };
 
       // Link movement to shipment
       movement.shipment_id = saved.id;
