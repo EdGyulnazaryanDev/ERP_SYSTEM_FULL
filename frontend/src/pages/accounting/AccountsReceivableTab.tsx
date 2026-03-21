@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Table, Button, Space, Modal, Form, Input, DatePicker, message, Select, Row, Col, Alert, Tooltip, InputNumber } from 'antd';
+import { Table, Button, Space, Modal, Form, Input, DatePicker, message, Select, Row, Col, Alert, Tooltip } from 'antd';
 import { PlusOutlined, ArrowUpOutlined, DollarOutlined, ClockCircleOutlined, CheckCircleOutlined, CloseCircleOutlined, ExclamationCircleOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { accountingApi } from '@/api/accounting';
@@ -32,11 +32,8 @@ function StatusPill({ status }: { status: string }) {
 export default function AccountsReceivableTab() {
   const queryClient = useQueryClient();
   const [form] = Form.useForm();
-  const [payForm] = Form.useForm();
   const [isModalVisible, setIsModalVisible] = useState(false);
-  const [payRecord, setPayRecord] = useState<any>(null);
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
-
   const { data, isLoading } = useQuery({
     queryKey: ['accounts-receivable'],
     queryFn: () => accountingApi.getAccountsReceivable().then(res => res.data),
@@ -58,34 +55,16 @@ export default function AccountsReceivableTab() {
     onError: (e: any) => message.error(e?.response?.data?.message || 'Failed to create invoice'),
   });
 
-  const payMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) =>
-      accountingApi.recordARPayment(id, data),
-    onSuccess: () => {
-      message.success('Payment recorded — journal entry created');
-      setPayRecord(null);
-      payForm.resetFields();
-      queryClient.invalidateQueries({ queryKey: ['accounts-receivable'] });
-      queryClient.invalidateQueries({ queryKey: ['journal-entries'] });
-    },
-    onError: (e: any) => message.error(e?.response?.data?.message || 'Failed to record payment'),
-  });
-
   const customerList = Array.isArray(customersRaw) ? customersRaw : (customersRaw as any)?.data || [];
   const customerOptions = customerList.map((c: any) => ({
-    label: c.company_name || c.contact_person || c.id,
+    label: c.company_name || `${c.first_name || ''} ${c.last_name || ''}`.trim() || c.name || c.id,
     value: c.id,
   }));
 
   const rawList: any[] = Array.isArray(data) ? data : (data as any)?.data || [];
   const filtered = statusFilter ? rawList.filter(r => r.status === statusFilter) : rawList;
   const overdueCount = rawList.filter(r => r.status === 'overdue').length;
-  const totalBalance   = rawList.reduce((s, r) => s + Number(r.balance_amount || 0), 0);
-  const totalInvoiced  = rawList.reduce((s, r) => s + Number(r.total_amount   || 0), 0);
-  const totalCollected = rawList.reduce((s, r) => s + Number(r.paid_amount    || 0), 0);
-  const totalOverdue   = rawList.filter(r => r.status === 'overdue').reduce((s, r) => s + Number(r.balance_amount || 0), 0);
-
-  const fmt = (v: number) => `$${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const totalBalance = rawList.reduce((s, r) => s + Number(r.balance_amount || 0), 0);
 
   const columns = [
     {
@@ -95,9 +74,7 @@ export default function AccountsReceivableTab() {
     {
       title: 'Customer', key: 'customer',
       render: (_: any, r: any) => (
-        <span style={{ fontWeight: 500 }}>
-          {r.customer_name || r.customer?.company_name || r.customer?.contact_person || '—'}
-        </span>
+        <span style={{ fontWeight: 500 }}>{r.customer_name || r.customer?.company_name || r.customer?.first_name || r.customer_id || '—'}</span>
       ),
     },
     {
@@ -118,39 +95,22 @@ export default function AccountsReceivableTab() {
     },
     {
       title: 'Total', dataIndex: 'total_amount', key: 'total_amount', width: 110, align: 'right' as const,
-      render: (v: any) => <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{fmt(Number(v || 0))}</span>,
+      render: (v: any) => <span style={{ fontFamily: 'monospace', fontSize: 12 }}>${Number(v || 0).toFixed(2)}</span>,
     },
     {
       title: 'Paid', dataIndex: 'paid_amount', key: 'paid_amount', width: 100, align: 'right' as const,
-      render: (v: any) => <span style={{ fontFamily: 'monospace', color: '#52c41a', fontSize: 12 }}>{fmt(Number(v || 0))}</span>,
+      render: (v: any) => <span style={{ fontFamily: 'monospace', color: '#52c41a', fontSize: 12 }}>${Number(v || 0).toFixed(2)}</span>,
     },
     {
       title: 'Balance', dataIndex: 'balance_amount', key: 'balance_amount', width: 110, align: 'right' as const,
       render: (v: any) => {
         const n = Number(v || 0);
-        return <span style={{ fontFamily: 'monospace', fontWeight: 700, color: n > 0 ? '#1677ff' : '#52c41a', fontSize: 12 }}>{fmt(n)}</span>;
+        return <span style={{ fontFamily: 'monospace', fontWeight: 700, color: n > 0 ? '#1677ff' : '#52c41a', fontSize: 12 }}>${n.toFixed(2)}</span>;
       },
     },
     {
-      title: 'Status', dataIndex: 'status', key: 'status', width: 130,
+      title: 'Status', dataIndex: 'status', key: 'status', width: 120,
       render: (s: string) => <StatusPill status={s} />,
-    },
-    {
-      title: 'Action', key: 'action', width: 120, align: 'center' as const,
-      render: (_: any, r: any) => {
-        if (r.status === 'paid' || r.status === 'written_off') return null;
-        return (
-          <Tooltip title="Record payment">
-            <Button
-              size="small" type="primary" icon={<DollarOutlined />}
-              style={{ borderRadius: 6, background: '#52c41a', borderColor: '#52c41a' }}
-              onClick={() => { setPayRecord(r); payForm.setFieldsValue({ payment_date: dayjs(), payment_amount: Number(r.balance_amount) }); }}
-            >
-              Pay
-            </Button>
-          </Tooltip>
-        );
-      },
     },
   ];
 
@@ -169,19 +129,23 @@ export default function AccountsReceivableTab() {
     <div>
       {/* Summary strip */}
       {rawList.length > 0 && (
-        <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+        <div style={{
+          display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap',
+        }}>
           {[
-            { label: 'Total Invoiced',  value: totalInvoiced,  color: '#1677ff' },
-            { label: 'Total Collected', value: totalCollected, color: '#52c41a' },
-            { label: 'Outstanding',     value: totalBalance,   color: totalBalance > 0 ? '#fa8c16' : '#52c41a' },
-            { label: 'Overdue',         value: totalOverdue,   color: '#ff4d4f' },
+            { label: 'Total Invoiced', value: rawList.reduce((s, r) => s + Number(r.total_amount || 0), 0), color: '#1677ff' },
+            { label: 'Total Collected', value: rawList.reduce((s, r) => s + Number(r.paid_amount || 0), 0), color: '#52c41a' },
+            { label: 'Outstanding', value: totalBalance, color: totalBalance > 0 ? '#fa8c16' : '#52c41a' },
+            { label: 'Overdue', value: rawList.filter(r => r.status === 'overdue').reduce((s, r) => s + Number(r.balance_amount || 0), 0), color: '#ff4d4f' },
           ].map(({ label, value, color }) => (
             <div key={label} style={{
               flex: '1 1 140px', padding: '10px 16px', borderRadius: 10,
               background: `${color}08`, border: `1px solid ${color}22`,
             }}>
               <div style={{ fontSize: 11, color: '#8c8c8c' }}>{label}</div>
-              <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 16, color }}>{fmt(value)}</div>
+              <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 16, color }}>
+                ${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
             </div>
           ))}
         </div>
@@ -189,7 +153,7 @@ export default function AccountsReceivableTab() {
 
       {overdueCount > 0 && (
         <Alert
-          message={`${overdueCount} overdue invoice(s) — click "Pay" on any row to record a payment and clear the balance`}
+          message={`${overdueCount} overdue invoice(s) — total outstanding: $${totalBalance.toFixed(2)}`}
           type="warning" showIcon style={{ marginBottom: 16, borderRadius: 8 }}
         />
       )}
@@ -215,14 +179,11 @@ export default function AccountsReceivableTab() {
           </Button>
         </Space>
       </div>
-
       <Table columns={columns} dataSource={filtered} loading={isLoading} rowKey="id" size="small"
-        scroll={{ x: 1000 }}
         pagination={{ pageSize: 15, showTotal: (t, r) => `${r[0]}–${r[1]} of ${t}` }}
         rowClassName={(r: any) => r.status === 'overdue' ? 'row-overdue' : r.status === 'paid' ? 'row-paid' : ''}
       />
 
-      {/* Add Invoice Modal */}
       <Modal title={<Space><ArrowUpOutlined style={{ color: '#52c41a' }} />Add Invoice</Space>}
         open={isModalVisible} onCancel={() => { setIsModalVisible(false); form.resetFields(); }} footer={null}>
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
@@ -257,77 +218,6 @@ export default function AccountsReceivableTab() {
             </Space>
           </Form.Item>
         </Form>
-      </Modal>
-
-      {/* Record Payment Modal */}
-      <Modal
-        title={
-          <Space>
-            <DollarOutlined style={{ color: '#52c41a' }} />
-            Record Payment — <span style={{ fontFamily: 'monospace' }}>{payRecord?.invoice_number}</span>
-          </Space>
-        }
-        open={!!payRecord}
-        onCancel={() => { setPayRecord(null); payForm.resetFields(); }}
-        footer={null}
-        width={440}
-      >
-        {payRecord && (
-          <div>
-            <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
-              <div style={{ flex: 1, padding: '10px 14px', borderRadius: 8, background: '#fff7e6', border: '1px solid #fa8c1633' }}>
-                <div style={{ fontSize: 11, color: '#8c8c8c' }}>Customer</div>
-                <div style={{ fontWeight: 600 }}>{payRecord.customer_name || '—'}</div>
-              </div>
-              <div style={{ flex: 1, padding: '10px 14px', borderRadius: 8, background: '#fff2f0', border: '1px solid #ff4d4f33' }}>
-                <div style={{ fontSize: 11, color: '#8c8c8c' }}>Balance Due</div>
-                <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 16, color: '#ff4d4f' }}>{fmt(Number(payRecord.balance_amount))}</div>
-              </div>
-            </div>
-            <Form form={payForm} layout="vertical"
-              onFinish={(values) => payMutation.mutate({
-                id: payRecord.id,
-                data: {
-                  payment_amount: Number(values.payment_amount),
-                  payment_date: values.payment_date ? values.payment_date.format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'),
-                  reference: values.reference,
-                  notes: values.notes,
-                },
-              })}
-            >
-              <Row gutter={12}>
-                <Col span={12}>
-                  <Form.Item name="payment_amount" label="Payment Amount" rules={[{ required: true }]}>
-                    <InputNumber min={0.01} max={Number(payRecord.balance_amount)} step={0.01} prefix="$" style={{ width: '100%' }} />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item name="payment_date" label="Payment Date" rules={[{ required: true }]}>
-                    <DatePicker style={{ width: '100%' }} />
-                  </Form.Item>
-                </Col>
-              </Row>
-              <Form.Item name="reference" label="Reference">
-                <Input placeholder="e.g. TXN-12345" />
-              </Form.Item>
-              <Form.Item name="notes" label="Notes">
-                <Input.TextArea rows={2} />
-              </Form.Item>
-              <Alert type="info" showIcon style={{ marginBottom: 12, borderRadius: 8 }}
-                message="Recording this payment will automatically create a Journal Entry: Debit Bank/Cash → Credit Accounts Receivable." />
-              <Form.Item style={{ marginBottom: 0 }}>
-                <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
-                  <Button onClick={() => { setPayRecord(null); payForm.resetFields(); }}>Cancel</Button>
-                  <Button type="primary" htmlType="submit" loading={payMutation.isPending}
-                    style={{ background: '#52c41a', borderColor: '#52c41a' }}
-                    icon={<CheckCircleOutlined />}>
-                    Confirm Payment
-                  </Button>
-                </Space>
-              </Form.Item>
-            </Form>
-          </div>
-        )}
       </Modal>
 
       <style>{`

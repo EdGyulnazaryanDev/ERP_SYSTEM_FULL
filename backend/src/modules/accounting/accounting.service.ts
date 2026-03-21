@@ -606,7 +606,7 @@ export class AccountingService {
         'ap.id', 'ap.bill_number', 'ap.vendor_id',
         'ap.bill_date', 'ap.due_date',
         'ap.total_amount', 'ap.paid_amount', 'ap.balance_amount',
-        'ap.status', 'ap.description', 'ap.journal_entry_id',
+        'ap.status', 'ap.notes', 'ap.reference', 'ap.journal_entry_id',
         'ap.created_at', 'ap.updated_at',
       ])
       .addSelect('s.name', 'supplier_name')
@@ -625,7 +625,8 @@ export class AccountingService {
       paid_amount: r.ap_paid_amount,
       balance_amount: r.ap_balance_amount,
       status: r.ap_status,
-      description: r.ap_description,
+      notes: r.ap_notes,
+      reference: r.ap_reference,
       journal_entry_id: r.ap_journal_entry_id,
       created_at: r.ap_created_at,
       updated_at: r.ap_updated_at,
