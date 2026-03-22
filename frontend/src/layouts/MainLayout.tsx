@@ -220,9 +220,9 @@ export default function MainLayout() {
     },
   ];
 
-  const visibleMenuItems = menuItems.filter((item) =>
-    item.pageKey ? canAccessPage(item.pageKey) : true,
-  );
+  const visibleMenuItems = menuItems
+    .filter((item) => (item.pageKey ? canAccessPage(item.pageKey) : true))
+    .map(({ pageKey, ...item }) => item);
 
   if (isLoading) {
     return (
