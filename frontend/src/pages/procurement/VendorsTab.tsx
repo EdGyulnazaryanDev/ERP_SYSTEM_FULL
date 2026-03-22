@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react';
 import { Table, Button, Space, Modal, Form, Input, message, Switch } from 'antd';
-import { PlusOutlined, EditOutlined, TeamOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
+import { PlusOutlined, EditOutlined, TeamOutlined, CheckCircleOutlined, CloseCircleOutlined, KeyOutlined, MailOutlined, LockOutlined, UserOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '@/api/client';
+import { authApi } from '@/api/auth';
 
 function StatusPill({ active }: { active: boolean }) {
   return (
@@ -55,6 +56,21 @@ export default function VendorsTab() {
     onError: (e: any) => message.error(e?.response?.data?.message || 'Failed to update vendor'),
   });
 
+  const [portalForm] = Form.useForm();
+  const [portalTarget, setPortalTarget] = useState<any>(null);
+  const [isPortalModalVisible, setPortalModalVisible] = useState(false);
+
+  const portalMutation = useMutation({
+    mutationFn: (values: any) => authApi.setPortalCredentials(values),
+    onSuccess: () => {
+      message.success('Portal credentials updated');
+      setPortalTarget(null);
+      setPortalModalVisible(false);
+      portalForm.resetFields();
+    },
+    onError: (e: any) => message.error(e?.response?.data?.message || 'Failed to update portal credentials'),
+  });
+
   const handleSubmit = (values: any) => {
     if (editingRecord) {
       updateMutation.mutate({ id: editingRecord.id, data: values });
@@ -98,16 +114,36 @@ export default function VendorsTab() {
     },
     {
       title: 'Actions', key: 'actions', width: 80, align: 'center' as const,
-      render: (_: any, record: any) => (
+    render: (_: any, record: any) => (
+      <Space size={4}>
         <Button
-          type="text" size="small" icon={<EditOutlined />}
+          type="text"
+          size="small"
+          icon={<EditOutlined />}
           onClick={() => {
             setEditingRecord(record);
             setIsModalVisible(true);
             setTimeout(() => form.setFieldsValue(record), 0);
           }}
         />
-      ),
+        <Button
+          type="text"
+          size="small"
+          icon={<KeyOutlined />}
+          onClick={() => {
+            setPortalTarget(record);
+            setPortalModalVisible(true);
+            portalForm.setFieldsValue({
+              email: record.email || '',
+              password: '',
+              confirmPassword: '',
+            });
+          }}
+        >
+          Portal
+        </Button>
+      </Space>
+    ),
     },
   ];
 
@@ -192,6 +228,74 @@ export default function VendorsTab() {
                 {editingRecord ? 'Update' : 'Create'}
               </Button>
             </Space>
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={`Portal credentials for ${portalTarget?.name || portalTarget?.contact_person || 'vendor'}`}
+        open={isPortalModalVisible}
+        forceRender
+        okText="Save"
+        onOk={() => portalForm.submit()}
+        onCancel={() => {
+          setPortalModalVisible(false);
+          setPortalTarget(null);
+          portalForm.resetFields();
+        }}
+        confirmLoading={portalMutation.isPending}
+      >
+        <Form
+          form={portalForm}
+          layout="vertical"
+          onFinish={(values) => {
+            if (!portalTarget) return;
+            portalMutation.mutate({
+              actorType: 'supplier',
+              actorId: portalTarget.id,
+              email: values.email,
+              password: values.password,
+              confirmPassword: values.confirmPassword,
+            });
+          }}
+        >
+          <Form.Item
+            name="email"
+            label="Portal email"
+            rules={[
+              { required: true, message: 'Email is required' },
+              { type: 'email', message: 'Enter a valid email address' },
+            ]}
+          >
+            <Input prefix={<MailOutlined />} placeholder="vendor@example.com" />
+          </Form.Item>
+          <Form.Item
+            name="password"
+            label="Password"
+            rules={[
+              { required: true, message: 'Please enter a password' },
+              { min: 6, message: 'Minimum 6 characters' },
+            ]}
+          >
+            <Input.Password prefix={<LockOutlined />} placeholder="••••••••" />
+          </Form.Item>
+          <Form.Item
+            name="confirmPassword"
+            label="Confirm password"
+            dependencies={['password']}
+            rules={[
+              { required: true, message: 'Confirm the password' },
+              ({ getFieldValue }) => ({
+                validator(_, value) {
+                  if (!value || getFieldValue('password') === value) {
+                    return Promise.resolve();
+                  }
+                  return Promise.reject(new Error('Passwords do not match'));
+                },
+              }),
+            ]}
+          >
+            <Input.Password prefix={<UserOutlined />} placeholder="••••••••" />
           </Form.Item>
         </Form>
       </Modal>

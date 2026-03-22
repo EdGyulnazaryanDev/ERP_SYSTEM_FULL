@@ -94,8 +94,12 @@ export class SettingsService {
           can_export: access.can_export,
         });
       } else {
-        // Merge with OR logic (if any role allows, user can do it)
-        existing.can_view = existing.can_view || access.can_view;
+        // Page visibility is deny-precedence: if any assigned role disables view,
+        // the page should be hidden/blocked for the user.
+        existing.can_view = existing.can_view && access.can_view;
+
+        // Action permissions remain permissive across roles, but only matter
+        // once page visibility has been granted.
         existing.can_create = existing.can_create || access.can_create;
         existing.can_edit = existing.can_edit || access.can_edit;
         existing.can_delete = existing.can_delete || access.can_delete;

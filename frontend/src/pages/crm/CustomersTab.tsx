@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react';
 import { Table, Button, Tag, Space, Modal, Form, Input, Select, message, Popconfirm, Row, Col, Card } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, TeamOutlined, UserOutlined, StopOutlined, EyeOutlined } from '@ant-design/icons';
+import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, TeamOutlined, UserOutlined, StopOutlined, EyeOutlined, KeyOutlined, MailOutlined, LockOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { crmApi } from '@/api/crm';
+import { authApi } from '@/api/auth';
 
 const STATUS_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
   active:   { color: '#52c41a', bg: '#f6ffed', label: 'Active' },
@@ -65,6 +66,23 @@ export default function CustomersTab() {
     onError: (e: any) => message.error(e.response?.data?.message || 'Failed to delete customer'),
   });
 
+  const [portalForm] = Form.useForm();
+  const [isPortalModalVisible, setIsPortalModalVisible] = useState(false);
+  const [portalTarget, setPortalTarget] = useState<any>(null);
+
+  const portalMutation = useMutation({
+    mutationFn: (values: any) => authApi.setPortalCredentials(values),
+    onSuccess: () => {
+      message.success('Portal credentials saved');
+      setIsPortalModalVisible(false);
+      setPortalTarget(null);
+      portalForm.resetFields();
+    },
+    onError: (e: any) => {
+      message.error(e?.response?.data?.message || 'Failed to save portal credentials');
+    },
+  });
+
   const filtered = useMemo(() => customers.filter((c: any) => {
     const matchSearch = !searchQuery || `${c.company_name} ${c.contact_person} ${c.email} ${c.customer_code}`.toLowerCase().includes(searchQuery.toLowerCase());
     const matchStatus = !statusFilter || c.status === statusFilter;
@@ -104,6 +122,22 @@ export default function CustomersTab() {
           <Popconfirm title="Delete this customer?" onConfirm={() => deleteMutation.mutate(record.id)} okText="Yes" cancelText="No">
             <Button type="link" size="small" danger icon={<DeleteOutlined />} />
           </Popconfirm>
+          <Button
+            type="link"
+            size="small"
+            icon={<KeyOutlined />}
+            onClick={() => {
+              setPortalTarget(record);
+              setIsPortalModalVisible(true);
+              portalForm.setFieldsValue({
+                email: record.email || '',
+                password: '',
+                confirmPassword: '',
+              });
+            }}
+          >
+            Portal
+          </Button>
         </Space>
       ),
     },
@@ -179,6 +213,74 @@ export default function CustomersTab() {
           </Form.Item>
           <Form.Item name="industry" label="Industry"><Input /></Form.Item>
           <Form.Item name="website" label="Website"><Input /></Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={`Portal credentials for ${portalTarget?.company_name || portalTarget?.contact_person || 'customer'}`}
+        open={isPortalModalVisible}
+        forceRender
+        okText="Save"
+        onOk={() => portalForm.submit()}
+        onCancel={() => {
+          setIsPortalModalVisible(false);
+          setPortalTarget(null);
+          portalForm.resetFields();
+        }}
+        confirmLoading={portalMutation.isPending}
+      >
+        <Form
+          form={portalForm}
+          layout="vertical"
+          onFinish={(values) => {
+            if (!portalTarget) return;
+            portalMutation.mutate({
+              actorType: 'customer',
+              actorId: portalTarget.id,
+              email: values.email,
+              password: values.password,
+              confirmPassword: values.confirmPassword,
+            });
+          }}
+        >
+          <Form.Item
+            name="email"
+            label="Portal email"
+            rules={[
+              { required: true, message: 'Email is required' },
+              { type: 'email', message: 'Enter a valid email address' },
+            ]}
+          >
+            <Input prefix={<MailOutlined />} placeholder="user@example.com" />
+          </Form.Item>
+          <Form.Item
+            name="password"
+            label="Password"
+            rules={[
+              { required: true, message: 'Please enter a password' },
+              { min: 6, message: 'Minimum 6 characters' },
+            ]}
+          >
+            <Input.Password prefix={<LockOutlined />} placeholder="••••••••" />
+          </Form.Item>
+          <Form.Item
+            name="confirmPassword"
+            label="Confirm password"
+            dependencies={['password']}
+            rules={[
+              { required: true, message: 'Confirm the password' },
+              ({ getFieldValue }) => ({
+                validator(_, value) {
+                  if (!value || getFieldValue('password') === value) {
+                    return Promise.resolve();
+                  }
+                  return Promise.reject(new Error('Passwords do not match'));
+                },
+              }),
+            ]}
+          >
+            <Input.Password prefix={<UserOutlined />} placeholder="••••••••" />
+          </Form.Item>
         </Form>
       </Modal>
 

@@ -73,25 +73,19 @@ export function useAccessControl() {
   const getPageAccess = (pageKey: string) => pageAccessMap.get(pageKey);
 
   const canAccessPage = (pageKey: string) => {
-    if (isPrivilegedUser) {
-      return true;
-    }
-
     const page = pageCatalogMap.get(pageKey);
     const access = pageAccessMap.get(pageKey);
 
     const canView = access?.can_view ?? true;
-    const featureAllowed = !page?.requiredFeature
-      || enabledFeatures.includes(page.requiredFeature as any);
+    const featureAllowed = isPrivilegedUser
+      ? true
+      : !page?.requiredFeature
+        || enabledFeatures.includes(page.requiredFeature as any);
 
     return canView && featureAllowed;
   };
 
   const canPerform = (pageKey: string, action: PageAction) => {
-    if (isPrivilegedUser) {
-      return true;
-    }
-
     if (!canAccessPage(pageKey)) {
       return false;
     }

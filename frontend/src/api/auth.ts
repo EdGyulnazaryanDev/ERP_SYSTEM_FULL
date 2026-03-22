@@ -4,6 +4,7 @@ import type { User } from '@/types';
 export interface LoginRequest {
   email: string;
   password: string;
+  actorType?: 'staff' | 'customer' | 'supplier';
 }
 
 export interface RegisterRequest {
@@ -16,6 +17,21 @@ export interface RegisterRequest {
 
 export interface AuthResponse {
   accessToken: string;
+}
+
+export interface ActivatePortalAccountRequest {
+  actorType: 'customer' | 'supplier';
+  email: string;
+  password: string;
+  confirmPassword: string;
+}
+
+export interface SetPortalCredentialsRequest {
+  actorType: 'customer' | 'supplier';
+  actorId: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
 }
 
 export interface LoginResponse {
@@ -32,6 +48,12 @@ export const authApi = {
 
   register: (data: RegisterRequest) =>
     apiClient.post<AuthResponse>('/auth/register', data),
+
+  activatePortalAccount: (data: ActivatePortalAccountRequest) =>
+    apiClient.post<AuthResponse>('/auth/activate', data),
+
+  setPortalCredentials: (data: SetPortalCredentialsRequest) =>
+    apiClient.post('/auth/portal-accounts', data),
 
   logout: () =>
     apiClient.post('/auth/logout'),

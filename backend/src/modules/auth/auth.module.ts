@@ -11,15 +11,26 @@ import { Tenant } from '../tenants/tenant.entity';
 import { User } from '../users/user.entity';
 import { Role } from '../roles/role.entity';
 import { UserRole } from '../roles/user-role.entity';
+import { CustomerEntity } from '../crm/entities/customer.entity';
+import { SupplierEntity } from '../suppliers/supplier.entity';
 import { PassportModule } from '@nestjs/passport';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { SeedersModule } from '../../database/seeders/seeders.module';
 import { ComplianceAuditModule } from '../compliance-audit/compliance-audit.module';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
+import { PortalAccountEntity } from './entities/portal-account.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Tenant, User, Role, UserRole]),
+    TypeOrmModule.forFeature([
+      Tenant,
+      User,
+      Role,
+      UserRole,
+      CustomerEntity,
+      SupplierEntity,
+      PortalAccountEntity,
+    ]),
     PassportModule,
     ConfigModule,
     SeedersModule,
