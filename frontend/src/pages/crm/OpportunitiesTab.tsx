@@ -7,7 +7,7 @@ import dayjs from 'dayjs';
 import { useAccessControl } from '@/hooks/useAccessControl';
 
 const STAGE_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
-  prospecting:  { color: '#8c8c8c', bg: '#fafafa',   label: 'Prospecting' },
+  prospecting:  { color: '#8fa3b8', bg: 'rgba(255,255,255,0.04)', label: 'Prospecting' },
   qualification:{ color: '#1677ff', bg: '#e6f4ff',   label: 'Qualification' },
   proposal:     { color: '#fa8c16', bg: '#fff7e6',   label: 'Proposal' },
   negotiation:  { color: '#722ed1', bg: '#f9f0ff',   label: 'Negotiation' },
@@ -16,7 +16,7 @@ const STAGE_CONFIG: Record<string, { color: string; bg: string; label: string }>
 };
 
 function StagePill({ stage }: { stage: string }) {
-  const cfg = STAGE_CONFIG[stage] || { color: '#8c8c8c', bg: '#fafafa', label: stage };
+  const cfg = STAGE_CONFIG[stage] || { color: '#8fa3b8', bg: 'rgba(255,255,255,0.04)', label: stage };
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center',
@@ -93,7 +93,7 @@ export default function OpportunitiesTab() {
 
   const columns = [
     { title: 'Code', dataIndex: 'opportunity_code', key: 'opportunity_code', width: 120,
-      render: (v: string) => <span style={{ fontFamily: 'monospace', fontSize: 12, color: '#595959' }}>{v}</span> },
+      render: (v: string) => <span style={{ fontFamily: 'monospace', fontSize: 12, color: 'var(--app-text-muted)' }}>{v}</span> },
     { title: 'Name', dataIndex: 'name', key: 'name', render: (v: string) => <span style={{ fontWeight: 600 }}>{v}</span> },
     { title: 'Customer', key: 'customer', render: (_: any, r: any) => r.customer?.company_name || '-' },
     { title: 'Amount', dataIndex: 'amount', key: 'amount', width: 120,
@@ -114,7 +114,7 @@ export default function OpportunitiesTab() {
         if (!date) return '-';
         const d = dayjs(date);
         const isOverdue = d.isBefore(dayjs()) && !['closed_won', 'closed_lost'].includes('');
-        return <span style={{ color: isOverdue ? '#ff4d4f' : '#595959', fontSize: 12 }}>{d.format('MMM DD, YYYY')}</span>;
+        return <span style={{ color: isOverdue ? '#ff4d4f' : 'var(--app-text-muted)', fontSize: 12 }}>{d.format('MMM DD, YYYY')}</span>;
       }
     },
     {
@@ -138,7 +138,7 @@ export default function OpportunitiesTab() {
         <Space wrap>
           <Input
             placeholder="Search opportunities..."
-            prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
+            prefix={<SearchOutlined style={{ color: 'var(--app-text-soft)' }} />}
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             allowClear
@@ -147,7 +147,7 @@ export default function OpportunitiesTab() {
           <Select placeholder="Stage" allowClear style={{ width: 160 }} value={stageFilter || undefined} onChange={v => setStageFilter(v || '')}>
             {Object.entries(STAGE_CONFIG).map(([k, v]) => <Select.Option key={k} value={k}>{v.label}</Select.Option>)}
           </Select>
-          <span style={{ color: '#8c8c8c', fontSize: 13 }}>{filtered.length} opportunities</span>
+          <span style={{ color: 'var(--app-text-muted)', fontSize: 13 }}>{filtered.length} opportunities</span>
         </Space>
         {canCreateOpportunities && <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 8 }} onClick={handleAdd}>Add Opportunity</Button>}
       </div>
@@ -194,8 +194,8 @@ export default function OpportunitiesTab() {
       )}
 
       <style>{`
-        .row-won td { background: #f6ffed !important; }
-        .row-lost td { background: #fff2f0 !important; opacity: 0.75; }
+        .row-won td { background: rgba(82,196,26,0.10) !important; }
+        .row-lost td { background: rgba(255,77,79,0.10) !important; opacity: 0.78; }
       `}</style>
     </div>
   );

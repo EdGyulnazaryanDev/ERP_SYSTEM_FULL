@@ -21,7 +21,7 @@ const STATUS_CFG: Record<string, { color: string; bg: string; icon: React.ReactN
 };
 
 function StatusPill({ status }: { status: string }) {
-  const cfg = STATUS_CFG[status] ?? { color: '#8c8c8c', bg: '#f5f5f5', icon: null, label: status?.toUpperCase() };
+  const cfg = STATUS_CFG[status] ?? { color: 'var(--app-text-muted)', bg: 'rgba(255,255,255,0.04)', icon: null, label: status?.toUpperCase() };
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 4,
@@ -109,7 +109,7 @@ export default function JournalEntriesTab() {
       dataIndex: 'description',
       key: 'description',
       ellipsis: true,
-      render: (v: string) => <span style={{ color: '#595959', fontSize: 12 }}>{v || '—'}</span>,
+      render: (v: string) => <span style={{ color: 'var(--app-text-muted)', fontSize: 12 }}>{v || '—'}</span>,
     },
     {
       title: 'Debit',
@@ -157,7 +157,7 @@ export default function JournalEntriesTab() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <Space>
           <BookOutlined style={{ color: '#1677ff', fontSize: 16 }} />
-          <span style={{ fontWeight: 600, color: '#1a1a2e' }}>{filtered.length} entries</span>
+          <span style={{ fontWeight: 600, color: 'var(--app-text)' }}>{filtered.length} entries</span>
           <Select
             placeholder="All statuses"
             style={{ width: 140 }}
@@ -259,20 +259,20 @@ export default function JournalEntriesTab() {
           <div>
             <Row gutter={16} style={{ marginBottom: 16 }}>
               <Col span={8}>
-                <div style={{ fontSize: 11, color: '#8c8c8c' }}>Date</div>
+                <div style={{ fontSize: 11, color: 'var(--app-text-muted)' }}>Date</div>
                 <div style={{ fontWeight: 600 }}>{dayjs(viewRecord.entry_date).format('MMM DD, YYYY')}</div>
               </Col>
               <Col span={8}>
-                <div style={{ fontSize: 11, color: '#8c8c8c' }}>Type</div>
+                <div style={{ fontSize: 11, color: 'var(--app-text-muted)' }}>Type</div>
                 <Tag style={{ marginTop: 2 }}>{viewRecord.entry_type}</Tag>
               </Col>
               <Col span={8}>
-                <div style={{ fontSize: 11, color: '#8c8c8c' }}>Reference</div>
+                <div style={{ fontSize: 11, color: 'var(--app-text-muted)' }}>Reference</div>
                 <div style={{ fontFamily: 'monospace', fontSize: 12 }}>{viewRecord.reference || '—'}</div>
               </Col>
             </Row>
             {viewRecord.description && (
-              <div style={{ marginBottom: 16, padding: '8px 12px', background: '#fafafa', borderRadius: 8, fontSize: 13, color: '#595959' }}>
+              <div style={{ marginBottom: 16, padding: '8px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 8, border: '1px solid rgba(134, 166, 197, 0.12)', fontSize: 13, color: 'var(--app-text-muted)' }}>
                 {viewRecord.description}
               </div>
             )}
@@ -295,7 +295,7 @@ export default function JournalEntriesTab() {
                   align: 'right' as const,
                   render: (v: number) => v > 0
                     ? <span style={{ fontFamily: 'monospace', color: '#ff4d4f', fontWeight: 600 }}>${Number(v).toFixed(2)}</span>
-                    : <span style={{ color: '#bfbfbf' }}>—</span>,
+                    : <span style={{ color: 'var(--app-text-soft)' }}>—</span>,
                 },
                 {
                   title: 'Credit',
@@ -304,14 +304,14 @@ export default function JournalEntriesTab() {
                   align: 'right' as const,
                   render: (v: number) => v > 0
                     ? <span style={{ fontFamily: 'monospace', color: '#52c41a', fontWeight: 600 }}>${Number(v).toFixed(2)}</span>
-                    : <span style={{ color: '#bfbfbf' }}>—</span>,
+                    : <span style={{ color: 'var(--app-text-soft)' }}>—</span>,
                 },
               ]}
               summary={(rows) => {
                 const totalDebit  = rows.reduce((s, r: any) => s + Number(r.debit  || 0), 0);
                 const totalCredit = rows.reduce((s, r: any) => s + Number(r.credit || 0), 0);
                 return (
-                  <Table.Summary.Row style={{ background: '#fafafa', fontWeight: 700 }}>
+                  <Table.Summary.Row style={{ background: 'rgba(255,255,255,0.03)', fontWeight: 700 }}>
                     <Table.Summary.Cell index={0}>Total</Table.Summary.Cell>
                     <Table.Summary.Cell index={1} align="right">
                       <span style={{ fontFamily: 'monospace', color: '#ff4d4f' }}>${totalDebit.toFixed(2)}</span>
@@ -328,8 +328,8 @@ export default function JournalEntriesTab() {
       </Modal>
 
       <style>{`
-        .row-draft td { background: #fffbe6 !important; }
-        .row-reversed td { background: #fff2f0 !important; opacity: 0.7; }
+        .row-draft td { background: rgba(250,140,22,0.10) !important; }
+        .row-reversed td { background: rgba(255,77,79,0.10) !important; opacity: 0.78; }
       `}</style>
     </div>
   );

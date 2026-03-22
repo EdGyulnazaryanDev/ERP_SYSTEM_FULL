@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Optional, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -34,8 +34,9 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly rbacSeeder: DefaultRbacSeeder,
-    private readonly complianceAuditService: ComplianceAuditService,
     private readonly subscriptionsService: SubscriptionsService,
+    @Optional()
+    private readonly complianceAuditService?: ComplianceAuditService,
   ) {}
 
   async login(dto: LoginDto) {
@@ -45,35 +46,31 @@ export class AuthService {
 
     const isMatch = await bcrypt.compare(dto.password, user.password);
     if (!isMatch) {
-      await this.complianceAuditService
-        .createAuditLog(
-          {
-            action: AuditAction.LOGIN,
-            entity_type: 'auth',
-            entity_id: user.id,
-            description: 'Failed login attempt (invalid password)',
-            severity: AuditSeverity.MEDIUM,
-          },
-          user.id,
-          user.tenantId,
-        )
-        .catch(() => undefined);
-      throw new UnauthorizedException();
-    }
-
-    await this.complianceAuditService
-      .createAuditLog(
+      await this.complianceAuditService?.createAuditLog(
         {
           action: AuditAction.LOGIN,
           entity_type: 'auth',
           entity_id: user.id,
-          description: 'Successful login',
-          severity: AuditSeverity.LOW,
+          description: 'Failed login attempt (invalid password)',
+          severity: AuditSeverity.MEDIUM,
         },
         user.id,
         user.tenantId,
-      )
-      .catch(() => undefined);
+      );
+      throw new UnauthorizedException();
+    }
+
+    await this.complianceAuditService?.createAuditLog(
+      {
+        action: AuditAction.LOGIN,
+        entity_type: 'auth',
+        entity_id: user.id,
+        description: 'Successful login',
+        severity: AuditSeverity.LOW,
+      },
+      user.id,
+      user.tenantId,
+    );
 
     const tokens = await this.generateTokens(
       user.id,
@@ -131,19 +128,17 @@ export class AuthService {
       refreshToken: null,
     });
 
-    await this.complianceAuditService
-      .createAuditLog(
-        {
-          action: AuditAction.LOGOUT,
-          entity_type: 'auth',
-          entity_id: userId,
-          description: 'User logged out',
-          severity: AuditSeverity.LOW,
-        },
-        userId,
-        tenantId,
-      )
-      .catch(() => undefined);
+    await this.complianceAuditService?.createAuditLog(
+      {
+        action: AuditAction.LOGOUT,
+        entity_type: 'auth',
+        entity_id: userId,
+        description: 'User logged out',
+        severity: AuditSeverity.LOW,
+      },
+      userId,
+      tenantId,
+    );
 
     return { message: 'Logged out successfully' };
   }

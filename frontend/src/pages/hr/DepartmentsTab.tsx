@@ -32,7 +32,7 @@ export default function DepartmentsTab() {
 
   const columns = [
     { title: 'Code', dataIndex: 'employee_code', key: 'employee_code', width: 100,
-      render: (v: string) => <span style={{ fontFamily: 'monospace', fontSize: 12, color: '#595959' }}>{v}</span> },
+      render: (v: string) => <span style={{ fontFamily: 'monospace', fontSize: 12, color: 'var(--app-text-muted)' }}>{v}</span> },
     { title: 'Name', key: 'name', render: (_: any, r: any) => <span style={{ fontWeight: 600 }}>{r.first_name} {r.last_name}</span> },
     { title: 'Email', dataIndex: 'email', key: 'email', ellipsis: true },
     { title: 'Position', dataIndex: 'position', key: 'position' },
@@ -81,15 +81,15 @@ export default function DepartmentsTab() {
                       <ApartmentOutlined />
                     </div>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 700, fontSize: 14, color: '#1a1a2e' }}>{dept}</div>
-                      <div style={{ fontSize: 12, color: '#8c8c8c', marginTop: 2 }}>
+                      <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--app-text)' }}>{dept}</div>
+                      <div style={{ fontSize: 12, color: 'var(--app-text-muted)', marginTop: 2 }}>
                         <span style={{ color: '#52c41a', fontWeight: 600 }}>{stats.active} active</span>
                         {stats.onLeave > 0 && <span style={{ color: '#fa8c16', marginLeft: 8 }}>{stats.onLeave} on leave</span>}
                       </div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
                       <div style={{ fontSize: 22, fontWeight: 700, color }}>{stats.total}</div>
-                      <div style={{ fontSize: 11, color: '#8c8c8c' }}>employees</div>
+                      <div style={{ fontSize: 11, color: 'var(--app-text-muted)' }}>employees</div>
                     </div>
                   </div>
                 </Card>
@@ -100,7 +100,7 @@ export default function DepartmentsTab() {
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <span style={{ fontWeight: 600, fontSize: 14, color: '#1a1a2e' }}>
+        <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--app-text)' }}>
           {selectedDepartment ? `${selectedDepartment} — ${filteredEmployees.length} employees` : `All Employees — ${filteredEmployees.length}`}
         </span>
         <Select

@@ -25,10 +25,10 @@ function StatCard({
         border: active ? `2px solid ${color}` : `1px solid ${color}22`,
         background: active
           ? `linear-gradient(135deg, ${color}18 0%, ${color}08 100%)`
-          : `linear-gradient(135deg, ${color}0a 0%, #ffffff 100%)`,
+          : `linear-gradient(135deg, ${color}12 0%, rgba(8, 25, 40, 0.76) 100%)`,
         cursor: onClick ? 'pointer' : 'default',
         transition: 'all 0.2s ease',
-        boxShadow: active ? `0 4px 16px ${color}28` : '0 1px 4px rgba(0,0,0,0.05)',
+        boxShadow: active ? `0 4px 16px ${color}28` : '0 16px 36px rgba(2, 10, 19, 0.18)',
         transform: active ? 'translateY(-2px)' : undefined,
       }}
       bodyStyle={{ padding: '14px 18px' }}
@@ -43,9 +43,9 @@ function StatCard({
           {icon}
         </div>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1, color: '#1a1a2e' }}>{value}</div>
-          <div style={{ fontSize: 12, color: active ? color : '#8c8c8c', fontWeight: active ? 600 : 400, marginTop: 2 }}>{label}</div>
-          {sub && <div style={{ fontSize: 11, color: '#bfbfbf', marginTop: 1 }}>{sub}</div>}
+          <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1, color: 'var(--app-text)' }}>{value}</div>
+          <div style={{ fontSize: 12, color: active ? color : 'var(--app-text-muted)', fontWeight: active ? 600 : 400, marginTop: 2 }}>{label}</div>
+          {sub && <div style={{ fontSize: 11, color: 'var(--app-text-soft)', marginTop: 1 }}>{sub}</div>}
         </div>
       </div>
     </Card>
@@ -90,7 +90,7 @@ export default function WarehousePage() {
   ];
 
   return (
-    <div style={{ padding: 24, background: '#f0f2f7', minHeight: '100vh' }}>
+    <div style={{ padding: 24, minHeight: '100vh' }}>
       {/* Header */}
       <div style={{
         background: 'linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%)',
@@ -164,7 +164,12 @@ export default function WarehousePage() {
 
       {/* Main Card */}
       <Card
-        style={{ borderRadius: 14, boxShadow: '0 2px 12px rgba(0,0,0,0.07)', border: '1px solid #e8eaf0' }}
+        style={{
+          borderRadius: 14,
+          background: 'rgba(8, 25, 40, 0.72)',
+          border: '1px solid rgba(134, 166, 197, 0.12)',
+          boxShadow: '0 20px 50px rgba(2, 10, 19, 0.22)',
+        }}
         bodyStyle={{ padding: 0 }}
       >
         <Tabs
@@ -172,7 +177,7 @@ export default function WarehousePage() {
           onChange={setActiveTab}
           items={items}
           style={{ padding: '0 20px' }}
-          tabBarStyle={{ marginBottom: 0, borderBottom: '1px solid #f0f0f0' }}
+          tabBarStyle={{ marginBottom: 0, borderBottom: '1px solid rgba(134, 166, 197, 0.12)' }}
         />
       </Card>
     </div>

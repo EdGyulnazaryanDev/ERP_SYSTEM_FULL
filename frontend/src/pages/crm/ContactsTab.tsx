@@ -112,7 +112,7 @@ export default function ContactsTab() {
             optionFilterProp="label"
           />
           {selectedCustomer && (
-            <span style={{ color: '#8c8c8c', fontSize: 13 }}>{contacts.length} contacts</span>
+            <span style={{ color: 'var(--app-text-muted)', fontSize: 13 }}>{contacts.length} contacts</span>
           )}
         </Space>
         <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 8 }} onClick={handleAdd} disabled={!selectedCustomerId}>

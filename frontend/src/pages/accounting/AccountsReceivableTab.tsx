@@ -11,11 +11,11 @@ const STATUS_CFG: Record<string, { color: string; bg: string; icon: React.ReactN
   partially_paid: { color: '#1677ff', bg: '#e6f4ff', icon: <DollarOutlined />,            label: 'PARTIAL' },
   paid:           { color: '#52c41a', bg: '#f6ffed', icon: <CheckCircleOutlined />,       label: 'PAID' },
   overdue:        { color: '#ff4d4f', bg: '#fff2f0', icon: <ExclamationCircleOutlined />, label: 'OVERDUE' },
-  written_off:    { color: '#8c8c8c', bg: '#f5f5f5', icon: <CloseCircleOutlined />,       label: 'WRITTEN OFF' },
+  written_off:    { color: '#8fa3b8', bg: 'rgba(255,255,255,0.04)', icon: <CloseCircleOutlined />, label: 'WRITTEN OFF' },
 };
 
 function StatusPill({ status }: { status: string }) {
-  const cfg = STATUS_CFG[status] ?? { color: '#8c8c8c', bg: '#f5f5f5', icon: null, label: (status || '').toUpperCase() };
+  const cfg = STATUS_CFG[status] ?? { color: 'var(--app-text-muted)', bg: 'rgba(255,255,255,0.04)', icon: null, label: (status || '').toUpperCase() };
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 4,
@@ -87,7 +87,7 @@ export default function AccountsReceivableTab() {
         if (!d) return '—';
         const isLate = r.status !== 'paid' && dayjs(d).isBefore(dayjs());
         return (
-          <span style={{ fontSize: 12, color: isLate ? '#ff4d4f' : '#595959', fontWeight: isLate ? 600 : 400 }}>
+          <span style={{ fontSize: 12, color: isLate ? '#ff4d4f' : 'var(--app-text-muted)', fontWeight: isLate ? 600 : 400 }}>
             {isLate && '⚠ '}{dayjs(d).format('MMM DD, YYYY')}
           </span>
         );
@@ -140,9 +140,10 @@ export default function AccountsReceivableTab() {
           ].map(({ label, value, color }) => (
             <div key={label} style={{
               flex: '1 1 140px', padding: '10px 16px', borderRadius: 10,
-              background: `${color}08`, border: `1px solid ${color}22`,
+              background: `linear-gradient(135deg, ${color}14 0%, rgba(8, 25, 40, 0.58) 100%)`,
+              border: `1px solid ${color}22`,
             }}>
-              <div style={{ fontSize: 11, color: '#8c8c8c' }}>{label}</div>
+              <div style={{ fontSize: 11, color: 'var(--app-text-muted)' }}>{label}</div>
               <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 16, color }}>
                 ${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
@@ -161,7 +162,7 @@ export default function AccountsReceivableTab() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <Space>
           <ArrowUpOutlined style={{ color: '#52c41a', fontSize: 16 }} />
-          <span style={{ fontWeight: 600, color: '#1a1a2e' }}>{filtered.length} invoices</span>
+          <span style={{ fontWeight: 600, color: 'var(--app-text)' }}>{filtered.length} invoices</span>
           <Select
             placeholder="All statuses" style={{ width: 150 }} value={statusFilter}
             onChange={setStatusFilter} allowClear size="small"
@@ -221,8 +222,8 @@ export default function AccountsReceivableTab() {
       </Modal>
 
       <style>{`
-        .row-overdue td { background: #fff2f0 !important; }
-        .row-paid td { background: #f6ffed !important; }
+        .row-overdue td { background: rgba(255,77,79,0.10) !important; }
+        .row-paid td { background: rgba(82,196,26,0.10) !important; }
       `}</style>
     </div>
   );

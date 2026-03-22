@@ -7,7 +7,7 @@ import dayjs from 'dayjs';
 import { useAccessControl } from '@/hooks/useAccessControl';
 
 const STATUS_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
-  planning:    { color: '#8c8c8c', bg: '#fafafa',   label: 'Planning' },
+  planning:    { color: '#8fa3b8', bg: 'rgba(255,255,255,0.04)', label: 'Planning' },
   in_progress: { color: '#1677ff', bg: '#e6f4ff',   label: 'In Progress' },
   on_hold:     { color: '#fa8c16', bg: '#fff7e6',   label: 'On Hold' },
   completed:   { color: '#52c41a', bg: '#f6ffed',   label: 'Completed' },
@@ -22,7 +22,7 @@ const PRIORITY_CONFIG: Record<string, { color: string; label: string }> = {
 };
 
 function StatusPill({ status }: { status: string }) {
-  const cfg = STATUS_CONFIG[status] || { color: '#8c8c8c', bg: '#fafafa', label: status };
+  const cfg = STATUS_CONFIG[status] || { color: '#8fa3b8', bg: 'rgba(255,255,255,0.04)', label: status };
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center',
@@ -89,13 +89,13 @@ export default function ProjectsTab() {
 
   const columns = [
     { title: 'Code', dataIndex: 'project_code', key: 'project_code', width: 120,
-      render: (v: string) => <span style={{ fontFamily: 'monospace', fontSize: 12, color: '#595959' }}>{v}</span> },
+      render: (v: string) => <span style={{ fontFamily: 'monospace', fontSize: 12, color: 'var(--app-text-muted)' }}>{v}</span> },
     { title: 'Name', dataIndex: 'project_name', key: 'project_name', render: (v: string) => <span style={{ fontWeight: 600 }}>{v}</span> },
     { title: 'Progress', dataIndex: 'progress_percentage', key: 'progress_percentage', width: 150,
       render: (v: number) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <Progress percent={v} size="small" showInfo={false} style={{ width: 80 }} strokeColor={v >= 80 ? '#52c41a' : v >= 40 ? '#1677ff' : '#fa8c16'} />
-          <span style={{ fontSize: 12, color: '#595959' }}>{v}%</span>
+          <span style={{ fontSize: 12, color: 'var(--app-text-muted)' }}>{v}%</span>
         </div>
       )
     },
@@ -108,7 +108,7 @@ export default function ProjectsTab() {
       render: (d: string, r: any) => {
         if (!d) return '-';
         const isOverdue = dayjs(d).isBefore(dayjs()) && r.status !== 'completed' && r.status !== 'cancelled';
-        return <span style={{ color: isOverdue ? '#ff4d4f' : '#595959', fontSize: 12 }}>{isOverdue && '⚠ '}{dayjs(d).format('MMM DD, YYYY')}</span>;
+        return <span style={{ color: isOverdue ? '#ff4d4f' : 'var(--app-text-muted)', fontSize: 12 }}>{isOverdue && '⚠ '}{dayjs(d).format('MMM DD, YYYY')}</span>;
       }
     },
     {
@@ -131,11 +131,11 @@ export default function ProjectsTab() {
     <div style={{ padding: '16px 0' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
         <Space>
-          <Input placeholder="Search projects..." prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />} value={searchQuery} onChange={e => setSearchQuery(e.target.value)} allowClear style={{ width: 220, borderRadius: 8 }} />
+          <Input placeholder="Search projects..." prefix={<SearchOutlined style={{ color: 'var(--app-text-soft)' }} />} value={searchQuery} onChange={e => setSearchQuery(e.target.value)} allowClear style={{ width: 220, borderRadius: 8 }} />
           <Select placeholder="Status" allowClear style={{ width: 140 }} value={statusFilter || undefined} onChange={v => setStatusFilter(v || '')}>
             {Object.entries(STATUS_CONFIG).map(([k, v]) => <Select.Option key={k} value={k}>{v.label}</Select.Option>)}
           </Select>
-          <span style={{ color: '#8c8c8c', fontSize: 13 }}>{filtered.length} projects</span>
+          <span style={{ color: 'var(--app-text-muted)', fontSize: 13 }}>{filtered.length} projects</span>
         </Space>
         {canCreateProjects && <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 8 }} onClick={() => { setEditingRecord(null); setIsModalVisible(true); form.resetFields(); }}>New Project</Button>}
       </div>
@@ -193,8 +193,8 @@ export default function ProjectsTab() {
       )}
 
       <style>{`
-        .row-completed td { background: #f6ffed !important; }
-        .row-cancelled td { background: #fff2f0 !important; opacity: 0.75; }
+        .row-completed td { background: rgba(82,196,26,0.10) !important; }
+        .row-cancelled td { background: rgba(255,77,79,0.10) !important; opacity: 0.82; }
       `}</style>
     </div>
   );

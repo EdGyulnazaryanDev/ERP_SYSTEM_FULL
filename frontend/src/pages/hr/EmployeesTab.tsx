@@ -101,7 +101,7 @@ export default function EmployeesTab() {
 
   const employeeColumns = [
     { title: 'Code', dataIndex: 'employee_code', key: 'employee_code', width: 100,
-      render: (v: string) => <span style={{ fontFamily: 'monospace', fontSize: 12, color: '#595959' }}>{v}</span> },
+      render: (v: string) => <span style={{ fontFamily: 'monospace', fontSize: 12, color: 'var(--app-text-muted)' }}>{v}</span> },
     { title: 'Name', key: 'name', render: (_: any, r: any) => <span style={{ fontWeight: 600 }}>{r.first_name} {r.last_name}</span> },
     { title: 'Email', dataIndex: 'email', key: 'email', ellipsis: true },
     { title: 'Department', dataIndex: 'department', key: 'department',
@@ -241,8 +241,8 @@ export default function EmployeesTab() {
       </Modal>
 
       <style>{`
-        .row-terminated td { background: #fff2f0 !important; opacity: 0.75; }
-        .row-on-leave td { background: #fff7e6 !important; }
+        .row-terminated td { background: rgba(239, 68, 68, 0.12) !important; opacity: 0.82; }
+        .row-on-leave td { background: rgba(245, 158, 11, 0.12) !important; }
       `}</style>
     </div>
   );

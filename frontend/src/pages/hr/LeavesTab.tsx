@@ -125,7 +125,7 @@ export default function LeavesTab() {
               <Col key={i} xs={12} sm={6}>
                 <Card size="small" style={{ borderRadius: 10, border: `1px solid ${stat.color}22`, background: `${stat.color}08`, textAlign: 'center' }} bodyStyle={{ padding: '12px' }}>
                   <div style={{ fontSize: 22, fontWeight: 700, color: stat.color }}>{stat.value}</div>
-                  <div style={{ fontSize: 12, color: '#8c8c8c' }}>{stat.label}</div>
+                  <div style={{ fontSize: 12, color: 'var(--app-text-muted)' }}>{stat.label}</div>
                 </Card>
               </Col>
             ))}
@@ -229,8 +229,8 @@ export default function LeavesTab() {
       </Modal>
 
       <style>{`
-        .row-approved td { background: #f6ffed !important; }
-        .row-rejected td { background: #fff2f0 !important; opacity: 0.8; }
+        .row-approved td { background: rgba(34, 197, 94, 0.12) !important; }
+        .row-rejected td { background: rgba(239, 68, 68, 0.12) !important; opacity: 0.82; }
       `}</style>
     </div>
   );

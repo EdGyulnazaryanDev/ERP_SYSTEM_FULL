@@ -28,7 +28,7 @@ const MOVEMENT_CFG: Record<MovementType, { color: string; bg: string; icon: Reac
 };
 
 function MovementPill({ type }: { type: MovementType }) {
-  const cfg = MOVEMENT_CFG[type] ?? { color: '#8c8c8c', bg: '#f5f5f5', icon: null, label: type };
+  const cfg = MOVEMENT_CFG[type] ?? { color: 'var(--app-text-muted)', bg: 'rgba(255,255,255,0.04)', icon: null, label: type };
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 4,
@@ -173,14 +173,14 @@ export default function StockMovementsTab() {
       render: (v: string) => (
         <span style={{
           fontFamily: 'monospace', fontWeight: 700, fontSize: 11,
-          background: '#f5f5f5', color: '#595959',
+          background: 'rgba(255,255,255,0.04)', color: 'var(--app-text-muted)',
           padding: '2px 8px', borderRadius: 6,
         }}>{v}</span>
       ),
     },
     {
       title: 'Product', dataIndex: 'product_name', key: 'product_name',
-      render: (v: string) => <span style={{ fontWeight: 600, color: '#1a1a2e' }}>{v || '—'}</span>,
+      render: (v: string) => <span style={{ fontWeight: 600, color: 'var(--app-text)' }}>{v || '—'}</span>,
     },
     {
       title: 'Type', dataIndex: 'movement_type', key: 'movement_type', width: 130,
@@ -195,13 +195,13 @@ export default function StockMovementsTab() {
               {r.from_location}
             </span>
           )}
-          {r.from_location && r.to_location && <span style={{ color: '#bfbfbf', margin: '0 2px' }}>→</span>}
+          {r.from_location && r.to_location && <span style={{ color: 'var(--app-text-soft)', margin: '0 2px' }}>→</span>}
           {r.to_location && (
             <span style={{ color: '#52c41a', background: '#f6ffed', padding: '1px 6px', borderRadius: 4 }}>
               {r.to_location}
             </span>
           )}
-          {!r.from_location && !r.to_location && <span style={{ color: '#bfbfbf' }}>—</span>}
+          {!r.from_location && !r.to_location && <span style={{ color: 'var(--app-text-soft)' }}>—</span>}
         </div>
       ),
     },
@@ -212,7 +212,7 @@ export default function StockMovementsTab() {
         return (
           <span style={{
             fontFamily: 'monospace', fontWeight: 800, fontSize: 14,
-            color: cfg?.color || '#1a1a2e',
+            color: cfg?.color || 'var(--app-text)',
           }}>
             {r.movement_type === 'ISSUE' ? '-' : '+'}{v}
           </span>
@@ -222,14 +222,14 @@ export default function StockMovementsTab() {
     {
       title: 'Date', dataIndex: 'movement_date', key: 'movement_date', width: 120,
       render: (d: string) => d
-        ? <span style={{ fontSize: 12, color: '#595959' }}>{dayjs(d).format('MMM DD, YYYY')}</span>
+        ? <span style={{ fontSize: 12, color: 'var(--app-text-muted)' }}>{dayjs(d).format('MMM DD, YYYY')}</span>
         : '—',
     },
     {
       title: 'Reference', dataIndex: 'reference_document', key: 'reference_document', ellipsis: true,
       render: (v: string) => v
         ? <span style={{ fontSize: 12, fontFamily: 'monospace', color: '#1677ff' }}>{v}</span>
-        : <span style={{ color: '#bfbfbf' }}>—</span>,
+        : <span style={{ color: 'var(--app-text-soft)' }}>—</span>,
     },
     {
       title: '', key: 'actions', width: 80, align: 'center' as const,
@@ -264,9 +264,9 @@ export default function StockMovementsTab() {
             style={{
               display: 'flex', alignItems: 'center', gap: 6,
               padding: '6px 14px', borderRadius: 20, cursor: 'pointer',
-              background: filterType === type ? cfg.bg : '#fafafa',
-              border: `1.5px solid ${filterType === type ? cfg.color : '#e8e8e8'}`,
-              color: filterType === type ? cfg.color : '#595959',
+              background: filterType === type ? cfg.bg : 'rgba(255,255,255,0.03)',
+              border: `1.5px solid ${filterType === type ? cfg.color : 'rgba(134, 166, 197, 0.16)'}`,
+              color: filterType === type ? cfg.color : 'var(--app-text-muted)',
               fontWeight: filterType === type ? 700 : 400,
               fontSize: 12, transition: 'all 0.15s',
             }}
@@ -274,8 +274,8 @@ export default function StockMovementsTab() {
             {cfg.icon}
             <span>{cfg.label}</span>
             <span style={{
-              background: filterType === type ? cfg.color : '#e8e8e8',
-              color: filterType === type ? '#fff' : '#595959',
+              background: filterType === type ? cfg.color : 'rgba(255,255,255,0.08)',
+              color: filterType === type ? '#fff' : 'var(--app-text-muted)',
               borderRadius: 10, padding: '0 6px', fontSize: 11, fontWeight: 700,
             }}>{counts[type]}</span>
           </div>
@@ -286,7 +286,7 @@ export default function StockMovementsTab() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <Space>
           <SwapOutlined style={{ color: '#fa8c16', fontSize: 16 }} />
-          <span style={{ fontWeight: 700, color: '#1a1a2e', fontSize: 14 }}>{filtered.length} movements</span>
+          <span style={{ fontWeight: 700, color: 'var(--app-text)', fontSize: 14 }}>{filtered.length} movements</span>
           <Input.Search
             placeholder="Search product, ref…"
             value={search} onChange={e => setSearch(e.target.value)}

@@ -32,9 +32,9 @@ function SummaryCard({
           {icon}
         </div>
         <div>
-          <div style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.2, color: '#1a1a2e' }}>{value}</div>
-          <div style={{ fontSize: 12, color: '#8c8c8c', marginTop: 2 }}>{label}</div>
-          {sub && <div style={{ fontSize: 11, color: '#bfbfbf', marginTop: 1 }}>{sub}</div>}
+          <div style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.2, color: 'var(--app-text)' }}>{value}</div>
+          <div style={{ fontSize: 12, color: 'var(--app-text-muted)', marginTop: 2 }}>{label}</div>
+          {sub && <div style={{ fontSize: 11, color: 'var(--app-text-soft)', marginTop: 1 }}>{sub}</div>}
         </div>
       </div>
     </Card>
@@ -100,13 +100,13 @@ export default function AccountingPage() {
   ];
 
   return (
-    <div style={{ padding: 24, background: '#f5f6fa', minHeight: '100vh' }}>
+    <div style={{ padding: 24, minHeight: '100vh' }}>
       <div style={{ marginBottom: 20 }}>
-        <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#1a1a2e' }}>
+        <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: 'var(--app-text)' }}>
           <FileTextOutlined style={{ marginRight: 10, color: '#1677ff' }} />
           Accounting
         </h1>
-        <p style={{ margin: '4px 0 0', color: '#8c8c8c', fontSize: 13 }}>
+        <p style={{ margin: '4px 0 0', color: 'var(--app-text-muted)', fontSize: 13 }}>
           Journal entries, payables, receivables, and bank accounts
         </p>
       </div>
@@ -130,7 +130,15 @@ export default function AccountingPage() {
         </Col>
       </Row>
 
-      <Card style={{ borderRadius: 12, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }} styles={{ body: { padding: '0 20px 20px' } }}>
+      <Card
+        style={{
+          borderRadius: 12,
+          background: 'rgba(8, 25, 40, 0.72)',
+          border: '1px solid rgba(134, 166, 197, 0.12)',
+          boxShadow: '0 20px 50px rgba(2, 10, 19, 0.22)',
+        }}
+        styles={{ body: { padding: '0 20px 20px' } }}
+      >
         <Tabs activeKey={activeTab} onChange={setActiveTab} items={tabItems} tabBarStyle={{ marginBottom: 20 }} />
       </Card>
     </div>

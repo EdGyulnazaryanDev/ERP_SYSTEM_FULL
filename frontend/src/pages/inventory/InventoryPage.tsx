@@ -51,9 +51,9 @@ function StatCard({
           {icon}
         </div>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.2, color: '#1a1a2e' }}>{value}</div>
-          <div style={{ fontSize: 12, color: active ? color : '#8c8c8c', fontWeight: active ? 600 : 400, marginTop: 2 }}>{label}</div>
-          {sub && <div style={{ fontSize: 11, color: '#bfbfbf', marginTop: 1 }}>{sub}</div>}
+          <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.2, color: 'var(--app-text)' }}>{value}</div>
+          <div style={{ fontSize: 12, color: active ? color : 'var(--app-text-muted)', fontWeight: active ? 600 : 400, marginTop: 2 }}>{label}</div>
+          {sub && <div style={{ fontSize: 11, color: 'var(--app-text-soft)', marginTop: 1 }}>{sub}</div>}
         </div>
       </div>
     </Card>
@@ -255,8 +255,8 @@ export default function InventoryPage() {
       sorter: (a: Inventory, b: Inventory) => (a.product_name || '').localeCompare(b.product_name || ''),
       render: (text: string, record: Inventory) => (
         <div>
-          <div style={{ fontWeight: 600, color: '#1a1a2e' }}>{text || '—'}</div>
-          <div style={{ fontFamily: 'monospace', fontSize: 11, color: '#8c8c8c', marginTop: 2 }}>{record.sku}</div>
+          <div style={{ fontWeight: 600, color: 'var(--app-text)' }}>{text || '—'}</div>
+          <div style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--app-text-muted)', marginTop: 2 }}>{record.sku}</div>
         </div>
       ),
     },
@@ -277,7 +277,7 @@ export default function InventoryPage() {
       width: 95,
       align: 'right' as const,
       render: (v: number) => (
-        <span style={{ fontWeight: 600, color: toNum(v) === 0 ? '#ff4d4f' : '#1a1a2e' }}>{toNum(v)}</span>
+        <span style={{ fontWeight: 600, color: toNum(v) === 0 ? '#ff4d4f' : 'var(--app-text)' }}>{toNum(v)}</span>
       ),
     },
     {
@@ -287,7 +287,7 @@ export default function InventoryPage() {
       width: 90,
       align: 'right' as const,
       render: (v: number) => (
-        <span style={{ color: toNum(v) > 0 ? '#722ed1' : '#bfbfbf' }}>{toNum(v)}</span>
+        <span style={{ color: toNum(v) > 0 ? '#722ed1' : 'var(--app-text-soft)' }}>{toNum(v)}</span>
       ),
     },
     {
@@ -313,7 +313,7 @@ export default function InventoryPage() {
       width: 120,
       render: (v: string) => v
         ? <Tag icon={<EnvironmentOutlined />} color="geekblue" style={{ fontSize: 11 }}>{v}</Tag>
-        : <span style={{ color: '#bfbfbf' }}>—</span>,
+        : <span style={{ color: 'var(--app-text-soft)' }}>—</span>,
     },
     {
       title: 'Unit Cost',
@@ -351,7 +351,7 @@ export default function InventoryPage() {
       ellipsis: true,
       render: (v: string) => v
         ? <Tag color="purple" style={{ fontSize: 11 }}>{v}</Tag>
-        : <span style={{ color: '#bfbfbf', fontSize: 12 }}>—</span>,
+        : <span style={{ color: 'var(--app-text-soft)', fontSize: 12 }}>—</span>,
     },
     {
       title: 'Actions',
@@ -420,7 +420,7 @@ export default function InventoryPage() {
       width: 160,
       render: (v: string) => v
         ? <Tag color="purple" style={{ fontSize: 11 }}>{v}</Tag>
-        : <span style={{ color: '#bfbfbf', fontSize: 12 }}>Not assigned</span>,
+        : <span style={{ color: 'var(--app-text-soft)', fontSize: 12 }}>Not assigned</span>,
     },
     {
       title: 'Unit Cost',
@@ -449,11 +449,20 @@ export default function InventoryPage() {
   // ── Error state ────────────────────────────────────────────────────────────
   if (isError) {
     return (
-      <div style={{ padding: 24, background: '#f5f6fa', minHeight: '100vh' }}>
-        <Card style={{ borderRadius: 12, textAlign: 'center', padding: '40px 0' }}>
+      <div style={{ padding: 24, minHeight: '100vh' }}>
+        <Card
+          style={{
+            borderRadius: 12,
+            textAlign: 'center',
+            padding: '40px 0',
+            background: 'rgba(8, 25, 40, 0.72)',
+            border: '1px solid rgba(134, 166, 197, 0.12)',
+            boxShadow: '0 20px 50px rgba(2, 10, 19, 0.22)',
+          }}
+        >
           <WarningOutlined style={{ fontSize: 48, color: '#ff4d4f', marginBottom: 16 }} />
           <h2>Error Loading Inventory</h2>
-          <p style={{ color: '#666', marginBottom: 24 }}>{(error as Error)?.message}</p>
+          <p style={{ color: 'var(--app-text-muted)', marginBottom: 24 }}>{(error as Error)?.message}</p>
           <Space>
             <Button type="primary" icon={<ReloadOutlined />} onClick={() => queryClient.invalidateQueries({ queryKey: ['inventory'] })}>Retry</Button>
             {canCreateInventory && <Button onClick={() => navigate('/inventory/create')}>Add First Item</Button>}
@@ -467,16 +476,16 @@ export default function InventoryPage() {
   const alertCount = (reorderAlerts as unknown[]).length;
 
   return (
-    <div style={{ padding: 24, background: '#f5f6fa', minHeight: '100vh' }}>
+    <div style={{ padding: 24, minHeight: '100vh' }}>
 
       {/* Page header */}
       <div style={{ marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#1a1a2e' }}>
+          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: 'var(--app-text)' }}>
             <DatabaseOutlined style={{ marginRight: 10, color: '#1677ff' }} />
             Inventory
           </h1>
-          <p style={{ margin: '4px 0 0', color: '#8c8c8c', fontSize: 13 }}>
+          <p style={{ margin: '4px 0 0', color: 'var(--app-text-muted)', fontSize: 13 }}>
             Track stock levels, valuations, and reorder alerts across all locations
           </p>
         </div>
@@ -548,13 +557,18 @@ export default function InventoryPage() {
       <Row gutter={12} style={{ marginBottom: 20 }}>
         <Col xs={24} lg={16}>
           <Card
-            style={{ borderRadius: 12, border: '1px solid #d9f7be', background: 'linear-gradient(135deg, #fbfff7 0%, #f4ffeb 100%)' }}
+            style={{
+              borderRadius: 12,
+              border: '1px solid rgba(84, 214, 255, 0.18)',
+              background: 'linear-gradient(135deg, rgba(8, 41, 63, 0.94) 0%, rgba(11, 57, 83, 0.88) 100%)',
+              boxShadow: '0 20px 40px rgba(2, 10, 19, 0.18)',
+            }}
             styles={{ body: { padding: '16px 18px' } }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
               <div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: '#1a1a2e' }}>Inventory Operations Desk</div>
-                <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--app-text)' }}>Inventory Operations Desk</div>
+                <div style={{ fontSize: 12, color: 'var(--app-text-muted)', marginTop: 4 }}>
                   Switch between stock risk, reserved inventory, and highest-value positions instantly.
                 </div>
               </div>
@@ -588,24 +602,32 @@ export default function InventoryPage() {
           </Card>
         </Col>
         <Col xs={24} lg={8}>
-          <Card style={{ borderRadius: 12 }} styles={{ body: { padding: '16px 18px' } }}>
+          <Card
+            style={{
+              borderRadius: 12,
+              background: 'rgba(8, 25, 40, 0.72)',
+              border: '1px solid rgba(134, 166, 197, 0.12)',
+              boxShadow: '0 20px 50px rgba(2, 10, 19, 0.22)',
+            }}
+            styles={{ body: { padding: '16px 18px' } }}
+          >
             <div style={{ display: 'grid', gap: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                <span style={{ color: '#6b7280', fontSize: 12 }}>Reserved units</span>
+                <span style={{ color: 'var(--app-text-muted)', fontSize: 12 }}>Reserved units</span>
                 <strong>{inventoryInsights.totalReserved}</strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                <span style={{ color: '#6b7280', fontSize: 12 }}>Blocked value</span>
+                <span style={{ color: 'var(--app-text-muted)', fontSize: 12 }}>Blocked value</span>
                 <strong style={{ color: inventoryInsights.blockedValue > 0 ? '#fa8c16' : '#52c41a' }}>
                   {fmt(inventoryInsights.blockedValue)}
                 </strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                <span style={{ color: '#6b7280', fontSize: 12 }}>Available value</span>
+                <span style={{ color: 'var(--app-text-muted)', fontSize: 12 }}>Available value</span>
                 <strong>{fmt(inventoryInsights.availableValue)}</strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                <span style={{ color: '#6b7280', fontSize: 12 }}>Largest position</span>
+                <span style={{ color: 'var(--app-text-muted)', fontSize: 12 }}>Largest position</span>
                 <strong>
                   {inventoryInsights.highValueItem
                     ? `${inventoryInsights.highValueItem.product_name} (${fmt(toNum(inventoryInsights.highValueItem.quantity) * toNum(inventoryInsights.highValueItem.unit_cost))})`
@@ -633,7 +655,12 @@ export default function InventoryPage() {
 
       {/* Main card with tabs */}
       <Card
-        style={{ borderRadius: 12, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}
+        style={{
+          borderRadius: 12,
+          background: 'rgba(8, 25, 40, 0.72)',
+          border: '1px solid rgba(134, 166, 197, 0.12)',
+          boxShadow: '0 20px 50px rgba(2, 10, 19, 0.22)',
+        }}
         styles={{ body: { padding: 0 } }}
       >
         <Tabs
@@ -681,7 +708,7 @@ export default function InventoryPage() {
               children: (
                 <div>
                   {/* Filters bar */}
-                  <div style={{ padding: '16px 0', borderBottom: '1px solid #f0f0f0' }}>
+                  <div style={{ padding: '16px 0', borderBottom: '1px solid rgba(134, 166, 197, 0.12)' }}>
                     <Row gutter={12} align="middle">
                       <Col xs={24} md={10}>
                         <Search
@@ -811,11 +838,11 @@ export default function InventoryPage() {
           <div>
             <Row gutter={16} style={{ marginBottom: 16 }}>
               <Col span={12}>
-                <div style={{ fontSize: 12, color: '#8c8c8c' }}>Supplier</div>
-                <div style={{ fontWeight: 600 }}>{reorderModal.supplier_name || <span style={{ color: '#bfbfbf' }}>Not assigned</span>}</div>
+                <div style={{ fontSize: 12, color: 'var(--app-text-muted)' }}>Supplier</div>
+                <div style={{ fontWeight: 600 }}>{reorderModal.supplier_name || <span style={{ color: 'var(--app-text-soft)' }}>Not assigned</span>}</div>
               </Col>
               <Col span={12}>
-                <div style={{ fontSize: 12, color: '#8c8c8c' }}>Unit Cost</div>
+                <div style={{ fontSize: 12, color: 'var(--app-text-muted)' }}>Unit Cost</div>
                 <div style={{ fontWeight: 600, fontFamily: 'monospace' }}>${Number(reorderModal.unit_cost).toFixed(2)}</div>
               </Col>
             </Row>
@@ -829,11 +856,11 @@ export default function InventoryPage() {
             />
             <div style={{
               marginTop: 16, padding: '12px 16px', borderRadius: 8,
-              background: '#f6ffed', border: '1px solid #b7eb8f',
+              background: 'rgba(82,196,26,0.10)', border: '1px solid rgba(82,196,26,0.24)',
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
             }}>
               <span style={{ color: '#52c41a', fontWeight: 500 }}>Estimated Total</span>
-              <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 16, color: '#1a1a2e' }}>
+              <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 16, color: 'var(--app-text)' }}>
                 ${(reorderQty * Number(reorderModal.unit_cost)).toFixed(2)}
               </span>
             </div>
@@ -849,8 +876,8 @@ export default function InventoryPage() {
 
       {/* Row styles */}
       <style>{`
-        .row-out-of-stock td { background: #fff2f0 !important; }
-        .row-low-stock td { background: #fff7e6 !important; }
+        .row-out-of-stock td { background: rgba(255,77,79,0.10) !important; }
+        .row-low-stock td { background: rgba(250,140,22,0.10) !important; }
         .ant-tabs-content-holder { padding: 0 20px 20px; }
       `}</style>
     </div>

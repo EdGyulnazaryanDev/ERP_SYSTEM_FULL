@@ -30,8 +30,8 @@ const ZONE_COLORS: Record<string, string> = {
 };
 
 function ZoneBadge({ zone }: { zone: string }) {
-  if (!zone) return <span style={{ color: '#bfbfbf' }}>—</span>;
-  const color = ZONE_COLORS[zone] || '#595959';
+  if (!zone) return <span style={{ color: 'var(--app-text-soft)' }}>—</span>;
+  const color = ZONE_COLORS[zone] || 'var(--app-text-muted)';
   return (
     <span style={{
       display: 'inline-block', padding: '2px 8px', borderRadius: 6,
@@ -147,7 +147,7 @@ export default function BinsTab() {
       title: 'Capacity', dataIndex: 'capacity', key: 'capacity', width: 100, align: 'right' as const,
       render: (v: number | null) => v
         ? <span style={{ fontFamily: 'monospace', fontWeight: 600, color: '#1677ff' }}>{v.toLocaleString()}</span>
-        : <span style={{ color: '#bfbfbf' }}>—</span>,
+        : <span style={{ color: 'var(--app-text-soft)' }}>—</span>,
     },
     {
       title: '', key: 'actions', width: 80, align: 'center' as const,
@@ -172,7 +172,7 @@ export default function BinsTab() {
       {/* Toolbar */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <Space wrap>
-          <span style={{ fontWeight: 700, color: '#1a1a2e', fontSize: 14 }}>
+          <span style={{ fontWeight: 700, color: 'var(--app-text)', fontSize: 14 }}>
             <AppstoreOutlined style={{ color: '#722ed1', marginRight: 6 }} />
             {filtered.length} bins
           </span>

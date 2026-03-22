@@ -6,7 +6,7 @@ import { crmApi } from '@/api/crm';
 
 const STATUS_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
   active:   { color: '#52c41a', bg: '#f6ffed', label: 'Active' },
-  inactive: { color: '#8c8c8c', bg: '#fafafa', label: 'Inactive' },
+  inactive: { color: '#8fa3b8', bg: 'rgba(255,255,255,0.04)', label: 'Inactive' },
   prospect: { color: '#fa8c16', bg: '#fff7e6', label: 'Prospect' },
   blocked:  { color: '#ff4d4f', bg: '#fff2f0', label: 'Blocked' },
 };
@@ -17,7 +17,7 @@ const TYPE_CONFIG: Record<string, { color: string; label: string }> = {
 };
 
 function StatusPill({ status }: { status: string }) {
-  const cfg = STATUS_CONFIG[status] || { color: '#8c8c8c', bg: '#fafafa', label: status };
+  const cfg = STATUS_CONFIG[status] || { color: '#8fa3b8', bg: 'rgba(255,255,255,0.04)', label: status };
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 4,
@@ -83,14 +83,14 @@ export default function CustomersTab() {
 
   const columns = [
     { title: 'Code', dataIndex: 'customer_code', key: 'customer_code', width: 110,
-      render: (v: string) => <span style={{ fontFamily: 'monospace', fontSize: 12, color: '#595959' }}>{v}</span> },
+      render: (v: string) => <span style={{ fontFamily: 'monospace', fontSize: 12, color: 'var(--app-text-muted)' }}>{v}</span> },
     { title: 'Company', dataIndex: 'company_name', key: 'company_name', render: (v: string) => <span style={{ fontWeight: 600 }}>{v}</span> },
     { title: 'Contact', dataIndex: 'contact_person', key: 'contact_person' },
     { title: 'Email', dataIndex: 'email', key: 'email', ellipsis: true },
     { title: 'Phone', dataIndex: 'phone', key: 'phone' },
     { title: 'Type', dataIndex: 'customer_type', key: 'customer_type', width: 110,
       render: (type: string) => {
-        const cfg = TYPE_CONFIG[type] || { color: '#8c8c8c', label: type };
+        const cfg = TYPE_CONFIG[type] || { color: 'default', label: type };
         return type ? <Tag color={cfg.color} style={{ fontSize: 11, fontWeight: 600 }}>{cfg.label}</Tag> : null;
       }
     },
@@ -120,7 +120,7 @@ export default function CustomersTab() {
         <Space wrap>
           <Input
             placeholder="Search customers..."
-            prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
+            prefix={<SearchOutlined style={{ color: 'var(--app-text-soft)' }} />}
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             allowClear
@@ -136,7 +136,7 @@ export default function CustomersTab() {
             <Select.Option value="business">Business</Select.Option>
             <Select.Option value="individual">Individual</Select.Option>
           </Select>
-          <span style={{ color: '#8c8c8c', fontSize: 13 }}>{filtered.length} customers</span>
+          <span style={{ color: 'var(--app-text-muted)', fontSize: 13 }}>{filtered.length} customers</span>
         </Space>
         <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 8 }} onClick={handleAdd}>Add Customer</Button>
       </div>
@@ -183,8 +183,8 @@ export default function CustomersTab() {
       </Modal>
 
       <style>{`
-        .row-blocked td { background: #fff2f0 !important; opacity: 0.8; }
-        .row-inactive td { background: #fafafa !important; opacity: 0.75; }
+        .row-blocked td { background: rgba(255,77,79,0.10) !important; opacity: 0.88; }
+        .row-inactive td { background: rgba(255,255,255,0.02) !important; opacity: 0.75; }
       `}</style>
     </div>
   );

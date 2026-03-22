@@ -123,8 +123,8 @@ export default function ResourcesTab() {
     <div style={{ padding: '16px 0' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
         <Space>
-          <Input placeholder="Search resources..." prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />} value={searchQuery} onChange={e => setSearchQuery(e.target.value)} allowClear style={{ width: 220, borderRadius: 8 }} />
-          <span style={{ color: '#8c8c8c', fontSize: 13 }}>{filtered.length} resources</span>
+          <Input placeholder="Search resources..." prefix={<SearchOutlined style={{ color: 'var(--app-text-soft)' }} />} value={searchQuery} onChange={e => setSearchQuery(e.target.value)} allowClear style={{ width: 220, borderRadius: 8 }} />
+          <span style={{ color: 'var(--app-text-muted)', fontSize: 13 }}>{filtered.length} resources</span>
         </Space>
         {canCreateResources && <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 8 }} onClick={() => { setEditingRecord(null); setIsModalVisible(true); form.resetFields(); }}>Assign Resource</Button>}
       </div>

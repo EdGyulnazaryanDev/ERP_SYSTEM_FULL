@@ -8,18 +8,18 @@ import dayjs from 'dayjs';
 import { useAccessControl } from '@/hooks/useAccessControl';
 
 const STATUS_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
-  draft:            { color: '#8c8c8c', bg: '#fafafa',   label: 'Draft' },
+  draft:            { color: '#8fa3b8', bg: 'rgba(255,255,255,0.04)', label: 'Draft' },
   pending_approval: { color: '#fa8c16', bg: '#fff7e6',   label: 'Pending' },
   pending:          { color: '#fa8c16', bg: '#fff7e6',   label: 'Pending' },
   approved:         { color: '#52c41a', bg: '#f6ffed',   label: 'Approved' },
   rejected:         { color: '#ff4d4f', bg: '#fff2f0',   label: 'Rejected' },
-  cancelled:        { color: '#bfbfbf', bg: '#f5f5f5',   label: 'Cancelled' },
+  cancelled:        { color: '#9db0c4', bg: 'rgba(255,255,255,0.03)', label: 'Cancelled' },
   received:         { color: '#1677ff', bg: '#e6f4ff',   label: 'Received' },
 };
 
 function StatusPill({ status }: { status: string }) {
   const key = (status || '').toLowerCase();
-  const cfg = STATUS_CONFIG[key] || { color: '#8c8c8c', bg: '#fafafa', label: status };
+  const cfg = STATUS_CONFIG[key] || { color: '#8fa3b8', bg: 'rgba(255,255,255,0.04)', label: status };
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center',
@@ -133,14 +133,14 @@ export default function PurchaseOrdersTab() {
     <div style={{ padding: '16px 0' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
         <Space>
-          <Input placeholder="Search PO number, vendor..." prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
+          <Input placeholder="Search PO number, vendor..." prefix={<SearchOutlined style={{ color: 'var(--app-text-soft)' }} />}
             value={searchQuery} onChange={e => setSearchQuery(e.target.value)} allowClear style={{ width: 240, borderRadius: 8 }} />
           <Select placeholder="All statuses" allowClear style={{ width: 150 }} value={statusFilter || undefined} onChange={v => setStatusFilter(v || '')}>
             {Object.entries(STATUS_CONFIG).filter(([k]) => !['pending'].includes(k)).map(([k, v]) =>
               <Select.Option key={k} value={k}>{v.label}</Select.Option>
             )}
           </Select>
-          <span style={{ color: '#8c8c8c', fontSize: 13 }}>{filtered.length} orders</span>
+          <span style={{ color: 'var(--app-text-muted)', fontSize: 13 }}>{filtered.length} orders</span>
         </Space>
         <Space>
           <Tooltip title="Refresh">
@@ -214,8 +214,8 @@ export default function PurchaseOrdersTab() {
       )}
 
       <style>{`
-        .row-approved td { background: #f6ffed !important; }
-        .row-rejected td { background: #fff2f0 !important; opacity: 0.8; }
+        .row-approved td { background: rgba(82,196,26,0.10) !important; }
+        .row-rejected td { background: rgba(255,77,79,0.10) !important; opacity: 0.88; }
       `}</style>
     </div>
   );

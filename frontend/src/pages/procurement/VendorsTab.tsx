@@ -9,9 +9,9 @@ function StatusPill({ active }: { active: boolean }) {
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 4,
       padding: '3px 10px', borderRadius: 20,
-      background: active ? '#f6ffed' : '#f5f5f5',
-      color: active ? '#52c41a' : '#8c8c8c',
-      border: `1px solid ${active ? '#52c41a33' : '#d9d9d9'}`,
+      background: active ? 'rgba(82,196,26,0.14)' : 'rgba(255,255,255,0.04)',
+      color: active ? '#52c41a' : 'var(--app-text-muted)',
+      border: `1px solid ${active ? '#52c41a33' : 'rgba(134, 166, 197, 0.16)'}`,
       fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
     }}>
       {active ? <CheckCircleOutlined /> : <CloseCircleOutlined />}
@@ -117,8 +117,8 @@ export default function VendorsTab() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <Space>
           <TeamOutlined style={{ color: '#52c41a', fontSize: 16 }} />
-          <span style={{ fontWeight: 600, color: '#1a1a2e' }}>{filtered.length} vendors</span>
-          <span style={{ fontSize: 12, color: '#8c8c8c' }}>
+          <span style={{ fontWeight: 600, color: 'var(--app-text)' }}>{filtered.length} vendors</span>
+          <span style={{ fontSize: 12, color: 'var(--app-text-muted)' }}>
             ({activeCount} active, {inactiveCount} inactive)
           </span>
           <Input.Search
@@ -197,7 +197,7 @@ export default function VendorsTab() {
       </Modal>
 
       <style>{`
-        .row-inactive td { background: #fafafa !important; color: #bfbfbf; }
+        .row-inactive td { background: rgba(255,255,255,0.02) !important; color: var(--app-text-soft); }
       `}</style>
     </div>
   );

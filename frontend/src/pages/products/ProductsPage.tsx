@@ -48,10 +48,10 @@ function StatCard({
           {icon}
         </div>
         <div>
-          <div style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.2, color: '#1a1a2e' }}>
+          <div style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.2, color: 'var(--app-text)' }}>
             {value}{suffix && <span style={{ fontSize: 12, fontWeight: 400, marginLeft: 2 }}>{suffix}</span>}
           </div>
-          <div style={{ fontSize: 12, color: active ? color : '#8c8c8c', fontWeight: active ? 600 : 400, marginTop: 2 }}>
+          <div style={{ fontSize: 12, color: active ? color : 'var(--app-text-muted)', fontWeight: active ? 600 : 400, marginTop: 2 }}>
             {label}
           </div>
         </div>
@@ -391,7 +391,7 @@ export default function ProductsPage() {
       width: 130,
       fixed: 'left' as const,
       render: (text: string) => (
-        <span style={{ fontFamily: 'monospace', fontSize: 12, color: '#595959' }}>{text}</span>
+        <span style={{ fontFamily: 'monospace', fontSize: 12, color: 'var(--app-text-muted)' }}>{text}</span>
       ),
     },
     {
@@ -400,12 +400,12 @@ export default function ProductsPage() {
       key: 'name',
       render: (text: string, record: Product) => (
         <div>
-          <div style={{ fontWeight: 600, color: '#1a1a2e' }}>{text}</div>
+          <div style={{ fontWeight: 600, color: 'var(--app-text)' }}>{text}</div>
           {record.category && (
             <Tag color="blue" style={{ fontSize: 10, marginTop: 2 }}>{record.category}</Tag>
           )}
           {record.description && (
-            <div style={{ fontSize: 11, color: '#8c8c8c', marginTop: 2, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ fontSize: 11, color: 'var(--app-text-muted)', marginTop: 2, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {record.description}
             </div>
           )}
@@ -487,7 +487,7 @@ export default function ProductsPage() {
       ellipsis: true,
       render: (supplier: string) => supplier
         ? <Tag color="geekblue" style={{ fontSize: 11 }}>{supplier}</Tag>
-        : <span style={{ color: '#bfbfbf', fontSize: 12 }}>—</span>,
+        : <span style={{ color: 'var(--app-text-soft)', fontSize: 12 }}>—</span>,
     },
     {
       title: 'Status',
@@ -500,7 +500,7 @@ export default function ProductsPage() {
           display: 'inline-flex', alignItems: 'center', gap: 4,
           padding: '3px 10px', borderRadius: 20,
           background: isActive ? '#f6ffed' : '#f5f5f5',
-          color: isActive ? '#52c41a' : '#8c8c8c',
+          color: isActive ? '#52c41a' : 'var(--app-text-muted)',
           border: `1px solid ${isActive ? '#52c41a33' : '#d9d9d9'}`,
           fontSize: 11, fontWeight: 600,
         }}>
@@ -544,16 +544,16 @@ export default function ProductsPage() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div style={{ padding: 24, background: '#f5f6fa', minHeight: '100vh' }}>
+    <div style={{ padding: 24, minHeight: '100vh' }}>
 
       {/* Page header */}
       <div style={{ marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#1a1a2e' }}>
+          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: 'var(--app-text)' }}>
             <AppstoreOutlined style={{ marginRight: 10, color: '#1677ff' }} />
             Products & Services
           </h1>
-          <p style={{ margin: '4px 0 0', color: '#8c8c8c', fontSize: 13 }}>
+          <p style={{ margin: '4px 0 0', color: 'var(--app-text-muted)', fontSize: 13 }}>
             Manage your product catalog, pricing, and stock levels
           </p>
         </div>
@@ -625,13 +625,18 @@ export default function ProductsPage() {
       <Row gutter={12} style={{ marginBottom: 20 }}>
         <Col xs={24} lg={16}>
           <Card
-            style={{ borderRadius: 12, border: '1px solid #d6e4ff', background: 'linear-gradient(135deg, #f7fbff 0%, #eef6ff 100%)' }}
+            style={{
+              borderRadius: 12,
+              border: '1px solid rgba(84, 214, 255, 0.18)',
+              background: 'linear-gradient(135deg, rgba(8, 41, 63, 0.94) 0%, rgba(11, 57, 83, 0.88) 100%)',
+              boxShadow: '0 20px 40px rgba(2, 10, 19, 0.18)',
+            }}
             styles={{ body: { padding: '16px 18px' } }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
               <div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: '#1a1a2e' }}>Product Control Tower</div>
-                <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--app-text)' }}>Product Control Tower</div>
+                <div style={{ fontSize: 12, color: 'var(--app-text-muted)', marginTop: 4 }}>
                   Focus on margin leaks, stock risk, and supplier gaps without leaving the page.
                 </div>
               </div>
@@ -665,24 +670,32 @@ export default function ProductsPage() {
           </Card>
         </Col>
         <Col xs={24} lg={8}>
-          <Card style={{ borderRadius: 12 }} styles={{ body: { padding: '16px 18px' } }}>
+          <Card
+            style={{
+              borderRadius: 12,
+              background: 'rgba(8, 25, 40, 0.72)',
+              border: '1px solid rgba(134, 166, 197, 0.12)',
+              boxShadow: '0 20px 50px rgba(2, 10, 19, 0.22)',
+            }}
+            styles={{ body: { padding: '16px 18px' } }}
+          >
             <div style={{ display: 'grid', gap: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                <span style={{ color: '#6b7280', fontSize: 12 }}>Average margin</span>
+                <span style={{ color: 'var(--app-text-muted)', fontSize: 12 }}>Average margin</span>
                 <strong style={{ color: productInsights.avgMargin >= 20 ? '#52c41a' : productInsights.avgMargin > 0 ? '#1677ff' : '#ff4d4f' }}>
                   {productInsights.avgMargin.toFixed(1)}%
                 </strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                <span style={{ color: '#6b7280', fontSize: 12 }}>Top category</span>
+                <span style={{ color: 'var(--app-text-muted)', fontSize: 12 }}>Top category</span>
                 <strong>{productInsights.topCategory ? `${productInsights.topCategory[0]} (${productInsights.topCategory[1]})` : '—'}</strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                <span style={{ color: '#6b7280', fontSize: 12 }}>Missing supplier</span>
+                <span style={{ color: 'var(--app-text-muted)', fontSize: 12 }}>Missing supplier</span>
                 <strong>{productInsights.unsourcedCount}</strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                <span style={{ color: '#6b7280', fontSize: 12 }}>Negative margin items</span>
+                <span style={{ color: 'var(--app-text-muted)', fontSize: 12 }}>Negative margin items</span>
                 <strong style={{ color: productInsights.negativeMarginCount ? '#ff4d4f' : '#52c41a' }}>
                   {productInsights.negativeMarginCount}
                 </strong>
@@ -722,11 +735,16 @@ export default function ProductsPage() {
 
       {/* Main table card */}
       <Card
-        style={{ borderRadius: 12, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}
+        style={{
+          borderRadius: 12,
+          background: 'rgba(8, 25, 40, 0.72)',
+          border: '1px solid rgba(134, 166, 197, 0.12)',
+          boxShadow: '0 20px 50px rgba(2, 10, 19, 0.22)',
+        }}
         styles={{ body: { padding: 0 } }}
       >
         {/* Filters bar */}
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid #f0f0f0' }}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(134, 166, 197, 0.12)' }}>
           <Row gutter={12} align="middle">
             <Col xs={24} md={8}>
               <Input
@@ -826,7 +844,7 @@ export default function ProductsPage() {
               >
                 <div>
                   <div style={{ fontWeight: 500 }}>{p.name}</div>
-                  <div style={{ fontSize: 11, color: '#8c8c8c' }}>{p.sku} • {p.supplier || '—'}</div>
+                  <div style={{ fontSize: 11, color: 'var(--app-text-muted)' }}>{p.sku} • {p.supplier || '—'}</div>
                 </div>
               </List.Item>
             )}
@@ -836,9 +854,9 @@ export default function ProductsPage() {
 
       {/* Row highlight styles */}
       <style>{`
-        .row-inactive td { background: #fafafa !important; opacity: 0.7; }
-        .row-out-of-stock td { background: #fff2f0 !important; }
-        .row-low-stock td { background: #fff7e6 !important; }
+        .row-inactive td { background: rgba(255,255,255,0.02) !important; opacity: 0.72; }
+        .row-out-of-stock td { background: rgba(255,77,79,0.10) !important; }
+        .row-low-stock td { background: rgba(250,140,22,0.10) !important; }
       `}</style>
 
       {/* Product Form Modal */}

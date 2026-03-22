@@ -51,7 +51,7 @@ const accountSubtypes: Record<string, { label: string; value: string }[]> = {
 };
 
 function TypePill({ type }: { type: string }) {
-  const cfg = TYPE_STYLE[type] ?? { color: '#8c8c8c', bg: '#f5f5f5' };
+  const cfg = TYPE_STYLE[type] ?? { color: 'var(--app-text-muted)', bg: 'rgba(255,255,255,0.04)' };
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center',
@@ -116,7 +116,7 @@ export default function ChartOfAccountsTab() {
       dataIndex: 'account_code',
       key: 'account_code',
       width: 100,
-      render: (v: string) => <span style={{ fontFamily: 'monospace', fontWeight: 600, color: '#595959' }}>{v}</span>,
+      render: (v: string) => <span style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--app-text-muted)' }}>{v}</span>,
     },
     {
       title: 'Account Name',
@@ -124,8 +124,8 @@ export default function ChartOfAccountsTab() {
       key: 'account_name',
       render: (v: string, r: any) => (
         <div>
-          <div style={{ fontWeight: 600, color: '#1a1a2e' }}>{v}</div>
-          {r.description && <div style={{ fontSize: 11, color: '#8c8c8c', marginTop: 1 }}>{r.description}</div>}
+          <div style={{ fontWeight: 600, color: 'var(--app-text)' }}>{v}</div>
+          {r.description && <div style={{ fontSize: 11, color: 'var(--app-text-muted)', marginTop: 1 }}>{r.description}</div>}
         </div>
       ),
     },
@@ -143,7 +143,7 @@ export default function ChartOfAccountsTab() {
       width: 160,
       render: (v: string) => v
         ? <Tag style={{ fontSize: 11 }}>{v.replace(/_/g, ' ')}</Tag>
-        : <span style={{ color: '#bfbfbf' }}>—</span>,
+        : <span style={{ color: 'var(--app-text-soft)' }}>—</span>,
     },
     {
       title: 'Balance',
@@ -153,7 +153,7 @@ export default function ChartOfAccountsTab() {
       align: 'right' as const,
       render: (v: number) => {
         const n = Number(v || 0);
-        const color = n > 0 ? '#52c41a' : n < 0 ? '#ff4d4f' : '#8c8c8c';
+        const color = n > 0 ? '#52c41a' : n < 0 ? '#ff4d4f' : 'var(--app-text-muted)';
         return <span style={{ fontFamily: 'monospace', fontWeight: 700, color }}>${n.toFixed(2)}</span>;
       },
     },
@@ -167,9 +167,9 @@ export default function ChartOfAccountsTab() {
         <span style={{
           display: 'inline-flex', alignItems: 'center', gap: 3,
           padding: '2px 8px', borderRadius: 20,
-          background: v ? '#f6ffed' : '#f5f5f5',
-          color: v ? '#52c41a' : '#8c8c8c',
-          border: `1px solid ${v ? '#52c41a33' : '#d9d9d9'}`,
+          background: v ? 'rgba(82,196,26,0.14)' : 'rgba(255,255,255,0.04)',
+          color: v ? '#52c41a' : 'var(--app-text-muted)',
+          border: `1px solid ${v ? '#52c41a33' : 'rgba(134, 166, 197, 0.16)'}`,
           fontSize: 11, fontWeight: 600,
         }}>
           {v ? 'Active' : 'Inactive'}
@@ -214,7 +214,7 @@ export default function ChartOfAccountsTab() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <Space>
           <AccountBookOutlined style={{ color: '#1677ff', fontSize: 16 }} />
-          <span style={{ fontWeight: 600, color: '#1a1a2e' }}>
+          <span style={{ fontWeight: 600, color: 'var(--app-text)' }}>
             {filtered.length} account{filtered.length !== 1 ? 's' : ''}
           </span>
           <Select

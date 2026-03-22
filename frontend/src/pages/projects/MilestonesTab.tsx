@@ -13,7 +13,7 @@ const STATUS_CONFIG: Record<string, { color: string; bg: string; label: string }
 };
 
 function StatusPill({ status }: { status: string }) {
-  const cfg = STATUS_CONFIG[status] || { color: '#8c8c8c', bg: '#fafafa', label: status };
+  const cfg = STATUS_CONFIG[status] || { color: '#8fa3b8', bg: 'rgba(255,255,255,0.04)', label: status };
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center',
@@ -82,7 +82,7 @@ export default function MilestonesTab() {
       render: (d: string, r: any) => {
         if (!d) return '-';
         const isOverdue = dayjs(d).isBefore(dayjs()) && r.status !== 'completed';
-        return <span style={{ color: isOverdue ? '#ff4d4f' : '#595959', fontSize: 12 }}>{isOverdue && '⚠ '}{dayjs(d).format('MMM DD, YYYY')}</span>;
+        return <span style={{ color: isOverdue ? '#ff4d4f' : 'var(--app-text-muted)', fontSize: 12 }}>{isOverdue && '⚠ '}{dayjs(d).format('MMM DD, YYYY')}</span>;
       }
     },
     { title: 'Status', dataIndex: 'status', key: 'status', width: 130, render: (s: string) => s ? <StatusPill status={s} /> : null },
@@ -104,11 +104,11 @@ export default function MilestonesTab() {
     <div style={{ padding: '16px 0' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
         <Space>
-          <Input placeholder="Search milestones..." prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />} value={searchQuery} onChange={e => setSearchQuery(e.target.value)} allowClear style={{ width: 220, borderRadius: 8 }} />
+          <Input placeholder="Search milestones..." prefix={<SearchOutlined style={{ color: 'var(--app-text-soft)' }} />} value={searchQuery} onChange={e => setSearchQuery(e.target.value)} allowClear style={{ width: 220, borderRadius: 8 }} />
           <Select placeholder="Status" allowClear style={{ width: 140 }} value={statusFilter || undefined} onChange={v => setStatusFilter(v || '')}>
             {Object.entries(STATUS_CONFIG).map(([k, v]) => <Select.Option key={k} value={k}>{v.label}</Select.Option>)}
           </Select>
-          <span style={{ color: '#8c8c8c', fontSize: 13 }}>{filtered.length} milestones</span>
+          <span style={{ color: 'var(--app-text-muted)', fontSize: 13 }}>{filtered.length} milestones</span>
         </Space>
         <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 8 }} onClick={() => { setEditingRecord(null); setIsModalVisible(true); form.resetFields(); }}>New Milestone</Button>
       </div>
@@ -155,8 +155,8 @@ export default function MilestonesTab() {
       </Modal>
 
       <style>{`
-        .row-completed td { background: #f6ffed !important; }
-        .row-delayed td { background: #fff2f0 !important; }
+        .row-completed td { background: rgba(82,196,26,0.10) !important; }
+        .row-delayed td { background: rgba(255,77,79,0.10) !important; }
       `}</style>
     </div>
   );

@@ -39,8 +39,8 @@ function StatCard({ label, value, color, icon, active, onClick }: {
           {icon}
         </div>
         <div>
-          <div style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.2, color: '#1a1a2e' }}>{value}</div>
-          <div style={{ fontSize: 12, color: active ? color : '#8c8c8c', fontWeight: active ? 600 : 400, marginTop: 2 }}>{label}</div>
+          <div style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.2, color: 'var(--app-text)' }}>{value}</div>
+          <div style={{ fontSize: 12, color: active ? color : 'var(--app-text-muted)', fontWeight: active ? 600 : 400, marginTop: 2 }}>{label}</div>
         </div>
       </div>
     </Card>
@@ -89,14 +89,14 @@ export default function HRPage() {
   ];
 
   return (
-    <div style={{ padding: 24, background: '#f5f6fa', minHeight: '100vh' }}>
+    <div style={{ minHeight: '100vh' }}>
       <div style={{ marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#1a1a2e' }}>
+          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: 'var(--app-text)' }}>
             <TeamOutlined style={{ marginRight: 10, color: '#1677ff' }} />
             Human Resources
           </h1>
-          <p style={{ margin: '4px 0 0', color: '#8c8c8c', fontSize: 13 }}>
+          <p style={{ margin: '4px 0 0', color: 'var(--app-text-muted)', fontSize: 13 }}>
             Employees, attendance, payroll and leave management
           </p>
         </div>
@@ -125,7 +125,15 @@ export default function HRPage() {
         </Col>
       </Row>
 
-      <Card style={{ borderRadius: 12, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }} bodyStyle={{ padding: 0 }}>
+      <Card
+        style={{
+          borderRadius: 16,
+          background: 'rgba(8, 25, 40, 0.72)',
+          border: '1px solid rgba(134, 166, 197, 0.12)',
+          boxShadow: '0 20px 50px rgba(2, 10, 19, 0.2)',
+        }}
+        bodyStyle={{ padding: 0 }}
+      >
         <Tabs
           activeKey={activeTab}
           onChange={setActiveTab}

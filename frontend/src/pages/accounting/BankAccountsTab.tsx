@@ -57,15 +57,15 @@ export default function BankAccountsTab() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div style={{
             width: 32, height: 32, borderRadius: 8,
-            background: r.is_active ? '#e6f4ff' : '#f5f5f5',
+            background: r.is_active ? 'rgba(22,119,255,0.16)' : 'rgba(255,255,255,0.04)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: r.is_active ? '#1677ff' : '#8c8c8c', fontSize: 14, flexShrink: 0,
+            color: r.is_active ? '#1677ff' : 'var(--app-text-muted)', fontSize: 14, flexShrink: 0,
           }}>
             <BankOutlined />
           </div>
           <div>
-            <div style={{ fontWeight: 600, color: '#1a1a2e' }}>{v}</div>
-            <div style={{ fontSize: 11, color: '#8c8c8c' }}>{r.bank_name}</div>
+            <div style={{ fontWeight: 600, color: 'var(--app-text)' }}>{v}</div>
+            <div style={{ fontSize: 11, color: 'var(--app-text-muted)' }}>{r.bank_name}</div>
           </div>
         </div>
       ),
@@ -76,7 +76,7 @@ export default function BankAccountsTab() {
       key: 'account_number',
       width: 160,
       render: (v: string) => (
-        <span style={{ fontFamily: 'monospace', fontSize: 12, color: '#595959' }}>
+        <span style={{ fontFamily: 'monospace', fontSize: 12, color: 'var(--app-text-muted)' }}>
           {'•'.repeat(Math.max(0, (v || '').length - 4))}{(v || '').slice(-4)}
         </span>
       ),
@@ -90,7 +90,7 @@ export default function BankAccountsTab() {
       render: (v: string) => (
         <span style={{
           display: 'inline-block', padding: '2px 8px', borderRadius: 6,
-          background: '#f0f5ff', color: '#1677ff',
+          background: 'rgba(22,119,255,0.16)', color: '#58a6ff',
           fontSize: 11, fontWeight: 700,
         }}>{v || 'USD'}</span>
       ),
@@ -104,7 +104,7 @@ export default function BankAccountsTab() {
       render: (v: number) => {
         const n = Number(v || 0);
         return (
-          <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 14, color: n >= 0 ? '#1a1a2e' : '#ff4d4f' }}>
+          <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 14, color: n >= 0 ? 'var(--app-text)' : '#ff4d4f' }}>
             ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </span>
         );
@@ -120,9 +120,9 @@ export default function BankAccountsTab() {
         <span style={{
           display: 'inline-flex', alignItems: 'center', gap: 3,
           padding: '2px 8px', borderRadius: 20,
-          background: v ? '#f6ffed' : '#f5f5f5',
-          color: v ? '#52c41a' : '#8c8c8c',
-          border: `1px solid ${v ? '#52c41a33' : '#d9d9d9'}`,
+          background: v ? 'rgba(82,196,26,0.14)' : 'rgba(255,255,255,0.04)',
+          color: v ? '#52c41a' : 'var(--app-text-muted)',
+          border: `1px solid ${v ? '#52c41a33' : 'rgba(134, 166, 197, 0.16)'}`,
           fontSize: 11, fontWeight: 600,
         }}>
           {v ? <CheckCircleOutlined /> : <StopOutlined />}
@@ -149,18 +149,23 @@ export default function BankAccountsTab() {
       {rawList.length > 0 && (
         <Card
           size="small"
-          style={{ marginBottom: 16, borderRadius: 10, border: '1px solid #1677ff22', background: '#1677ff08' }}
+          style={{
+            marginBottom: 16,
+            borderRadius: 10,
+            border: '1px solid rgba(22,119,255,0.18)',
+            background: 'linear-gradient(135deg, rgba(22,119,255,0.14) 0%, rgba(8, 25, 40, 0.58) 100%)',
+          }}
           styles={{ body: { padding: '12px 18px' } }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Space>
               <BankOutlined style={{ color: '#1677ff', fontSize: 16 }} />
-              <span style={{ fontWeight: 600, color: '#1a1a2e' }}>
+              <span style={{ fontWeight: 600, color: 'var(--app-text)' }}>
                 {rawList.length} bank account{rawList.length !== 1 ? 's' : ''}
               </span>
             </Space>
             <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: 11, color: '#8c8c8c' }}>Total Balance</div>
+              <div style={{ fontSize: 11, color: 'var(--app-text-muted)' }}>Total Balance</div>
               <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 18, color: '#1677ff' }}>
                 ${totalBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>

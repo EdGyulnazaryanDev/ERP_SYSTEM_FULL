@@ -25,9 +25,9 @@ function StatusPill({ active }: { active: boolean }) {
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 4,
       padding: '3px 10px', borderRadius: 20,
-      background: active ? '#f6ffed' : '#f5f5f5',
-      color: active ? '#52c41a' : '#8c8c8c',
-      border: `1px solid ${active ? '#52c41a33' : '#d9d9d9'}`,
+      background: active ? 'rgba(82,196,26,0.14)' : 'rgba(255,255,255,0.04)',
+      color: active ? '#52c41a' : 'var(--app-text-muted)',
+      border: `1px solid ${active ? '#52c41a33' : 'rgba(134, 166, 197, 0.16)'}`,
       fontSize: 11, fontWeight: 600,
     }}>
       {active ? <CheckCircleOutlined /> : <CloseCircleOutlined />}
@@ -102,19 +102,19 @@ export default function WarehousesTab() {
       render: (v: string) => (
         <span style={{
           fontFamily: 'monospace', fontWeight: 700, fontSize: 12,
-          background: '#f0f5ff', color: '#1677ff',
-          padding: '2px 8px', borderRadius: 6, border: '1px solid #adc6ff',
+          background: 'rgba(22,119,255,0.16)', color: '#58a6ff',
+          padding: '2px 8px', borderRadius: 6, border: '1px solid rgba(88,166,255,0.24)',
         }}>{v}</span>
       ),
     },
     {
       title: 'Warehouse', dataIndex: 'warehouse_name', key: 'warehouse_name',
-      render: (v: string) => <span style={{ fontWeight: 600, color: '#1a1a2e' }}>{v}</span>,
+      render: (v: string) => <span style={{ fontWeight: 600, color: 'var(--app-text)' }}>{v}</span>,
     },
     {
       title: 'Location', dataIndex: 'location', key: 'location', ellipsis: true,
       render: (v: string) => v ? (
-        <span style={{ color: '#595959', fontSize: 12 }}>
+        <span style={{ color: 'var(--app-text-muted)', fontSize: 12 }}>
           <EnvironmentOutlined style={{ color: '#fa8c16', marginRight: 4 }} />{v}
         </span>
       ) : '—',
@@ -125,19 +125,19 @@ export default function WarehousesTab() {
         <span style={{ fontSize: 12 }}>
           <UserOutlined style={{ color: '#722ed1', marginRight: 4 }} />{v}
         </span>
-      ) : <span style={{ color: '#bfbfbf' }}>—</span>,
+      ) : <span style={{ color: 'var(--app-text-soft)' }}>—</span>,
     },
     {
       title: 'Capacity', dataIndex: 'capacity', key: 'capacity', width: 140,
       render: (v: number | null) => v ? (
         <Tooltip title={`${v.toLocaleString()} units`}>
           <div>
-            <div style={{ fontSize: 11, color: '#8c8c8c', marginBottom: 2 }}>{v.toLocaleString()} units</div>
+            <div style={{ fontSize: 11, color: 'var(--app-text-muted)', marginBottom: 2 }}>{v.toLocaleString()} units</div>
             <Progress percent={Math.min(100, Math.round((v / 10000) * 100))}
               size="small" strokeColor="#1677ff" showInfo={false} style={{ margin: 0 }} />
           </div>
         </Tooltip>
-      ) : <span style={{ color: '#bfbfbf', fontSize: 12 }}>—</span>,
+      ) : <span style={{ color: 'var(--app-text-soft)', fontSize: 12 }}>—</span>,
     },
     {
       title: 'Status', dataIndex: 'is_active', key: 'is_active', width: 110,
@@ -174,7 +174,7 @@ export default function WarehousesTab() {
       {/* Toolbar */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <Space>
-          <span style={{ fontWeight: 700, color: '#1a1a2e', fontSize: 14 }}>
+          <span style={{ fontWeight: 700, color: 'var(--app-text)', fontSize: 14 }}>
             🏭 {filtered.length} warehouses
           </span>
           <Input.Search
@@ -233,7 +233,7 @@ export default function WarehousesTab() {
       )}
 
       <style>{`
-        .row-inactive td { background: #fafafa !important; color: #bfbfbf; }
+        .row-inactive td { background: rgba(255,255,255,0.02) !important; color: var(--app-text-soft); }
       `}</style>
     </div>
   );

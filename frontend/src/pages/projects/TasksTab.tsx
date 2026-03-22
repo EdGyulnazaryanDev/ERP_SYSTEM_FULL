@@ -6,12 +6,12 @@ import apiClient from '@/api/client';
 import dayjs from 'dayjs';
 
 const STATUS_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
-  todo:        { color: '#8c8c8c', bg: '#fafafa',   label: 'To Do' },
+  todo:        { color: '#8fa3b8', bg: 'rgba(255,255,255,0.04)', label: 'To Do' },
   in_progress: { color: '#1677ff', bg: '#e6f4ff',   label: 'In Progress' },
   in_review:   { color: '#722ed1', bg: '#f9f0ff',   label: 'In Review' },
   completed:   { color: '#52c41a', bg: '#f6ffed',   label: 'Completed' },
   blocked:     { color: '#ff4d4f', bg: '#fff2f0',   label: 'Blocked' },
-  cancelled:   { color: '#bfbfbf', bg: '#f5f5f5',   label: 'Cancelled' },
+  cancelled:   { color: '#9db0c4', bg: 'rgba(255,255,255,0.03)', label: 'Cancelled' },
 };
 
 const PRIORITY_CONFIG: Record<string, { color: string; label: string }> = {
@@ -22,7 +22,7 @@ const PRIORITY_CONFIG: Record<string, { color: string; label: string }> = {
 };
 
 function StatusPill({ status }: { status: string }) {
-  const cfg = STATUS_CONFIG[status] || { color: '#8c8c8c', bg: '#fafafa', label: status };
+  const cfg = STATUS_CONFIG[status] || { color: '#8fa3b8', bg: 'rgba(255,255,255,0.04)', label: status };
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center',
@@ -91,7 +91,7 @@ export default function TasksTab() {
       render: (d: string, r: any) => {
         if (!d) return '-';
         const isOverdue = dayjs(d).isBefore(dayjs()) && r.status !== 'completed' && r.status !== 'cancelled';
-        return <span style={{ color: isOverdue ? '#ff4d4f' : '#595959', fontSize: 12 }}>{isOverdue && '⚠ '}{dayjs(d).format('MMM DD, YYYY')}</span>;
+        return <span style={{ color: isOverdue ? '#ff4d4f' : 'var(--app-text-muted)', fontSize: 12 }}>{isOverdue && '⚠ '}{dayjs(d).format('MMM DD, YYYY')}</span>;
       }
     },
     {
@@ -112,14 +112,14 @@ export default function TasksTab() {
     <div style={{ padding: '16px 0' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
         <Space>
-          <Input placeholder="Search tasks..." prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />} value={searchQuery} onChange={e => setSearchQuery(e.target.value)} allowClear style={{ width: 200, borderRadius: 8 }} />
+          <Input placeholder="Search tasks..." prefix={<SearchOutlined style={{ color: 'var(--app-text-soft)' }} />} value={searchQuery} onChange={e => setSearchQuery(e.target.value)} allowClear style={{ width: 200, borderRadius: 8 }} />
           <Select placeholder="Status" allowClear style={{ width: 140 }} value={statusFilter || undefined} onChange={v => setStatusFilter(v || '')}>
             {Object.entries(STATUS_CONFIG).map(([k, v]) => <Select.Option key={k} value={k}>{v.label}</Select.Option>)}
           </Select>
           <Select placeholder="Priority" allowClear style={{ width: 120 }} value={priorityFilter || undefined} onChange={v => setPriorityFilter(v || '')}>
             {Object.entries(PRIORITY_CONFIG).map(([k, v]) => <Select.Option key={k} value={k}>{v.label}</Select.Option>)}
           </Select>
-          <span style={{ color: '#8c8c8c', fontSize: 13 }}>{filtered.length} tasks</span>
+          <span style={{ color: 'var(--app-text-muted)', fontSize: 13 }}>{filtered.length} tasks</span>
         </Space>
         <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 8 }} onClick={() => { setEditingRecord(null); setIsModalVisible(true); form.resetFields(); }}>New Task</Button>
       </div>
@@ -178,8 +178,8 @@ export default function TasksTab() {
       </Modal>
 
       <style>{`
-        .row-completed td { background: #f6ffed !important; }
-        .row-blocked td { background: #fff2f0 !important; }
+        .row-completed td { background: rgba(82,196,26,0.10) !important; }
+        .row-blocked td { background: rgba(255,77,79,0.10) !important; }
       `}</style>
     </div>
   );

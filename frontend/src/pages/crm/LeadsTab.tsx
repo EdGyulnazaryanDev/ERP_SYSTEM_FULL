@@ -17,7 +17,7 @@ const STATUS_CONFIG: Record<string, { color: string; bg: string; label: string }
 };
 
 function StatusPill({ status }: { status: string }) {
-  const cfg = STATUS_CONFIG[status] || { color: '#8c8c8c', bg: '#fafafa', label: status };
+  const cfg = STATUS_CONFIG[status] || { color: '#8fa3b8', bg: 'rgba(255,255,255,0.04)', label: status };
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center',
@@ -95,7 +95,7 @@ export default function LeadsTab() {
 
   const columns = [
     { title: 'Code', dataIndex: 'lead_code', key: 'lead_code', width: 110,
-      render: (v: string) => <span style={{ fontFamily: 'monospace', fontSize: 12, color: '#595959' }}>{v}</span> },
+      render: (v: string) => <span style={{ fontFamily: 'monospace', fontSize: 12, color: 'var(--app-text-muted)' }}>{v}</span> },
     { title: 'Company', dataIndex: 'company_name', key: 'company_name', render: (v: string) => <span style={{ fontWeight: 600 }}>{v}</span> },
     { title: 'Contact', dataIndex: 'contact_person', key: 'contact_person' },
     { title: 'Source', dataIndex: 'source', key: 'source', width: 110,
@@ -108,7 +108,7 @@ export default function LeadsTab() {
       render: (prob: number) => prob != null ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <Progress percent={prob} size="small" showInfo={false} style={{ width: 60 }} strokeColor={prob >= 70 ? '#52c41a' : prob >= 40 ? '#fa8c16' : '#ff4d4f'} />
-          <span style={{ fontSize: 12, color: '#595959' }}>{prob}%</span>
+          <span style={{ fontSize: 12, color: 'var(--app-text-muted)' }}>{prob}%</span>
         </div>
       ) : '-' },
     { title: 'Status', dataIndex: 'status', key: 'status', width: 120,
@@ -139,7 +139,7 @@ export default function LeadsTab() {
         <Space wrap>
           <Input
             placeholder="Search leads..."
-            prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
+            prefix={<SearchOutlined style={{ color: 'var(--app-text-soft)' }} />}
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             allowClear
@@ -148,7 +148,7 @@ export default function LeadsTab() {
           <Select placeholder="Status" allowClear style={{ width: 140 }} value={statusFilter || undefined} onChange={v => setStatusFilter(v || '')}>
             {Object.entries(STATUS_CONFIG).map(([k, v]) => <Select.Option key={k} value={k}>{v.label}</Select.Option>)}
           </Select>
-          <span style={{ color: '#8c8c8c', fontSize: 13 }}>{filtered.length} leads</span>
+          <span style={{ color: 'var(--app-text-muted)', fontSize: 13 }}>{filtered.length} leads</span>
         </Space>
         {canCreateLeads && <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 8 }} onClick={handleAdd}>Add Lead</Button>}
       </div>
@@ -199,8 +199,8 @@ export default function LeadsTab() {
       )}
 
       <style>{`
-        .row-won td { background: #f6ffed !important; }
-        .row-lost td { background: #fff2f0 !important; opacity: 0.75; }
+        .row-won td { background: rgba(82,196,26,0.10) !important; }
+        .row-lost td { background: rgba(255,77,79,0.10) !important; opacity: 0.78; }
       `}</style>
     </div>
   );

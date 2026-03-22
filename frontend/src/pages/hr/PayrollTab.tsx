@@ -110,8 +110,8 @@ export default function PayrollTab() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{ width: 36, height: 36, borderRadius: 8, background: `${stat.color}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: stat.color, fontSize: 16 }}>{stat.icon}</div>
                 <div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e' }}>{stat.value}</div>
-                  <div style={{ fontSize: 12, color: '#8c8c8c' }}>{stat.label}</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--app-text)' }}>{stat.value}</div>
+                  <div style={{ fontSize: 12, color: 'var(--app-text-muted)' }}>{stat.label}</div>
                 </div>
               </div>
             </Card>
@@ -201,8 +201,8 @@ export default function PayrollTab() {
       </Modal>
 
       <style>{`
-        .row-paid td { background: #f6ffed !important; }
-        .row-cancelled td { background: #fff2f0 !important; opacity: 0.75; }
+        .row-paid td { background: rgba(34, 197, 94, 0.12) !important; }
+        .row-cancelled td { background: rgba(239, 68, 68, 0.12) !important; opacity: 0.82; }
       `}</style>
     </div>
   );

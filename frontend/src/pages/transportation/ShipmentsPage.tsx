@@ -21,14 +21,14 @@ const { RangePicker } = DatePicker;
 
 // ── Status config ────────────────────────────────────────────────────────────
 const STATUS_CONFIG: Record<ShipmentStatus, { color: string; bg: string; icon: React.ReactNode; label: string }> = {
-  [ShipmentStatus.PENDING]:           { color: '#8c8c8c', bg: '#fafafa',   icon: <ClockCircleOutlined />, label: 'Pending' },
+  [ShipmentStatus.PENDING]:           { color: '#8fa3b8', bg: 'rgba(255,255,255,0.04)', icon: <ClockCircleOutlined />, label: 'Pending' },
   [ShipmentStatus.PICKED_UP]:         { color: '#1677ff', bg: '#e6f4ff',   icon: <SendOutlined />,        label: 'Picked Up' },
   [ShipmentStatus.IN_TRANSIT]:        { color: '#13c2c2', bg: '#e6fffb',   icon: <TruckOutlined />,       label: 'In Transit' },
   [ShipmentStatus.OUT_FOR_DELIVERY]:  { color: '#722ed1', bg: '#f9f0ff',   icon: <EnvironmentOutlined />, label: 'Out for Delivery' },
   [ShipmentStatus.DELIVERED]:         { color: '#52c41a', bg: '#f6ffed',   icon: <CheckCircleOutlined />, label: 'Delivered' },
   [ShipmentStatus.FAILED]:            { color: '#ff4d4f', bg: '#fff2f0',   icon: <CloseCircleOutlined />, label: 'Failed' },
   [ShipmentStatus.RETURNED]:          { color: '#fa8c16', bg: '#fff7e6',   icon: <InboxOutlined />,       label: 'Returned' },
-  [ShipmentStatus.CANCELLED]:         { color: '#bfbfbf', bg: '#f5f5f5',   icon: <StopOutlined />,        label: 'Cancelled' },
+  [ShipmentStatus.CANCELLED]:         { color: '#9db0c4', bg: 'rgba(255,255,255,0.03)', icon: <StopOutlined />, label: 'Cancelled' },
 };
 
 const PRIORITY_CONFIG: Record<string, { color: string; label: string }> = {
@@ -92,8 +92,8 @@ function StatCard({
           {icon}
         </div>
         <div>
-          <div style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.2, color: '#1a1a2e' }}>{value}</div>
-          <div style={{ fontSize: 12, color: active ? color : '#8c8c8c', fontWeight: active ? 600 : 400, marginTop: 2 }}>{label}</div>
+          <div style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.2, color: 'var(--app-text)' }}>{value}</div>
+          <div style={{ fontSize: 12, color: active ? color : 'var(--app-text-muted)', fontWeight: active ? 600 : 400, marginTop: 2 }}>{label}</div>
         </div>
       </div>
     </Card>
@@ -226,7 +226,7 @@ export default function ShipmentsPage() {
       key: 'status',
       width: 155,
       render: (s: ShipmentStatus) => {
-        const cfg = STATUS_CONFIG[s] ?? { color: '#8c8c8c', bg: '#fafafa', icon: null, label: s };
+        const cfg = STATUS_CONFIG[s] ?? { color: '#8fa3b8', bg: 'rgba(255,255,255,0.04)', icon: null, label: s };
         return (
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: 5,
@@ -257,7 +257,7 @@ export default function ShipmentsPage() {
       width: 200,
       render: (_: unknown, record: Shipment) => (
         <div style={{ fontSize: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#595959' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--app-text-muted)' }}>
             <SendOutlined style={{ fontSize: 10, color: '#1677ff' }} />
             <Tooltip title={record.origin_address}>
               <span style={{ maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-block' }}>
@@ -266,7 +266,7 @@ export default function ShipmentsPage() {
             </Tooltip>
           </div>
           <div style={{ borderLeft: '1px dashed #d9d9d9', marginLeft: 5, height: 8 }} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#595959' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--app-text-muted)' }}>
             <EnvironmentOutlined style={{ fontSize: 10, color: '#52c41a' }} />
             <Tooltip title={record.destination_address}>
               <span style={{ maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-block' }}>
@@ -285,7 +285,7 @@ export default function ShipmentsPage() {
       ellipsis: true,
       render: (name: string) => name
         ? <Tag icon={<TruckOutlined />} color="geekblue" style={{ fontSize: 11 }}>{name}</Tag>
-        : <span style={{ color: '#bfbfbf', fontSize: 12 }}>Unassigned</span>,
+        : <span style={{ color: 'var(--app-text-soft)', fontSize: 12 }}>Unassigned</span>,
     },
     {
       title: 'Est. Delivery',
@@ -293,11 +293,11 @@ export default function ShipmentsPage() {
       key: 'estimated_delivery_date',
       width: 120,
       render: (d: string, record: Shipment) => {
-        if (!d) return <span style={{ color: '#bfbfbf' }}>—</span>;
+        if (!d) return <span style={{ color: 'var(--app-text-soft)' }}>—</span>;
         const date = dayjs(d);
         const isLate = record.status !== ShipmentStatus.DELIVERED && date.isBefore(dayjs());
         return (
-          <span style={{ color: isLate ? '#ff4d4f' : '#595959', fontWeight: isLate ? 600 : 400, fontSize: 12 }}>
+          <span style={{ color: isLate ? '#ff4d4f' : 'var(--app-text-muted)', fontWeight: isLate ? 600 : 400, fontSize: 12 }}>
             {isLate && '⚠ '}{date.format('MMM DD, YYYY')}
           </span>
         );
@@ -312,7 +312,7 @@ export default function ShipmentsPage() {
         const count = record.items?.length ?? 0;
         return count > 0
           ? <Badge count={count} color="#1677ff" style={{ fontSize: 11 }} />
-          : <span style={{ color: '#bfbfbf' }}>—</span>;
+          : <span style={{ color: 'var(--app-text-soft)' }}>—</span>;
       },
     },
     {
@@ -377,16 +377,16 @@ export default function ShipmentsPage() {
   ];
 
   return (
-    <div style={{ padding: 24, background: '#f5f6fa', minHeight: '100vh' }}>
+    <div style={{ padding: 24, minHeight: '100vh' }}>
 
       {/* ── Page header ── */}
       <div style={{ marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#1a1a2e' }}>
+          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: 'var(--app-text)' }}>
             <TruckOutlined style={{ marginRight: 10, color: '#1677ff' }} />
             Shipments
           </h1>
-          <p style={{ margin: '4px 0 0', color: '#8c8c8c', fontSize: 13 }}>
+          <p style={{ margin: '4px 0 0', color: 'var(--app-text-muted)', fontSize: 13 }}>
             Track and manage all inbound & outbound shipments
           </p>
         </div>
@@ -504,10 +504,10 @@ export default function ShipmentsPage() {
           expandable={{
             expandedRowRender: (record: Shipment) => {
               const items = record.items ?? [];
-              if (!items.length) return <p style={{ margin: 8, color: '#8c8c8c' }}>No items attached to this shipment.</p>;
+              if (!items.length) return <p style={{ margin: 8, color: 'var(--app-text-muted)' }}>No items attached to this shipment.</p>;
               return (
-                <div style={{ padding: '8px 16px', background: '#fafafa', borderRadius: 8 }}>
-                  <div style={{ fontWeight: 600, marginBottom: 8, color: '#595959', fontSize: 12 }}>
+                <div style={{ padding: '8px 16px', background: 'rgba(255,255,255,0.03)', borderRadius: 8, border: '1px solid rgba(134, 166, 197, 0.12)' }}>
+                  <div style={{ fontWeight: 600, marginBottom: 8, color: 'var(--app-text-muted)', fontSize: 12 }}>
                     📦 Shipment Items ({items.length})
                   </div>
                   <Table
@@ -545,7 +545,7 @@ export default function ShipmentsPage() {
                         dataIndex: 'description',
                         key: 'description',
                         ellipsis: true,
-                        render: (v: string) => <span style={{ color: '#595959', fontSize: 12 }}>{v || '—'}</span>,
+                        render: (v: string) => <span style={{ color: 'var(--app-text-muted)', fontSize: 12 }}>{v || '—'}</span>,
                       },
                     ]}
                   />
@@ -593,7 +593,7 @@ export default function ShipmentsPage() {
             />
           )}
           <Form.Item name="location" label="Current Location">
-            <Input placeholder="e.g. Yerevan Hub" prefix={<EnvironmentOutlined style={{ color: '#bfbfbf' }} />} />
+            <Input placeholder="e.g. Yerevan Hub" prefix={<EnvironmentOutlined style={{ color: 'var(--app-text-soft)' }} />} />
           </Form.Item>
           <Form.Item name="notes" label="Notes">
             <Input.TextArea rows={3} placeholder="Optional notes about this status update…" />
