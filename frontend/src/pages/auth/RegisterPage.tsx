@@ -12,6 +12,10 @@ interface JwtPayload {
   sub: string;
   tenantId: string;
   email: string;
+  actorType: 'staff' | 'customer' | 'supplier';
+  principalId: string;
+  role?: string;
+  name?: string;
 }
 
 export default function RegisterPage() {
@@ -30,9 +34,11 @@ export default function RegisterPage() {
         const user = {
           id: decoded.sub,
           email: decoded.email,
-          name: `${formData.firstName} ${formData.lastName}`,
+          name: decoded.name || `${formData.firstName} ${formData.lastName}`,
           tenantId: decoded.tenantId,
-          role: 'admin', // First user is always admin
+          role: decoded.role || 'admin',
+          actorType: decoded.actorType,
+          principalId: decoded.principalId,
         };
         
         setAuth(user, response.data.accessToken);

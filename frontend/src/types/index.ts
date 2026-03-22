@@ -4,6 +4,8 @@ export interface User {
   name: string;
   tenantId: string;
   role: string;
+  actorType: 'staff' | 'customer' | 'supplier';
+  principalId?: string;
 }
 
 export interface Tenant {

@@ -1,9 +1,10 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import MainLayout from '@/layouts/MainLayout';
 import AuthLayout from '@/layouts/AuthLayout';
 import LoginPage from '@/pages/auth/LoginPage';
 import RegisterPage from '@/pages/auth/RegisterPage';
+import ActivatePortalPage from '@/pages/auth/ActivatePortalPage';
 import DashboardPage from '@/pages/DashboardPage';
 import ModulesPage from '@/pages/modules/ModulesPage';
 import ModuleBuilderPage from '@/pages/modules/ModuleBuilderPage';
@@ -38,30 +39,40 @@ import CompliancePage from '@/pages/compliance/CompliancePage';
 import BiReportingPage from '@/pages/bi/BiReportingPage';
 import ServicesPage from '@/pages/services/ServicesPage';
 import PageAccessGuard from '@/components/common/PageAccessGuard';
+import PortalHomePage from '@/pages/PortalHomePage';
 
 function guarded(pageKey: string, element: JSX.Element) {
   return <PageAccessGuard pageKey={pageKey}>{element}</PageAccessGuard>;
 }
 
 function App() {
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore();
+  const isStaffUser = user?.actorType !== 'customer' && user?.actorType !== 'supplier';
+  const defaultAuthenticatedPath = isStaffUser ? '/' : '/portal';
+  const location = useLocation();
+  const isPortalActivationPath = location.pathname === '/auth/activate';
 
   return (
     <Routes>
       <Route
         path="/auth/*"
         element={
-          isAuthenticated ? <Navigate to="/" replace /> : <AuthLayout />
+          isAuthenticated && !isPortalActivationPath
+            ? <Navigate to={defaultAuthenticatedPath} replace />
+            : <AuthLayout />
         }
       >
         <Route path="login" element={<LoginPage />} />
         <Route path="register" element={<RegisterPage />} />
+        <Route path="activate" element={<ActivatePortalPage />} />
       </Route>
 
       <Route
         path="/*"
         element={
-          isAuthenticated ? <MainLayout /> : <Navigate to="/auth/login" replace />
+          isAuthenticated
+            ? (isStaffUser ? <MainLayout /> : <Navigate to="/portal" replace />)
+            : <Navigate to="/auth/login" replace />
         }
       >
         <Route index element={guarded('dashboard', <DashboardPage />)} />
@@ -132,6 +143,15 @@ function App() {
         {/* Services */}
         <Route path="services" element={guarded('services', <ServicesPage />)} />
       </Route>
+
+      <Route
+        path="/portal"
+        element={
+          isAuthenticated
+            ? (!isStaffUser ? <PortalHomePage /> : <Navigate to="/" replace />)
+            : <Navigate to="/auth/login" replace />
+        }
+      />
 
       {/* Public tracking page */}
       <Route path="/track/:trackingNumber" element={<ShipmentTrackingPage />} />

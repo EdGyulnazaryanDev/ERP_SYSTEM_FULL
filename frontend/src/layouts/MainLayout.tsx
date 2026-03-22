@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
-import { Layout, Menu, Avatar, Dropdown, Spin, theme } from 'antd';
+import { Layout, Menu, Avatar, Dropdown, Spin, Drawer, Grid, theme } from 'antd';
 import {
   DashboardOutlined,
   AppstoreOutlined,
@@ -36,11 +36,14 @@ const { Header, Sider, Content } = Layout;
 
 export default function MainLayout() {
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
   const { canAccessPage, isLoading } = useAccessControl();
+  const screens = Grid.useBreakpoint();
+  const isMobile = !screens.lg;
   const {
-    token: { colorBgContainer, borderRadiusLG },
+    token: { borderRadiusLG },
   } = theme.useToken();
 
   const menuItems = [
@@ -260,19 +263,39 @@ export default function MainLayout() {
     },
   ];
 
+  const handleMenuNavigate = (key: string) => {
+    navigate(key);
+    setMobileNavOpen(false);
+  };
+
+  const menuNode = (
+    <Menu
+      theme="dark"
+      mode="inline"
+      defaultSelectedKeys={['/']}
+      items={visibleMenuItems}
+      onClick={({ key }) => handleMenuNavigate(key)}
+      style={{
+        background: 'transparent',
+        border: 0,
+      }}
+    />
+  );
+
   return (
     <Layout style={{ minHeight: '100vh', background: 'transparent' }}>
-      <Sider
-        trigger={null}
-        collapsible
-        collapsed={collapsed}
-        width={276}
-        collapsedWidth={92}
-        style={{
-          padding: '16px 12px 18px',
-          background: 'transparent',
-        }}
-      >
+      {!isMobile && (
+        <Sider
+          trigger={null}
+          collapsible
+          collapsed={collapsed}
+          width={276}
+          collapsedWidth={92}
+          style={{
+            padding: '16px 12px 18px',
+            background: 'transparent',
+          }}
+        >
         <div
           style={{
             height: 74,
@@ -314,59 +337,124 @@ export default function MainLayout() {
             </div>
           )}
         </div>
-        <Menu
-          theme="dark"
-          mode="inline"
-          defaultSelectedKeys={['/']}
-          items={visibleMenuItems}
-          onClick={({ key }) => navigate(key)}
-          style={{
-            background: 'transparent',
-            border: 0,
-          }}
-        />
+        {menuNode}
       </Sider>
+      )}
+      {isMobile && (
+        <Drawer
+          placement="left"
+          open={mobileNavOpen}
+          onClose={() => setMobileNavOpen(false)}
+          closable={false}
+          width={296}
+          styles={{
+            body: {
+              padding: '16px 12px 18px',
+              background:
+                'linear-gradient(180deg, rgba(7, 26, 43, 0.98) 0%, rgba(6, 19, 31, 0.99) 100%)',
+            },
+            content: {
+              background:
+                'linear-gradient(180deg, rgba(7, 26, 43, 0.98) 0%, rgba(6, 19, 31, 0.99) 100%)',
+            },
+            mask: {
+              backdropFilter: 'blur(6px)',
+              background: 'rgba(3, 10, 18, 0.58)',
+            },
+            header: {
+              display: 'none',
+            },
+          }}
+        >
+          <div
+            style={{
+              height: 74,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '0 14px',
+              marginBottom: 12,
+              borderRadius: 20,
+              background: 'linear-gradient(135deg, rgba(15, 118, 110, 0.2) 0%, rgba(14, 165, 233, 0.12) 100%)',
+              border: '1px solid rgba(88, 150, 198, 0.18)',
+              boxShadow: '0 20px 45px rgba(2, 10, 19, 0.24)',
+            }}
+          >
+            <div>
+              <div style={{ color: '#f8fbff', fontSize: 13, fontWeight: 700, letterSpacing: '0.08em' }}>
+                BI OPS
+              </div>
+              <div style={{ color: '#8fd0de', fontSize: 12, marginTop: 4 }}>
+                Enterprise intelligence
+              </div>
+            </div>
+            <div
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: 14,
+                display: 'grid',
+                placeItems: 'center',
+                background: 'rgba(3, 12, 23, 0.4)',
+                color: '#7dd3fc',
+                fontWeight: 700,
+              }}
+            >
+              IQ
+            </div>
+          </div>
+          {menuNode}
+        </Drawer>
+      )}
       <Layout>
         <Header
+          className="app-shell-header"
           style={{
-            margin: '16px 16px 0',
-            padding: '0 18px',
-            height: 72,
-            lineHeight: '72px',
+            margin: isMobile ? '12px 12px 0' : '16px 16px 0',
+            padding: isMobile ? '0 12px' : '0 18px',
+            height: isMobile ? 64 : 72,
+            lineHeight: isMobile ? '64px' : '72px',
             background: 'rgba(8, 25, 40, 0.74)',
             border: '1px solid rgba(134, 166, 197, 0.12)',
-            borderRadius: 22,
+            borderRadius: isMobile ? 18 : 22,
             boxShadow: '0 24px 60px rgba(2, 10, 19, 0.22)',
           }}
         >
           <div className="flex items-center justify-between h-full">
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3 min-w-0">
               <button
-              className="text-lg"
-              onClick={() => setCollapsed(!collapsed)}
-              style={{
-                width: 44,
-                height: 44,
-                borderRadius: 14,
-                border: '1px solid rgba(120, 153, 185, 0.16)',
-                background: 'rgba(6, 19, 31, 0.76)',
-                color: '#e6f6ff',
-              }}
-            >
-                {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+                className="text-lg"
+                onClick={() => (isMobile ? setMobileNavOpen(true) : setCollapsed(!collapsed))}
+                style={{
+                  width: isMobile ? 40 : 44,
+                  height: isMobile ? 40 : 44,
+                  borderRadius: isMobile ? 12 : 14,
+                  border: '1px solid rgba(120, 153, 185, 0.16)',
+                  background: 'rgba(6, 19, 31, 0.76)',
+                  color: '#e6f6ff',
+                  flexShrink: 0,
+                }}
+              >
+                {isMobile || collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
               </button>
-              <div>
-                <div style={{ color: '#f8fbff', fontWeight: 700, fontSize: 16 }}>Executive Workspace</div>
-                <div style={{ color: '#88a0b9', fontSize: 12, lineHeight: 1.2 }}>Monitor operations, finance, inventory, and growth in one surface</div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ color: '#f8fbff', fontWeight: 700, fontSize: isMobile ? 14 : 16, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  Executive Workspace
+                </div>
+                {!isMobile && (
+                  <div style={{ color: '#88a0b9', fontSize: 12, lineHeight: 1.2 }}>
+                    Monitor operations, finance, inventory, and growth in one surface
+                  </div>
+                )}
               </div>
             </div>
             <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
               <div
                 className="flex items-center gap-3 cursor-pointer"
                 style={{
-                  height: 46,
-                  padding: '0 12px 0 10px',
-                  borderRadius: 15,
+                  height: isMobile ? 40 : 46,
+                  padding: isMobile ? '0 8px 0 8px' : '0 12px 0 10px',
+                  borderRadius: isMobile ? 12 : 15,
                   border: '1px solid rgba(120, 153, 185, 0.12)',
                   background: 'linear-gradient(135deg, rgba(10, 31, 47, 0.54) 0%, rgba(5, 17, 29, 0.44) 100%)',
                   boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03), 0 10px 20px rgba(2, 10, 19, 0.12)',
@@ -418,10 +506,12 @@ export default function MainLayout() {
                     }}
                   />
                 </div>
-                <div className="text-right">
-                  <div style={{ color: '#f8fbff', fontWeight: 600, fontSize: 13 }}>{userName}</div>
-                  <div style={{ color: '#8da3ba', fontSize: 11, lineHeight: 1.1 }}>Executive access</div>
-                </div>
+                {!isMobile && (
+                  <div className="text-right">
+                    <div style={{ color: '#f8fbff', fontWeight: 600, fontSize: 13 }}>{userName}</div>
+                    <div style={{ color: '#8da3ba', fontSize: 11, lineHeight: 1.1 }}>Executive access</div>
+                  </div>
+                )}
                 <div
                   style={{
                     width: 20,
@@ -431,7 +521,7 @@ export default function MainLayout() {
                     placeItems: 'center',
                     background: 'rgba(148, 163, 184, 0.12)',
                     color: '#9fb8cf',
-                    marginLeft: 2,
+                    marginLeft: isMobile ? 0 : 2,
                   }}
                 >
                   <DownOutlined style={{ fontSize: 10 }} />
@@ -441,12 +531,13 @@ export default function MainLayout() {
           </div>
         </Header>
         <Content
+          className="app-shell-content"
           style={{
-            margin: '18px 16px 16px',
-            padding: 28,
+            margin: isMobile ? '12px' : '18px 16px 16px',
+            padding: isMobile ? 14 : 28,
             minHeight: 280,
             background: 'rgba(8, 25, 40, 0.62)',
-            borderRadius: borderRadiusLG + 10,
+            borderRadius: isMobile ? 18 : borderRadiusLG + 10,
             border: '1px solid rgba(134, 166, 197, 0.1)',
             boxShadow: '0 30px 70px rgba(2, 10, 19, 0.26)',
             backdropFilter: 'blur(18px)',
