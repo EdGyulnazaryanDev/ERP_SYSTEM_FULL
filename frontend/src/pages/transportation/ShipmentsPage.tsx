@@ -80,7 +80,7 @@ function StatCard({
         boxShadow: active ? `0 0 0 3px ${color}22` : undefined,
         transform: active ? 'translateY(-1px)' : undefined,
       }}
-      bodyStyle={{ padding: '14px 18px' }}
+      styles={{ body: { padding: '14px 18px' } }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div style={{
@@ -438,7 +438,7 @@ export default function ShipmentsPage() {
       {/* ── Main table card ── */}
       <Card
         style={{ borderRadius: 12, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}
-        bodyStyle={{ padding: 0 }}
+        styles={{ body: { padding: 0 } }}
       >
         {/* Filters bar */}
         <div style={{ padding: '16px 20px', borderBottom: '1px solid #f0f0f0' }}>

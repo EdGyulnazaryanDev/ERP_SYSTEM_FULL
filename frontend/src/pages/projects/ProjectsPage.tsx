@@ -25,7 +25,7 @@ function StatCard({ label, value, color, icon, active, onClick }: {
         boxShadow: active ? `0 0 0 3px ${color}22` : undefined,
         transform: active ? 'translateY(-1px)' : undefined,
       }}
-      bodyStyle={{ padding: '14px 18px' }}
+      styles={{ body: { padding: '14px 18px' } }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div style={{
@@ -124,7 +124,7 @@ export default function ProjectsPage() {
           border: '1px solid rgba(134, 166, 197, 0.12)',
           boxShadow: '0 20px 50px rgba(2, 10, 19, 0.22)',
         }}
-        bodyStyle={{ padding: 0 }}
+        styles={{ body: { padding: 0 } }}
       >
         <Tabs
           activeKey={activeTab}

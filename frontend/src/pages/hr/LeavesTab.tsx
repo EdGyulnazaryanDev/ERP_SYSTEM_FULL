@@ -123,7 +123,7 @@ export default function LeavesTab() {
               { label: 'Leave Types', value: leaveTypeList.length, color: '#1677ff' },
             ].map((stat, i) => (
               <Col key={i} xs={12} sm={6}>
-                <Card size="small" style={{ borderRadius: 10, border: `1px solid ${stat.color}22`, background: `${stat.color}08`, textAlign: 'center' }} bodyStyle={{ padding: '12px' }}>
+                <Card size="small" style={{ borderRadius: 10, border: `1px solid ${stat.color}22`, background: `${stat.color}08`, textAlign: 'center' }} styles={{ body: { padding: '12px' } }}>
                   <div style={{ fontSize: 22, fontWeight: 700, color: stat.color }}>{stat.value}</div>
                   <div style={{ fontSize: 12, color: 'var(--app-text-muted)' }}>{stat.label}</div>
                 </Card>

@@ -74,7 +74,7 @@ export default function DepartmentsTab() {
                     transform: isSelected ? 'translateY(-2px)' : undefined,
                     boxShadow: isSelected ? `0 4px 12px ${color}22` : undefined,
                   }}
-                  bodyStyle={{ padding: '16px' }}
+                  styles={{ body: { padding: '16px' } }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <div style={{ width: 44, height: 44, borderRadius: 10, background: `${color}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', color, fontSize: 20 }}>

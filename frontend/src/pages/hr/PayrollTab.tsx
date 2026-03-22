@@ -106,7 +106,7 @@ export default function PayrollTab() {
           { label: 'Paid Payslips', value: paidCount, color: '#722ed1', icon: <FileTextOutlined /> },
         ].map((stat, i) => (
           <Col key={i} xs={12} sm={6}>
-            <Card size="small" style={{ borderRadius: 12, border: `1px solid ${stat.color}22`, background: `${stat.color}08` }} bodyStyle={{ padding: '14px 18px' }}>
+            <Card size="small" style={{ borderRadius: 12, border: `1px solid ${stat.color}22`, background: `${stat.color}08` }} styles={{ body: { padding: '14px 18px' } }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{ width: 36, height: 36, borderRadius: 8, background: `${stat.color}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: stat.color, fontSize: 16 }}>{stat.icon}</div>
                 <div>

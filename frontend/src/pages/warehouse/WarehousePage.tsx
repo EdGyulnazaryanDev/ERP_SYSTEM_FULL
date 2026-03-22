@@ -31,7 +31,7 @@ function StatCard({
         boxShadow: active ? `0 4px 16px ${color}28` : '0 16px 36px rgba(2, 10, 19, 0.18)',
         transform: active ? 'translateY(-2px)' : undefined,
       }}
-      bodyStyle={{ padding: '14px 18px' }}
+      styles={{ body: { padding: '14px 18px' } }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <div style={{
@@ -170,7 +170,7 @@ export default function WarehousePage() {
           border: '1px solid rgba(134, 166, 197, 0.12)',
           boxShadow: '0 20px 50px rgba(2, 10, 19, 0.22)',
         }}
-        bodyStyle={{ padding: 0 }}
+        styles={{ body: { padding: 0 } }}
       >
         <Tabs
           activeKey={activeTab}

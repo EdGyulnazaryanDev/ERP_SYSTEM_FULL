@@ -264,7 +264,7 @@ export default function AttendanceTab() {
               const isOnline = rec && rec.clock_in_time && !rec.clock_out_time;
               return (
                 <List.Item>
-                  <Card size="small" bodyStyle={{ padding: '12px' }} style={{ background: 'rgba(7, 20, 34, 0.72)', border: '1px solid rgba(134, 166, 197, 0.12)' }}>
+                  <Card size="small" styles={{ body: { padding: '12px' } }} style={{ background: 'rgba(7, 20, 34, 0.72)', border: '1px solid rgba(134, 166, 197, 0.12)' }}>
                     <div className="flex items-center gap-2">
                       <Badge
                         dot
