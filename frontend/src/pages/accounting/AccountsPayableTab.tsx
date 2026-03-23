@@ -203,7 +203,6 @@ export default function AccountsPayableTab() {
       </div>
 
       <Table columns={columns} dataSource={filtered} loading={isLoading} rowKey="id" size="small"
-        scroll={{ x: 1050 }}
         pagination={{ pageSize: 15, showTotal: (t, r) => `${r[0]}–${r[1]} of ${t}` }}
         rowClassName={(r: any) => r.status === 'overdue' ? 'row-overdue' : r.status === 'paid' ? 'row-paid' : ''}
       />

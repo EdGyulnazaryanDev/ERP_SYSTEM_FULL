@@ -12,6 +12,8 @@ import { User } from '../users/user.entity';
 import { Role } from '../roles/role.entity';
 import { UserRole } from '../roles/user-role.entity';
 import { CustomerEntity } from '../crm/entities/customer.entity';
+import { ActivityEntity } from '../crm/entities/activity.entity';
+import { QuoteEntity } from '../crm/entities/quote.entity';
 import { SupplierEntity } from '../suppliers/supplier.entity';
 import { PassportModule } from '@nestjs/passport';
 import { JwtStrategy } from './strategies/jwt.strategy';
@@ -19,6 +21,10 @@ import { SeedersModule } from '../../database/seeders/seeders.module';
 import { ComplianceAuditModule } from '../compliance-audit/compliance-audit.module';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 import { PortalAccountEntity } from './entities/portal-account.entity';
+import { TransactionEntity } from '../transactions/entities/transaction.entity';
+import { ShipmentEntity } from '../transportation/entities/shipment.entity';
+import { AccountReceivableEntity } from '../accounting/entities/account-receivable.entity';
+import { AccountPayableEntity } from '../accounting/entities/account-payable.entity';
 
 @Module({
   imports: [
@@ -28,8 +34,14 @@ import { PortalAccountEntity } from './entities/portal-account.entity';
       Role,
       UserRole,
       CustomerEntity,
+      ActivityEntity,
+      QuoteEntity,
       SupplierEntity,
       PortalAccountEntity,
+      TransactionEntity,
+      ShipmentEntity,
+      AccountReceivableEntity,
+      AccountPayableEntity,
     ]),
     PassportModule,
     ConfigModule,

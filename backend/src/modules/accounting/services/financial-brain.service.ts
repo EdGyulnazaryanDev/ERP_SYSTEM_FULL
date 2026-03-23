@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { AccountingService } from '../accounting.service';
+import { ARApprovalStatus } from '../entities/account-receivable.entity';
 import { JournalEntryType } from '../entities/journal-entry.entity';
 import {
   FinancialEventType,
@@ -30,28 +31,18 @@ export class FinancialBrainService {
   async onInvoiceCreated(event: InvoiceCreatedEvent) {
     this.logger.log(`[BRAIN] Invoice created: ${event.invoiceNumber} for $${event.amount}`);
     try {
-      const arAccount = await this.accountingService['findDefaultAccount'](event.tenantId, 'accounts_receivable');
-      const revenueAccount = await this.accountingService['findDefaultAccount'](event.tenantId, 'sales_revenue')
-        || await this.accountingService['findDefaultAccount'](event.tenantId, 'service_revenue');
-
-      if (arAccount && revenueAccount) {
-        const je = await this.accountingService.createJournalEntry({
-          entry_date: event.date,
-          entry_type: JournalEntryType.SALES,
-          description: `Invoice ${event.invoiceNumber}${event.description ? ': ' + event.description : ''}`,
-          reference: event.invoiceNumber,
-          lines: [
-            { account_id: arAccount.id, description: `AR - ${event.invoiceNumber}`, debit: event.amount, credit: 0 },
-            { account_id: revenueAccount.id, description: `Revenue - ${event.invoiceNumber}`, debit: 0, credit: event.amount },
-          ],
-        }, event.tenantId);
-        await this.accountingService.postJournalEntry(je.id, {}, event.tenantId);
-        this.logger.log(`[BRAIN] Auto-posted JE ${je.entry_number} for invoice ${event.invoiceNumber}`);
-      } else {
-        this.logger.warn(`[BRAIN] Missing CoA accounts for invoice JE. Add accounts_receivable and sales_revenue to Chart of Accounts.`);
-      }
+      await this.accountingService.createAR({
+        customer_id: event.customerId,
+        invoice_number: event.invoiceNumber,
+        invoice_date: event.date,
+        amount: event.amount,
+        description: event.description,
+        reference: event.invoiceNumber,
+        initial_approval_status: ARApprovalStatus.PENDING_APPROVAL,
+      }, event.tenantId);
+      this.logger.log(`[BRAIN] Created invoice workflow record ${event.invoiceNumber} in pending approval state`);
     } catch (e) {
-      this.logger.error(`[BRAIN] Failed to create JE for invoice ${event.invoiceNumber}: ${e.message}`);
+      this.logger.error(`[BRAIN] Failed to create invoice workflow for ${event.invoiceNumber}: ${e.message}`);
     }
   }
 

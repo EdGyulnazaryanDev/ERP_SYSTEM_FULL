@@ -162,7 +162,7 @@ export default function TransactionsPage() {
 
   const completeMut = useMutation({
     mutationFn: (id: string) => apiClient.put(`/transactions/${id}/complete`),
-    onSuccess: () => { message.success('Transaction completed — inventory & accounting updated'); invalidateAll(); },
+    onSuccess: () => { message.success('Transaction completed'); invalidateAll(); },
     onError: (e: { response?: { data?: { message?: string } } }) =>
       message.error(e?.response?.data?.message || 'Failed to complete'),
   });
@@ -293,18 +293,27 @@ export default function TransactionsPage() {
           <Tooltip title="View details">
             <Button size="small" icon={<EyeOutlined />} onClick={() => setDetailTx(r)} />
           </Tooltip>
-          {r.status === 'draft' && (
+          {(r.status === 'draft' || r.status === 'pending') && (
             <>
               {canEditTransactions && (
                 <>
-                  <Tooltip title="Edit">
-                    <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
-                  </Tooltip>
-                  <Tooltip title="Complete — updates inventory & accounting">
-                    <Popconfirm title="Complete this transaction?" onConfirm={() => completeMut.mutate(r.id)}>
-                      <Button size="small" type="primary" icon={<CheckOutlined />} />
-                    </Popconfirm>
-                  </Tooltip>
+                  {r.status === 'draft' && (
+                    <Tooltip title="Edit">
+                      <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
+                    </Tooltip>
+                  )}
+                  {r.type !== 'purchase' && r.status === 'draft' && (
+                    <Tooltip title="Complete">
+                      <Popconfirm title="Complete this transaction?" onConfirm={() => completeMut.mutate(r.id)}>
+                        <Button size="small" type="primary" icon={<CheckOutlined />} />
+                      </Popconfirm>
+                    </Tooltip>
+                  )}
+                  {r.type === 'purchase' && (
+                    <Tooltip title="Purchase inventory is received only after requisition approval and delivered shipment">
+                      <Tag color="processing">Awaiting Receipt</Tag>
+                    </Tooltip>
+                  )}
                   <Tooltip title="Cancel">
                     <Popconfirm title="Cancel this transaction?" onConfirm={() => cancelMut.mutate(r.id)}>
                       <Button size="small" danger icon={<StopOutlined />} />
@@ -312,7 +321,7 @@ export default function TransactionsPage() {
                   </Tooltip>
                 </>
               )}
-              {canDeleteTransactions && (
+              {canDeleteTransactions && r.status === 'draft' && (
                 <Tooltip title="Delete">
                   <Popconfirm title="Delete this transaction?" onConfirm={() => deleteMut.mutate(r.id)}>
                     <Button size="small" danger icon={<DeleteOutlined />} />

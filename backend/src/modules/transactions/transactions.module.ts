@@ -9,6 +9,7 @@ import { TransactionEntity } from './entities/transaction.entity';
 import { TransactionItemEntity } from './entities/transaction-item.entity';
 import { InventoryEntity } from '../inventory/entities/inventory.entity';
 import { AccountingModule } from '../accounting/accounting.module';
+import { ShipmentEntity } from '../transportation/entities/shipment.entity';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { AccountingModule } from '../accounting/accounting.module';
       TransactionEntity,
       TransactionItemEntity,
       InventoryEntity,
+      ShipmentEntity,
     ]),
     AccountingModule,
     MulterModule.register({

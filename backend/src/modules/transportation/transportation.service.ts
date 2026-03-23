@@ -14,6 +14,8 @@ import { DeliveryRouteEntity, RouteStatus } from './entities/delivery-route.enti
 import { InventoryEntity } from '../inventory/entities/inventory.entity';
 import type { CreateShipmentDto } from './dto/create-shipment.dto';
 import { FinancialEventType, ShipmentDeliveredEvent, StockMovedEvent } from '../accounting/events/financial.events';
+import { AccountingService } from '../accounting/accounting.service';
+import { TransactionEntity, TransactionStatus } from '../transactions/entities/transaction.entity';
 
 @Injectable()
 export class TransportationService {
@@ -30,7 +32,10 @@ export class TransportationService {
     private routeRepo: Repository<DeliveryRouteEntity>,
     @InjectRepository(InventoryEntity)
     private inventoryRepo: Repository<InventoryEntity>,
+    @InjectRepository(TransactionEntity)
+    private transactionRepo: Repository<TransactionEntity>,
     private eventEmitter: EventEmitter2,
+    private accountingService: AccountingService,
   ) {}
 
   // Shipments
@@ -263,6 +268,14 @@ export class TransportationService {
       return;
     }
 
+    let linkedTransaction: TransactionEntity | null = null;
+    if (shipment.transaction_id) {
+      linkedTransaction = await this.transactionRepo.findOne({
+        where: { id: shipment.transaction_id, tenant_id: tenantId },
+        relations: ['items'],
+      });
+    }
+
     for (const item of shipment.items) {
       if (!item.product_id) continue;
 
@@ -285,7 +298,7 @@ export class TransportationService {
           const unitCost = Number(inv.unit_cost);
           const totalCost = qty * unitCost;
 
-          if (totalCost > 0) {
+          if (totalCost > 0 && !linkedTransaction) {
             const stockEvent = new StockMovedEvent();
             stockEvent.tenantId = tenantId;
             stockEvent.productId = inv.id;
@@ -310,6 +323,24 @@ export class TransportationService {
         this.logger.error(
           `[DELIVERY] Failed to update inventory for item ${item.product_id}: ${e.message}`,
         );
+      }
+    }
+
+    if (linkedTransaction) {
+      if (linkedTransaction.status !== TransactionStatus.COMPLETED) {
+        linkedTransaction.status = TransactionStatus.COMPLETED;
+        linkedTransaction.notes = `${linkedTransaction.notes || ''} Received via shipment ${shipment.tracking_number}`.trim();
+        await this.transactionRepo.save(linkedTransaction);
+      }
+
+      const draftEntries = await this.accountingService.findJournalEntriesByReference(
+        linkedTransaction.transaction_number,
+        tenantId,
+      );
+      for (const entry of draftEntries) {
+        if (entry.status === 'draft') {
+          await this.accountingService.postJournalEntry(entry.id, {}, tenantId);
+        }
       }
     }
   }

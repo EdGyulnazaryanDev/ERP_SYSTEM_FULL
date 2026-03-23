@@ -9,7 +9,13 @@ import { Repository, Between } from 'typeorm';
 import { ChartOfAccountEntity } from './entities/chart-of-account.entity';
 import { JournalEntryEntity, JournalEntryStatus, JournalEntryType } from './entities/journal-entry.entity';
 import { JournalEntryLineEntity } from './entities/journal-entry-line.entity';
-import { AccountReceivableEntity } from './entities/account-receivable.entity';
+import {
+  AccountReceivableEntity,
+  ARAcknowledgementStatus,
+  ARApprovalStatus,
+  ARPostingStatus,
+  ARStatus,
+} from './entities/account-receivable.entity';
 import { AccountPayableEntity } from './entities/account-payable.entity';
 import { PaymentEntity } from './entities/payment.entity';
 import { BankAccountEntity } from './entities/bank-account.entity';
@@ -32,12 +38,15 @@ import type {
   CreateAccountReceivableDto,
   CreateAccountPayableDto,
   RecordPaymentDto,
+  ReviewAccountReceivableDto,
+  SignAccountReceivableDto,
 } from './dto/create-ar-ap.dto';
 import type { CreatePaymentDto } from './dto/create-payment.dto';
 import type {
   CreateBankAccountDto,
   UpdateBankAccountDto,
 } from './dto/create-bank-account.dto';
+import { CustomerEntity } from '../crm/entities/customer.entity';
 
 @Injectable()
 export class AccountingService {
@@ -52,6 +61,8 @@ export class AccountingService {
     private arRepo: Repository<AccountReceivableEntity>,
     @InjectRepository(AccountPayableEntity)
     private apRepo: Repository<AccountPayableEntity>,
+    @InjectRepository(CustomerEntity)
+    private customerRepo: Repository<CustomerEntity>,
     @InjectRepository(PaymentEntity)
     private paymentRepo: Repository<PaymentEntity>,
     @InjectRepository(BankAccountEntity)
@@ -359,58 +370,36 @@ export class AccountingService {
       throw new ConflictException('Invoice number already exists');
     }
 
+    const dueDate = data.due_date
+      ? data.due_date
+      : await this.deriveCustomerDueDate(data.customer_id, data.invoice_date, tenantId);
+
     const ar = this.arRepo.create({
       ...data,
+      due_date: dueDate,
       total_amount: data.amount,
       balance_amount: data.amount - (data.paid_amount || 0),
       tenant_id: tenantId,
+      status:
+        Number(data.paid_amount || 0) >= Number(data.amount)
+          ? ARStatus.PAID
+          : Number(data.paid_amount || 0) > 0
+            ? ARStatus.PARTIALLY_PAID
+            : ARStatus.OPEN,
+      approval_status: data.initial_approval_status || ARApprovalStatus.DRAFT,
+      posting_status: ARPostingStatus.UNPOSTED,
+      acknowledgement_status: ARAcknowledgementStatus.PENDING,
     });
 
     const savedAR = await this.arRepo.save(ar);
 
-    // Auto-create journal entry: Debit AR account, Credit Revenue account
     try {
-      const arAccount = data.ar_account_id
-        ? await this.getAccount(data.ar_account_id, tenantId)
-        : await this.findDefaultAccount(tenantId, 'accounts_receivable');
-
-      const revenueAccount = data.revenue_account_id
-        ? await this.getAccount(data.revenue_account_id, tenantId)
-        : (await this.findDefaultAccount(tenantId, 'sales_revenue')) ||
-          (await this.findDefaultAccount(tenantId, 'service_revenue'));
-
-      if (arAccount && revenueAccount) {
-        const je = await this.createJournalEntry(
-          {
-            entry_date: data.invoice_date,
-            entry_type: JournalEntryType.SALES,
-            description: `Invoice ${data.invoice_number}${data.description ? ': ' + data.description : ''}`,
-            reference: data.invoice_number,
-            lines: [
-              {
-                account_id: arAccount.id,
-                description: `AR - ${data.invoice_number}`,
-                debit: data.amount,
-                credit: 0,
-              },
-              {
-                account_id: revenueAccount.id,
-                description: `Revenue - ${data.invoice_number}`,
-                debit: 0,
-                credit: data.amount,
-              },
-            ],
-          },
-          tenantId,
-        );
-
-        // Auto-post it and link back
-        await this.postJournalEntry(je.id, {}, tenantId);
+      const je = await this.ensureInvoiceDraftJournalEntry(savedAR, tenantId, data);
+      if (je && savedAR.journal_entry_id !== je.id) {
         savedAR.journal_entry_id = je.id;
         await this.arRepo.save(savedAR);
       }
     } catch (e) {
-      // Journal entry creation is best-effort — don't fail the AR creation
       console.warn('Could not auto-create journal entry for AR:', e.message);
     }
 
@@ -425,8 +414,10 @@ export class AccountingService {
         'ar.id', 'ar.invoice_number', 'ar.customer_id',
         'ar.invoice_date', 'ar.due_date',
         'ar.total_amount', 'ar.paid_amount', 'ar.balance_amount',
-        'ar.status', 'ar.reference', 'ar.description',
+        'ar.status', 'ar.approval_status', 'ar.posting_status',
+        'ar.acknowledgement_status', 'ar.reference', 'ar.description',
         'ar.journal_entry_id', 'ar.created_at', 'ar.updated_at',
+        'ar.approved_at', 'ar.posted_at', 'ar.signed_at', 'ar.signed_by_name',
       ])
       .addSelect(
         `COALESCE(NULLIF(c.company_name, ''), c.contact_person)`,
@@ -447,9 +438,16 @@ export class AccountingService {
       paid_amount: r.ar_paid_amount,
       balance_amount: r.ar_balance_amount,
       status: r.ar_status,
+      approval_status: r.ar_approval_status,
+      posting_status: r.ar_posting_status,
+      acknowledgement_status: r.ar_acknowledgement_status,
       reference: r.ar_reference,
       description: r.ar_description,
       journal_entry_id: r.ar_journal_entry_id,
+      approved_at: r.ar_approved_at,
+      posted_at: r.ar_posted_at,
+      signed_at: r.ar_signed_at,
+      signed_by_name: r.ar_signed_by_name,
       created_at: r.ar_created_at,
       updated_at: r.ar_updated_at,
     }));
@@ -467,12 +465,131 @@ export class AccountingService {
     return ar;
   }
 
+  async submitAR(id: string, tenantId: string): Promise<AccountReceivableEntity> {
+    const ar = await this.getAR(id, tenantId);
+
+    if (ar.approval_status !== ARApprovalStatus.DRAFT) {
+      throw new BadRequestException('Only draft invoices can be submitted for approval');
+    }
+
+    ar.approval_status = ARApprovalStatus.PENDING_APPROVAL;
+    return this.arRepo.save(ar);
+  }
+
+  async approveAR(
+    id: string,
+    data: ReviewAccountReceivableDto,
+    tenantId: string,
+    userId?: string,
+  ): Promise<AccountReceivableEntity> {
+    const ar = await this.getAR(id, tenantId);
+
+    if (
+      ![ARApprovalStatus.DRAFT, ARApprovalStatus.PENDING_APPROVAL].includes(
+        ar.approval_status,
+      )
+    ) {
+      throw new BadRequestException('Invoice is not awaiting approval');
+    }
+
+    await this.ensureInvoiceDraftJournalEntry(ar, tenantId);
+
+    ar.approval_status = ARApprovalStatus.APPROVED;
+    ar.approved_at = new Date();
+    ar.approved_by = (userId || undefined) as any;
+    ar.approval_notes = (data.notes || undefined) as any;
+    return this.arRepo.save(ar);
+  }
+
+  async rejectAR(
+    id: string,
+    data: ReviewAccountReceivableDto,
+    tenantId: string,
+    _userId?: string,
+  ): Promise<AccountReceivableEntity> {
+    const ar = await this.getAR(id, tenantId);
+
+    if (ar.posting_status === ARPostingStatus.POSTED) {
+      throw new BadRequestException('Posted invoices cannot be rejected. Reverse the journal entry instead.');
+    }
+
+    ar.approval_status = ARApprovalStatus.REJECTED;
+    ar.status = ARStatus.REJECTED;
+    ar.approval_notes = (data.notes || undefined) as any;
+    ar.acknowledgement_status = ARAcknowledgementStatus.PENDING;
+
+    if (ar.journal_entry_id) {
+      await this.deleteDraftJournalEntry(ar.journal_entry_id, tenantId);
+      ar.journal_entry_id = null as any;
+    }
+
+    return this.arRepo.save(ar);
+  }
+
+  async postAR(
+    id: string,
+    tenantId: string,
+    userId?: string,
+  ): Promise<AccountReceivableEntity> {
+    const ar = await this.getAR(id, tenantId);
+
+    if (ar.approval_status !== ARApprovalStatus.APPROVED) {
+      throw new BadRequestException('Only approved invoices can be posted');
+    }
+
+    if (ar.posting_status === ARPostingStatus.POSTED) {
+      throw new BadRequestException('Invoice already posted');
+    }
+
+    const journalEntry = await this.ensureInvoiceDraftJournalEntry(ar, tenantId);
+    if (!journalEntry) {
+      throw new BadRequestException('No draft journal entry available for posting');
+    }
+
+    if (journalEntry.status !== JournalEntryStatus.POSTED) {
+      await this.postJournalEntry(
+        journalEntry.id,
+        { posted_by: userId },
+        tenantId,
+      );
+    }
+
+    ar.posting_status = ARPostingStatus.POSTED;
+    ar.posted_at = new Date();
+    ar.posted_by = (userId || undefined) as any;
+    ar.status = this.computeReceivableCollectionStatus(ar);
+
+    return this.arRepo.save(ar);
+  }
+
+  async signAR(
+    id: string,
+    data: SignAccountReceivableDto,
+    tenantId: string,
+  ): Promise<AccountReceivableEntity> {
+    const ar = await this.getAR(id, tenantId);
+
+    if (ar.posting_status !== ARPostingStatus.POSTED) {
+      throw new BadRequestException('Only posted invoices can be signed');
+    }
+
+    ar.acknowledgement_status = ARAcknowledgementStatus.SIGNED;
+    ar.signed_by_name = data.signed_by_name;
+    ar.signed_at = new Date();
+    ar.signing_notes = (data.notes || undefined) as any;
+    return this.arRepo.save(ar);
+  }
+
   async recordARPayment(
     id: string,
     data: RecordPaymentDto,
     tenantId: string,
   ): Promise<AccountReceivableEntity> {
     const ar = await this.getAR(id, tenantId);
+
+    if (ar.posting_status !== ARPostingStatus.POSTED) {
+      throw new BadRequestException('Payments can be recorded only after the invoice is posted');
+    }
 
     const newPaidAmount = Number(ar.paid_amount) + Number(data.payment_amount);
 
@@ -482,12 +599,7 @@ export class AccountingService {
 
     ar.paid_amount = newPaidAmount;
     ar.balance_amount = Number(ar.total_amount) - newPaidAmount;
-
-    if (ar.balance_amount === 0) {
-      ar.status = 'paid' as any;
-    } else {
-      ar.status = 'partially_paid' as any;
-    }
+    ar.status = this.computeReceivableCollectionStatus(ar);
 
     const savedAR = await this.arRepo.save(ar);
 
@@ -537,6 +649,111 @@ export class AccountingService {
     }
 
     return savedAR;
+  }
+
+  private async deriveCustomerDueDate(
+    customerId: string,
+    invoiceDate: string,
+    tenantId: string,
+  ): Promise<string> {
+    const customer = await this.customerRepo.findOne({
+      where: { id: customerId, tenant_id: tenantId },
+    });
+
+    const baseDate = new Date(invoiceDate);
+    const paymentTerms = Number(customer?.payment_terms || 30);
+    baseDate.setDate(baseDate.getDate() + paymentTerms);
+    return baseDate.toISOString().split('T')[0];
+  }
+
+  private async ensureInvoiceDraftJournalEntry(
+    ar: AccountReceivableEntity,
+    tenantId: string,
+    data?: Partial<CreateAccountReceivableDto>,
+  ): Promise<JournalEntryEntity | null> {
+    if (ar.journal_entry_id) {
+      return this.getJournalEntry(ar.journal_entry_id, tenantId);
+    }
+
+    const arAccount = data?.ar_account_id
+      ? await this.getAccount(data.ar_account_id, tenantId)
+      : await this.findDefaultAccount(tenantId, 'accounts_receivable');
+
+    const revenueAccount = data?.revenue_account_id
+      ? await this.getAccount(data.revenue_account_id, tenantId)
+      : (await this.findDefaultAccount(tenantId, 'sales_revenue')) ||
+        (await this.findDefaultAccount(tenantId, 'service_revenue'));
+
+    if (!arAccount || !revenueAccount) {
+      return null;
+    }
+
+    const journalEntry = await this.createJournalEntry(
+      {
+        entry_date: new Date(ar.invoice_date).toISOString().split('T')[0],
+        entry_type: JournalEntryType.SALES,
+        description: `Invoice ${ar.invoice_number}${ar.description ? ': ' + ar.description : ''}`,
+        reference: ar.invoice_number,
+        lines: [
+          {
+            account_id: arAccount.id,
+            description: `AR - ${ar.invoice_number}`,
+            debit: Number(ar.total_amount),
+            credit: 0,
+          },
+          {
+            account_id: revenueAccount.id,
+            description: `Revenue - ${ar.invoice_number}`,
+            debit: 0,
+            credit: Number(ar.total_amount),
+          },
+        ],
+      },
+      tenantId,
+    );
+
+    ar.journal_entry_id = journalEntry.id;
+    await this.arRepo.save(ar);
+    return journalEntry;
+  }
+
+  private async deleteDraftJournalEntry(
+    journalEntryId: string,
+    tenantId: string,
+  ): Promise<void> {
+    const entry = await this.getJournalEntry(journalEntryId, tenantId);
+
+    if (entry.status !== JournalEntryStatus.DRAFT) {
+      throw new BadRequestException('Only draft journal entries can be removed from a rejected invoice');
+    }
+
+    await this.journalLineRepo.delete({ journal_entry_id: journalEntryId });
+    await this.journalEntryRepo.delete({ id: journalEntryId, tenant_id: tenantId });
+  }
+
+  private computeReceivableCollectionStatus(ar: {
+    balance_amount: number;
+    total_amount?: number;
+    due_date: Date | string;
+    posting_status?: ARPostingStatus;
+  }): ARStatus {
+    const balanceAmount = Number(ar.balance_amount || 0);
+    const totalAmount = Number(ar.total_amount || 0);
+
+    if (balanceAmount <= 0) {
+      return ARStatus.PAID;
+    }
+
+    if (ar.posting_status !== ARPostingStatus.POSTED) {
+      return ARStatus.OPEN;
+    }
+
+    const dueDate = ar.due_date ? new Date(ar.due_date) : null;
+    if (dueDate && dueDate.getTime() < new Date().getTime()) {
+      return ARStatus.OVERDUE;
+    }
+
+    return balanceAmount < totalAmount ? ARStatus.PARTIALLY_PAID : ARStatus.OPEN;
   }
 
   // ==================== ACCOUNTS PAYABLE METHODS ====================

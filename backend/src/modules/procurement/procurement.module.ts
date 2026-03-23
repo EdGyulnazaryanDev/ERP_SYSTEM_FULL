@@ -15,6 +15,10 @@ import { GoodsReceiptItemEntity } from './entities/goods-receipt-item.entity';
 import { ShipmentEntity } from '../transportation/entities/shipment.entity';
 import { ShipmentItemEntity } from '../transportation/entities/shipment-item.entity';
 import { InventoryEntity } from '../inventory/entities/inventory.entity';
+import { TransactionEntity } from '../transactions/entities/transaction.entity';
+import { TransactionItemEntity } from '../transactions/entities/transaction-item.entity';
+import { JournalEntryEntity } from '../accounting/entities/journal-entry.entity';
+import { JournalEntryLineEntity } from '../accounting/entities/journal-entry-line.entity';
 
 @Module({
   imports: [
@@ -32,6 +36,10 @@ import { InventoryEntity } from '../inventory/entities/inventory.entity';
       ShipmentEntity,
       ShipmentItemEntity,
       InventoryEntity,
+      TransactionEntity,
+      TransactionItemEntity,
+      JournalEntryEntity,
+      JournalEntryLineEntity,
     ]),
   ],
   controllers: [ProcurementController],

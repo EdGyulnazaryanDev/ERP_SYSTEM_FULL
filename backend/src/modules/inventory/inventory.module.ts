@@ -7,9 +7,11 @@ import { PurchaseRequisitionEntity } from '../procurement/entities/purchase-requ
 import { PurchaseRequisitionItemEntity } from '../procurement/entities/purchase-requisition-item.entity';
 import { TransactionEntity } from '../transactions/entities/transaction.entity';
 import { TransactionItemEntity } from '../transactions/entities/transaction-item.entity';
+import { AccountingModule } from '../accounting/accounting.module';
 
 @Module({
   imports: [
+    AccountingModule,
     TypeOrmModule.forFeature([
       InventoryEntity,
       PurchaseRequisitionEntity,

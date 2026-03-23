@@ -32,12 +32,16 @@ import {
   CreateAccountReceivableDto,
   CreateAccountPayableDto,
   RecordPaymentDto,
+  ReviewAccountReceivableDto,
+  SignAccountReceivableDto,
 } from './dto/create-ar-ap.dto';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import {
   CreateBankAccountDto,
   UpdateBankAccountDto,
 } from './dto/create-bank-account.dto';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import type { JwtUser } from '../../types/express';
 
 @Controller('accounting')
 @UseGuards(JwtAuthGuard, RequireFeatureGuard)
@@ -149,6 +153,52 @@ export class AccountingController {
   @Get('accounts-receivable/:id')
   getAR(@Param('id') id: string, @CurrentTenant() tenantId: string) {
     return this.accountingService.getAR(id, tenantId);
+  }
+
+  @Post('accounts-receivable/:id/submit')
+  submitAR(
+    @Param('id') id: string,
+    @CurrentTenant() tenantId: string,
+  ) {
+    return this.accountingService.submitAR(id, tenantId);
+  }
+
+  @Post('accounts-receivable/:id/approve')
+  approveAR(
+    @Param('id') id: string,
+    @Body() data: ReviewAccountReceivableDto,
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.accountingService.approveAR(id, data, tenantId, user.sub);
+  }
+
+  @Post('accounts-receivable/:id/reject')
+  rejectAR(
+    @Param('id') id: string,
+    @Body() data: ReviewAccountReceivableDto,
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.accountingService.rejectAR(id, data, tenantId, user.sub);
+  }
+
+  @Post('accounts-receivable/:id/post')
+  postAR(
+    @Param('id') id: string,
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.accountingService.postAR(id, tenantId, user.sub);
+  }
+
+  @Post('accounts-receivable/:id/sign')
+  signAR(
+    @Param('id') id: string,
+    @Body() data: SignAccountReceivableDto,
+    @CurrentTenant() tenantId: string,
+  ) {
+    return this.accountingService.signAR(id, data, tenantId);
   }
 
   @Post('accounts-receivable/:id/payment')

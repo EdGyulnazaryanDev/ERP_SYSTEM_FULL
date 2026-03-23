@@ -12,6 +12,7 @@ import {
   Row,
   Col,
   Select,
+  Alert,
 } from 'antd';
 import { SaveOutlined } from '@ant-design/icons';
 import { inventoryApi } from '@/api/inventory';
@@ -63,10 +64,17 @@ export default function InventoryFormPage() {
       }
       return inventoryApi.create(payload);
     },
-    onSuccess: () => {
-      message.success(`Inventory item ${id ? 'updated' : 'created'} successfully`);
+    onSuccess: (_data, values) => {
+      const requestedQty = Number(values?.quantity || 0);
+      if (!id && requestedQty > 0) {
+        message.success('Inventory item created. Opening stock is now pending approval and inbound delivery.');
+      } else {
+        message.success(`Inventory item ${id ? 'updated' : 'created'} successfully`);
+      }
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
       queryClient.invalidateQueries({ queryKey: ['inventory-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['purchase-requisitions'] });
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
       navigate('/inventory');
     },
     onError: (error: any) => {
@@ -117,6 +125,15 @@ export default function InventoryFormPage() {
           </Space>
         }
       >
+        {!id && (
+          <Alert
+            type="info"
+            showIcon
+            style={{ marginBottom: 16, borderRadius: 10 }}
+            message="New item receiving flow"
+            description="If you enter an opening quantity, the system will create a pending procurement/accounting workflow. Stock will stay at zero until the requisition is approved and the inbound shipment is delivered."
+          />
+        )}
         <Form
           form={form}
           layout="vertical"
@@ -156,7 +173,7 @@ export default function InventoryFormPage() {
           <Row gutter={16}>
             <Col span={8}>
               <Form.Item
-                label="Quantity"
+                label={id ? 'Quantity' : 'Requested Opening Qty'}
                 name="quantity"
                 rules={[{ required: true }]}
               >
@@ -173,6 +190,7 @@ export default function InventoryFormPage() {
                   style={{ width: '100%' }}
                   min={0}
                   placeholder="Reserved"
+                  disabled={!id}
                 />
               </Form.Item>
             </Col>

@@ -6,9 +6,11 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { FinancialEventType, PurchaseOrderReceivedEvent } from '../accounting/events/financial.events';
+import { JournalEntryEntity, JournalEntryStatus } from '../accounting/entities/journal-entry.entity';
+import { JournalEntryLineEntity } from '../accounting/entities/journal-entry-line.entity';
 import { PurchaseRequisitionEntity, RequisitionStatus } from './entities/purchase-requisition.entity';
 import { PurchaseRequisitionItemEntity } from './entities/purchase-requisition-item.entity';
 import { RfqEntity, RfqStatus } from './entities/rfq.entity';
@@ -22,6 +24,8 @@ import { GoodsReceiptItemEntity } from './entities/goods-receipt-item.entity';
 import { ShipmentEntity, ShipmentStatus, ShipmentPriority } from '../transportation/entities/shipment.entity';
 import { ShipmentItemEntity } from '../transportation/entities/shipment-item.entity';
 import { InventoryEntity } from '../inventory/entities/inventory.entity';
+import { TransactionEntity, TransactionStatus, TransactionType } from '../transactions/entities/transaction.entity';
+import { TransactionItemEntity } from '../transactions/entities/transaction-item.entity';
 import type { CreatePurchaseRequisitionDto, UpdatePurchaseRequisitionDto, ApproveRequisitionDto, RejectRequisitionDto } from './dto/create-purchase-requisition.dto';
 import type { CreateRfqDto, UpdateRfqDto } from './dto/create-rfq.dto';
 import type { CreateVendorQuoteDto, UpdateVendorQuoteDto } from './dto/create-vendor-quote.dto';
@@ -59,6 +63,14 @@ export class ProcurementService {
     private shipmentItemRepo: Repository<ShipmentItemEntity>,
     @InjectRepository(InventoryEntity)
     private inventoryRepo: Repository<InventoryEntity>,
+    @InjectRepository(TransactionEntity)
+    private transactionRepo: Repository<TransactionEntity>,
+    @InjectRepository(TransactionItemEntity)
+    private transactionItemRepo: Repository<TransactionItemEntity>,
+    @InjectRepository(JournalEntryEntity)
+    private journalEntryRepo: Repository<JournalEntryEntity>,
+    @InjectRepository(JournalEntryLineEntity)
+    private journalLineRepo: Repository<JournalEntryLineEntity>,
     private eventEmitter: EventEmitter2,
   ) { }
 
@@ -183,9 +195,21 @@ export class ProcurementService {
     requisition.approved_at = new Date();
 
     const saved = await this.requisitionRepo.save(requisition);
+    const linkedTransaction = await this.findWorkflowTransactionForRequisition(requisition, tenantId);
 
     // ── Create inbound PENDING shipment (supplier → warehouse) ──────────────────
     try {
+      const existingShipment = linkedTransaction
+        ? await this.shipmentRepo.findOne({
+            where: { tenant_id: tenantId, transaction_id: linkedTransaction.id },
+            relations: ['items'],
+          })
+        : null;
+      if (existingShipment) {
+        this.logger.log(`[PROCUREMENT] Shipment already exists for requisition ${requisition.requisition_number}`);
+        return saved;
+      }
+
       const trackingNumber = `SHP-REQ-${requisition.requisition_number}-${Date.now()}`;
 
       // Look up supplier info from inventory items
@@ -220,6 +244,7 @@ export class ProcurementService {
       const shipment = this.shipmentRepo.create({
         tenant_id: tenantId,
         tracking_number: trackingNumber,
+        transaction_id: linkedTransaction?.id,
         status: ShipmentStatus.PENDING,
         priority: ShipmentPriority.HIGH,
         origin_name: supplierName,
@@ -239,6 +264,10 @@ export class ProcurementService {
       });
 
       await this.shipmentRepo.save(shipment);
+      if (linkedTransaction && linkedTransaction.status !== TransactionStatus.PENDING) {
+        linkedTransaction.status = TransactionStatus.PENDING;
+        await this.transactionRepo.save(linkedTransaction);
+      }
       this.logger.log(`[PROCUREMENT] Created inbound shipment ${trackingNumber} for requisition ${requisition.requisition_number} (supplier: ${supplierName})`);
     } catch (e: any) {
       this.logger.error(`[PROCUREMENT] Failed to create inbound shipment: ${e.message}`);
@@ -256,8 +285,66 @@ export class ProcurementService {
 
     requisition.status = RequisitionStatus.REJECTED;
     requisition.rejection_reason = data.rejection_reason;
+    const saved = await this.requisitionRepo.save(requisition);
 
-    return this.requisitionRepo.save(requisition);
+    const linkedTransaction = await this.findWorkflowTransactionForRequisition(requisition, tenantId);
+    if (linkedTransaction) {
+      linkedTransaction.status = TransactionStatus.CANCELLED;
+      linkedTransaction.notes = `${linkedTransaction.notes || ''} Requisition rejected: ${data.rejection_reason}`.trim();
+      await this.transactionRepo.save(linkedTransaction);
+      await this.deleteDraftJournalEntriesForReference(linkedTransaction.transaction_number, tenantId);
+
+      const shipments = await this.shipmentRepo.find({
+        where: { tenant_id: tenantId, transaction_id: linkedTransaction.id, status: In([ShipmentStatus.PENDING, ShipmentStatus.PICKED_UP, ShipmentStatus.IN_TRANSIT, ShipmentStatus.OUT_FOR_DELIVERY]) },
+      });
+      for (const shipment of shipments) {
+        shipment.status = ShipmentStatus.CANCELLED;
+        shipment.tracking_history = [
+          ...(shipment.tracking_history || []),
+          {
+            status: ShipmentStatus.CANCELLED,
+            timestamp: new Date(),
+            location: shipment.origin_address || shipment.origin_name,
+            notes: `Cancelled because requisition ${requisition.requisition_number} was rejected`,
+          },
+        ];
+        await this.shipmentRepo.save(shipment);
+      }
+    }
+
+    return saved;
+  }
+
+  private async findWorkflowTransactionForRequisition(
+    requisition: PurchaseRequisitionEntity,
+    tenantId: string,
+  ): Promise<TransactionEntity | null> {
+    return this.transactionRepo.findOne({
+      where: {
+        tenant_id: tenantId,
+        type: TransactionType.PURCHASE,
+        terms: `workflow:requisition:${requisition.requisition_number}`,
+      },
+      relations: ['items'],
+      order: { created_at: 'DESC' },
+    });
+  }
+
+  private async deleteDraftJournalEntriesForReference(
+    reference: string,
+    tenantId: string,
+  ): Promise<void> {
+    const draftEntries = await this.journalEntryRepo.find({
+      where: { tenant_id: tenantId, reference, status: JournalEntryStatus.DRAFT },
+      relations: ['lines'],
+    });
+
+    for (const entry of draftEntries) {
+      if (entry.lines?.length) {
+        await this.journalLineRepo.delete({ journal_entry_id: entry.id, tenant_id: tenantId });
+      }
+      await this.journalEntryRepo.delete({ id: entry.id, tenant_id: tenantId });
+    }
   }
 
   // ==================== RFQ METHODS ====================

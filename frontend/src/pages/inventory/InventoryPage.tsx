@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Table, Button, Card, Space, Tag, Input, Select, Row, Col,
   message, Popconfirm, Alert, Badge, Modal, InputNumber, Tabs, Tooltip,
-  Progress, Segmented,
+  Progress, Segmented, Pagination,
 } from 'antd';
 import {
   PlusOutlined, EditOutlined, DeleteOutlined, WarningOutlined,
@@ -15,8 +15,15 @@ import {
 import { inventoryApi, type Inventory } from '@/api/inventory';
 import apiClient from '@/api/client';
 import { useAccessControl } from '@/hooks/useAccessControl';
+import styles from './InventoryPage.module.css';
 
 const { Search } = Input;
+type InventoryVariant = 'aurora' | 'graphite' | 'copper';
+const variantClassMap: Record<InventoryVariant, string> = {
+  aurora: styles.variantAurora,
+  graphite: styles.variantGraphite,
+  copper: styles.variantCopper,
+};
 
 // ── Stat Card ────────────────────────────────────────────────────────────────
 function StatCard({
@@ -28,32 +35,19 @@ function StatCard({
   return (
     <Card
       size="small"
+      className={`${styles.statCard} ${active ? styles.statCardActive : ''}`}
       onClick={onClick}
-      style={{
-        borderRadius: 12,
-        border: active ? `2px solid ${color}` : `1px solid ${color}22`,
-        background: active ? `${color}14` : `${color}08`,
-        cursor: onClick ? 'pointer' : 'default',
-        transition: 'all 0.18s ease',
-        boxShadow: active ? `0 0 0 3px ${color}22` : undefined,
-        transform: active ? 'translateY(-1px)' : undefined,
-        height: '100%',
-      }}
+      style={{ ['--stat-color' as string]: color, cursor: onClick ? 'pointer' : 'default' }}
       styles={{ body: { padding: '14px 18px' } }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{
-          width: 40, height: 40, borderRadius: 10,
-          background: active ? `${color}28` : `${color}18`,
-          display: 'flex', alignItems: 'center',
-          justifyContent: 'center', color, fontSize: 18, flexShrink: 0,
-        }}>
+      <div className={styles.statBody}>
+        <div className={styles.statIcon}>
           {icon}
         </div>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.2, color: 'var(--app-text)' }}>{value}</div>
-          <div style={{ fontSize: 12, color: active ? color : 'var(--app-text-muted)', fontWeight: active ? 600 : 400, marginTop: 2 }}>{label}</div>
-          {sub && <div style={{ fontSize: 11, color: 'var(--app-text-soft)', marginTop: 1 }}>{sub}</div>}
+          <div className={styles.statValue}>{value}</div>
+          <div className={styles.statLabel} style={active ? { color, fontWeight: 600 } : undefined}>{label}</div>
+          {sub && <div className={styles.statSub}>{sub}</div>}
         </div>
       </div>
     </Card>
@@ -91,7 +85,9 @@ export default function InventoryPage() {
   const [activeStatFilter, setActiveStatFilter] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('inventory');
   const [inventoryLens, setInventoryLens] = useState<'all' | 'risk' | 'reserved' | 'value'>('all');
+  const [inventoryVariant, setInventoryVariant] = useState<InventoryVariant>('aurora');
   const [tableDensity, setTableDensity] = useState<'small' | 'middle'>('small');
+  const [inventoryPage, setInventoryPage] = useState(1);
   const [reorderModal, setReorderModal] = useState<{
     id: string; product_name: string; reorder_quantity: number; unit_cost: number; supplier_name?: string;
   } | null>(null);
@@ -198,12 +194,35 @@ export default function InventoryPage() {
     };
   }, [safeItems]);
 
+  const filteredInventoryInsights = useMemo(() => {
+    const filteredValue = filteredItems.reduce((sum, item) => sum + (toNum(item.quantity) * toNum(item.unit_cost)), 0);
+    const filteredReserved = filteredItems.reduce((sum, item) => sum + toNum(item.reserved_quantity), 0);
+    const riskCount = filteredItems.filter((item) => toNum(item.quantity) === 0 || toNum(item.quantity) <= toNum(item.reorder_level)).length;
+    const activeLocations = new Set(filteredItems.map((item) => item.location).filter(Boolean)).size;
+
+    return {
+      filteredValue,
+      filteredReserved,
+      riskCount,
+      activeLocations,
+    };
+  }, [filteredItems]);
+
+  const inventoryPageSize = tableDensity === 'small' ? 8 : 6;
+  const inventoryPageCount = Math.max(1, Math.ceil(filteredItems.length / inventoryPageSize));
+  const currentInventoryPage = Math.min(inventoryPage, inventoryPageCount);
+  const pagedItems = useMemo(() => {
+    const start = (currentInventoryPage - 1) * inventoryPageSize;
+    return filteredItems.slice(start, start + inventoryPageSize);
+  }, [currentInventoryPage, filteredItems, inventoryPageSize]);
+
   const resetWorkspace = () => {
     setSearchText('');
     setLocationFilter(undefined);
     setActiveStatFilter(null);
     setInventoryLens('all');
     setActiveTab('inventory');
+    setInventoryPage(1);
   };
 
   const exportInventoryCsv = () => {
@@ -449,22 +468,15 @@ export default function InventoryPage() {
   // ── Error state ────────────────────────────────────────────────────────────
   if (isError) {
     return (
-      <div style={{ padding: 24, minHeight: '100vh' }}>
+      <div className={`${styles.root} ${variantClassMap[inventoryVariant]}`}>
         <Card
-          style={{
-            borderRadius: 12,
-            textAlign: 'center',
-            padding: '40px 0',
-            background: 'rgba(8, 25, 40, 0.72)',
-            border: '1px solid rgba(134, 166, 197, 0.12)',
-            boxShadow: '0 20px 50px rgba(2, 10, 19, 0.22)',
-          }}
+          className={styles.errorCard}
         >
           <WarningOutlined style={{ fontSize: 48, color: '#ff4d4f', marginBottom: 16 }} />
           <h2>Error Loading Inventory</h2>
           <p style={{ color: 'var(--app-text-muted)', marginBottom: 24 }}>{(error as Error)?.message}</p>
           <Space>
-            <Button type="primary" icon={<ReloadOutlined />} onClick={() => queryClient.invalidateQueries({ queryKey: ['inventory'] })}>Retry</Button>
+            <Button type="primary" className={styles.primaryButton} icon={<ReloadOutlined />} onClick={() => queryClient.invalidateQueries({ queryKey: ['inventory'] })}>Retry</Button>
             {canCreateInventory && <Button onClick={() => navigate('/inventory/create')}>Add First Item</Button>}
           </Space>
         </Card>
@@ -476,44 +488,67 @@ export default function InventoryPage() {
   const alertCount = (reorderAlerts as unknown[]).length;
 
   return (
-    <div style={{ padding: 24, minHeight: '100vh' }}>
-
-      {/* Page header */}
-      <div style={{ marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: 'var(--app-text)' }}>
-            <DatabaseOutlined style={{ marginRight: 10, color: '#1677ff' }} />
-            Inventory
-          </h1>
-          <p style={{ margin: '4px 0 0', color: 'var(--app-text-muted)', fontSize: 13 }}>
-            Track stock levels, valuations, and reorder alerts across all locations
-          </p>
-        </div>
-        <Space>
-          <Button
-            icon={<ReloadOutlined />}
-            style={{ borderRadius: 8 }}
-            onClick={() => {
-              queryClient.invalidateQueries({ queryKey: ['inventory'] });
-              queryClient.invalidateQueries({ queryKey: ['inventory-summary'] });
-              queryClient.invalidateQueries({ queryKey: ['reorder-alerts'] });
-            }}
-          >
-            Refresh
-          </Button>
-          {canCreateInventory && (
+    <div className={`${styles.root} ${variantClassMap[inventoryVariant]}`}>
+      <div className={styles.shell}>
+      <section className={styles.hero}>
+        <div className={styles.heroHeader}>
+          <div>
+            <div className={styles.eyebrow}>
+              <ClockCircleOutlined />
+              Live stock command
+            </div>
+            <div className={styles.titleRow}>
+              <span className={styles.titleIcon}>
+                <DatabaseOutlined />
+              </span>
+              <h1 className={styles.title}>Inventory</h1>
+            </div>
+            <p className={styles.subtitle}>
+              Track stock levels, valuations, reservations, and reorder pressure across every location from one focused operations surface.
+            </p>
+          </div>
+          <Space className={styles.heroActions}>
             <Button
-              type="primary" icon={<PlusOutlined />} size="large"
-              style={{ borderRadius: 8 }}
-              onClick={() => navigate('/inventory/create')}
+              icon={<ReloadOutlined />}
+              className={styles.softButton}
+              onClick={() => {
+                queryClient.invalidateQueries({ queryKey: ['inventory'] });
+                queryClient.invalidateQueries({ queryKey: ['inventory-summary'] });
+                queryClient.invalidateQueries({ queryKey: ['reorder-alerts'] });
+              }}
             >
-              Add Item
+              Refresh
             </Button>
-          )}
-        </Space>
-      </div>
+            {canCreateInventory && (
+              <Button
+                type="primary" icon={<PlusOutlined />} size="large"
+                className={styles.primaryButton}
+                onClick={() => navigate('/inventory/create')}
+              >
+                Add Item
+              </Button>
+            )}
+          </Space>
+        </div>
+        <div className={styles.heroMeta}>
+          <div className={styles.metaCard}>
+            <span className={styles.metaLabel}>Live inventory value</span>
+            <span className={styles.metaValue}>{fmt(summary?.totalValue)}</span>
+            <span className={styles.metaHint}>Current warehouse carrying value</span>
+          </div>
+          <div className={styles.metaCard}>
+            <span className={styles.metaLabel}>Watchlist pressure</span>
+            <span className={styles.metaValue}>{toNum(summary?.lowStockItems) + toNum(summary?.outOfStockItems)}</span>
+            <span className={styles.metaHint}>Items needing attention or replenishment</span>
+          </div>
+          <div className={styles.metaCard}>
+            <span className={styles.metaLabel}>Reserved units</span>
+            <span className={styles.metaValue}>{inventoryInsights.totalReserved}</span>
+            <span className={styles.metaHint}>Committed stock not freely available</span>
+          </div>
+        </div>
+      </section>
 
-      {/* Stat cards */}
       <Row gutter={12} style={{ marginBottom: 20 }}>
         <Col xs={12} sm={8} md={4} lg={4}>
           <StatCard
@@ -527,6 +562,7 @@ export default function InventoryPage() {
           <StatCard
             label="Total Qty" value={toNum(summary?.totalQuantity)} color="#13c2c2"
             icon={<DatabaseOutlined />}
+            sub="Units across all locations"
           />
         </Col>
         <Col xs={12} sm={8} md={4} lg={4}>
@@ -550,6 +586,7 @@ export default function InventoryPage() {
             label="Total Stock Value" color="#722ed1"
             value={`$${toNum(summary?.totalValue).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
             icon={<DollarOutlined />}
+            sub="Quantity x unit cost"
           />
         </Col>
       </Row>
@@ -557,22 +594,17 @@ export default function InventoryPage() {
       <Row gutter={12} style={{ marginBottom: 20 }}>
         <Col xs={24} lg={16}>
           <Card
-            style={{
-              borderRadius: 12,
-              border: '1px solid rgba(84, 214, 255, 0.18)',
-              background: 'linear-gradient(135deg, rgba(8, 41, 63, 0.94) 0%, rgba(11, 57, 83, 0.88) 100%)',
-              boxShadow: '0 20px 40px rgba(2, 10, 19, 0.18)',
-            }}
-            styles={{ body: { padding: '16px 18px' } }}
+            className={styles.controlPanel}
+            styles={{ body: { padding: '18px 20px' } }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+            <div className={styles.panelHeader}>
               <div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--app-text)' }}>Inventory Operations Desk</div>
-                <div style={{ fontSize: 12, color: 'var(--app-text-muted)', marginTop: 4 }}>
-                  Switch between stock risk, reserved inventory, and highest-value positions instantly.
-                </div>
+                <h2 className={styles.panelTitle}>Inventory Operations Desk</h2>
+                <p className={styles.panelText}>
+                  Switch between stock risk, reserved inventory, highest-value positions, and alternate visual variants without leaving the page.
+                </p>
               </div>
-              <Space wrap>
+              <div className={styles.panelControls}>
                 <Segmented
                   value={inventoryLens}
                   onChange={(value) => setInventoryLens(value as typeof inventoryLens)}
@@ -584,6 +616,15 @@ export default function InventoryPage() {
                   ]}
                 />
                 <Segmented
+                  value={inventoryVariant}
+                  onChange={(value) => setInventoryVariant(value as InventoryVariant)}
+                  options={[
+                    { label: 'Aurora', value: 'aurora' },
+                    { label: 'Graphite', value: 'graphite' },
+                    { label: 'Copper', value: 'copper' },
+                  ]}
+                />
+                <Segmented
                   value={tableDensity}
                   onChange={(value) => setTableDensity(value as typeof tableDensity)}
                   options={[
@@ -591,44 +632,39 @@ export default function InventoryPage() {
                     { label: 'Comfort', value: 'middle' },
                   ]}
                 />
-                <Button onClick={resetWorkspace}>Reset</Button>
+                <Button className={styles.softButton} onClick={resetWorkspace}>Reset</Button>
                 {canExportInventory && (
-                  <Button icon={<DownloadOutlined />} onClick={exportInventoryCsv}>
+                  <Button className={styles.softButton} icon={<DownloadOutlined />} onClick={exportInventoryCsv}>
                     Export CSV
                   </Button>
                 )}
-              </Space>
+              </div>
             </div>
           </Card>
         </Col>
         <Col xs={24} lg={8}>
           <Card
-            style={{
-              borderRadius: 12,
-              background: 'rgba(8, 25, 40, 0.72)',
-              border: '1px solid rgba(134, 166, 197, 0.12)',
-              boxShadow: '0 20px 50px rgba(2, 10, 19, 0.22)',
-            }}
-            styles={{ body: { padding: '16px 18px' } }}
+            className={styles.insightPanel}
+            styles={{ body: { padding: '18px 20px' } }}
           >
-            <div style={{ display: 'grid', gap: 10 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                <span style={{ color: 'var(--app-text-muted)', fontSize: 12 }}>Reserved units</span>
-                <strong>{inventoryInsights.totalReserved}</strong>
+            <div className={styles.insightGrid}>
+              <div className={styles.insightRow}>
+                <span className={styles.insightLabel}>Reserved units</span>
+                <strong className={styles.insightValue}>{inventoryInsights.totalReserved}</strong>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                <span style={{ color: 'var(--app-text-muted)', fontSize: 12 }}>Blocked value</span>
-                <strong style={{ color: inventoryInsights.blockedValue > 0 ? '#fa8c16' : '#52c41a' }}>
+              <div className={styles.insightRow}>
+                <span className={styles.insightLabel}>Blocked value</span>
+                <strong className={styles.insightValue} style={{ color: inventoryInsights.blockedValue > 0 ? '#fa8c16' : '#52c41a' }}>
                   {fmt(inventoryInsights.blockedValue)}
                 </strong>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                <span style={{ color: 'var(--app-text-muted)', fontSize: 12 }}>Available value</span>
-                <strong>{fmt(inventoryInsights.availableValue)}</strong>
+              <div className={styles.insightRow}>
+                <span className={styles.insightLabel}>Available value</span>
+                <strong className={styles.insightValue}>{fmt(inventoryInsights.availableValue)}</strong>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                <span style={{ color: 'var(--app-text-muted)', fontSize: 12 }}>Largest position</span>
-                <strong>
+              <div className={styles.insightRow}>
+                <span className={styles.insightLabel}>Largest position</span>
+                <strong className={styles.insightValue}>
                   {inventoryInsights.highValueItem
                     ? `${inventoryInsights.highValueItem.product_name} (${fmt(toNum(inventoryInsights.highValueItem.quantity) * toNum(inventoryInsights.highValueItem.unit_cost))})`
                     : '—'}
@@ -641,7 +677,7 @@ export default function InventoryPage() {
 
       {(toNum(summary?.outOfStockItems) > 0 || toNum(summary?.lowStockItems) > 0 || inventoryInsights.totalReserved > 0) && (
         <Alert
-          style={{ marginBottom: 16, borderRadius: 10 }}
+          className={styles.watchlist}
           type={toNum(summary?.outOfStockItems) > 0 ? 'warning' : 'info'}
           showIcon
           message="Inventory watchlist"
@@ -653,41 +689,13 @@ export default function InventoryPage() {
         />
       )}
 
-      {/* Main card with tabs */}
       <Card
-        style={{
-          borderRadius: 12,
-          background: 'rgba(8, 25, 40, 0.72)',
-          border: '1px solid rgba(134, 166, 197, 0.12)',
-          boxShadow: '0 20px 50px rgba(2, 10, 19, 0.22)',
-        }}
+        className={styles.workspaceCard}
         styles={{ body: { padding: 0 } }}
       >
         <Tabs
           activeKey={activeTab}
           onChange={setActiveTab}
-          style={{ padding: '0 20px' }}
-          tabBarStyle={{ marginBottom: 0 }}
-          tabBarExtraContent={
-            <Space style={{ paddingBottom: 8 }}>
-              <Button
-                icon={<ReloadOutlined />}
-                size="small"
-                onClick={() => {
-                  queryClient.invalidateQueries({ queryKey: ['inventory'] });
-                  queryClient.invalidateQueries({ queryKey: ['inventory-summary'] });
-                }}
-              />
-              {canCreateInventory && (
-                <Button
-                  type="primary" size="small" icon={<PlusOutlined />}
-                  onClick={() => navigate('/inventory/create')}
-                >
-                  Add Item
-                </Button>
-              )}
-            </Space>
-          }
           items={[
             {
               key: 'inventory',
@@ -707,8 +715,7 @@ export default function InventoryPage() {
               ),
               children: (
                 <div>
-                  {/* Filters bar */}
-                  <div style={{ padding: '16px 0', borderBottom: '1px solid rgba(134, 166, 197, 0.12)' }}>
+                  <div className={styles.filterBar}>
                     <Row gutter={12} align="middle">
                       <Col xs={24} md={10}>
                         <Search
@@ -736,7 +743,7 @@ export default function InventoryPage() {
                       </Col>
                       {activeStatFilter && (
                         <Col xs={24} md={4}>
-                          <Button size="small" onClick={() => setActiveStatFilter(null)}>
+                          <Button size="small" className={styles.softButton} onClick={() => setActiveStatFilter(null)}>
                             Clear filter
                           </Button>
                         </Col>
@@ -749,29 +756,171 @@ export default function InventoryPage() {
                       message="No inventory items yet"
                       type="info" showIcon
                       style={{ margin: '16px 0', borderRadius: 8 }}
-                      action={canCreateInventory ? <Button type="primary" size="small" onClick={() => navigate('/inventory/create')}>Add First Item</Button> : undefined}
+                      action={canCreateInventory ? <Button type="primary" size="small" className={styles.primaryButton} onClick={() => navigate('/inventory/create')}>Add First Item</Button> : undefined}
                     />
                   )}
 
-                  <Table
-                    columns={columns}
-                    dataSource={filteredItems}
-                    rowKey="id"
-                    loading={isLoading}
-                    size={tableDensity}
-                    scroll={{ x: 1300 }}
-                    pagination={{
-                      pageSize: 15,
-                      showSizeChanger: true,
-                      showTotal: (t, r) => `${r[0]}–${r[1]} of ${t} items`,
-                      style: { padding: '12px 0' },
-                    }}
-                    rowClassName={(record: Inventory) => {
-                      if (toNum(record.quantity) === 0) return 'row-out-of-stock';
-                      if (toNum(record.quantity) <= toNum(record.reorder_level)) return 'row-low-stock';
-                      return '';
-                    }}
-                  />
+                  <div className={styles.inventoryBoard}>
+                    <div className={styles.inventoryBoardHeader}>
+                      <div className={styles.inventoryBoardTitleBlock}>
+                        <h3 className={styles.inventoryBoardTitle}>Inventory Signal Grid</h3>
+                        <p className={styles.inventoryBoardText}>
+                          A denser visual surface for product health, carrying value, supplier ownership, and replenishment pressure.
+                        </p>
+                      </div>
+                      <div className={styles.inventorySummaryGrid}>
+                        <div className={styles.summaryChip}>
+                          <span className={styles.summaryChipLabel}>Visible items</span>
+                          <strong className={styles.summaryChipValue}>{filteredItems.length}</strong>
+                        </div>
+                        <div className={styles.summaryChip}>
+                          <span className={styles.summaryChipLabel}>Visible value</span>
+                          <strong className={styles.summaryChipValue}>{fmt(filteredInventoryInsights.filteredValue)}</strong>
+                        </div>
+                        <div className={styles.summaryChip}>
+                          <span className={styles.summaryChipLabel}>Reserved units</span>
+                          <strong className={styles.summaryChipValue}>{filteredInventoryInsights.filteredReserved}</strong>
+                        </div>
+                        <div className={styles.summaryChip}>
+                          <span className={styles.summaryChipLabel}>At risk</span>
+                          <strong className={styles.summaryChipValue}>{filteredInventoryInsights.riskCount}</strong>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className={styles.signalGrid}>
+                      {pagedItems.map((item, index) => {
+                        const qty = toNum(item.quantity);
+                        const reserved = toNum(item.reserved_quantity);
+                        const available = toNum(item.available_quantity);
+                        const reorderLevel = toNum(item.reorder_level);
+                        const reorderQty = toNum(item.reorder_quantity) || 50;
+                        const max = toNum(item.max_stock_level) || 100;
+                        const fill = Math.min(Math.round((qty / max) * 100), 100);
+                        const isOut = qty === 0;
+                        const isLow = !isOut && qty <= reorderLevel;
+                        const cardTone = isOut ? styles.signalCardDanger : isLow ? styles.signalCardWarning : styles.signalCardHealthy;
+                        const stockValue = qty * toNum(item.unit_cost);
+                        const itemRank = (currentInventoryPage - 1) * inventoryPageSize + index + 1;
+
+                        return (
+                          <article key={item.id} className={`${styles.signalCard} ${cardTone}`}>
+                            <div className={styles.signalCardTop}>
+                              <span className={styles.signalRank}>#{String(itemRank).padStart(2, '0')}</span>
+                              <StockPill qty={qty} reorderLevel={reorderLevel} />
+                            </div>
+
+                            <div className={styles.signalTitleBlock}>
+                              <h4 className={styles.signalName}>{item.product_name || 'Unnamed item'}</h4>
+                              <div className={styles.signalSku}>{item.sku || 'NO-SKU'}</div>
+                            </div>
+
+                            <div className={styles.signalMeta}>
+                              <span className={styles.signalMetaTag}>
+                                <EnvironmentOutlined />
+                                {item.location || 'No location'}
+                              </span>
+                              <span className={styles.signalMetaTag}>
+                                <ShoppingCartOutlined />
+                                {item.supplier_name || 'No supplier'}
+                              </span>
+                            </div>
+
+                            <div className={styles.signalMetrics}>
+                              <div className={styles.signalMetric}>
+                                <span className={styles.signalMetricLabel}>Available</span>
+                                <strong className={styles.signalMetricValue}>{available}</strong>
+                              </div>
+                              <div className={styles.signalMetric}>
+                                <span className={styles.signalMetricLabel}>Reserved</span>
+                                <strong className={styles.signalMetricValue}>{reserved}</strong>
+                              </div>
+                              <div className={styles.signalMetric}>
+                                <span className={styles.signalMetricLabel}>Value</span>
+                                <strong className={styles.signalMetricValue}>{fmt(stockValue)}</strong>
+                              </div>
+                              <div className={styles.signalMetric}>
+                                <span className={styles.signalMetricLabel}>Reorder</span>
+                                <strong className={styles.signalMetricValue}>{reorderQty}</strong>
+                              </div>
+                            </div>
+
+                            <div className={styles.signalGauge}>
+                              <div className={styles.signalGaugeHeader}>
+                                <span className={styles.signalGaugeLabel}>Capacity fill</span>
+                                <strong className={styles.signalGaugeValue}>{fill}%</strong>
+                              </div>
+                              <Progress
+                                percent={fill}
+                                size="small"
+                                strokeColor={isOut ? '#ff4d4f' : isLow ? '#fa8c16' : '#22c55e'}
+                                showInfo={false}
+                              />
+                              <div className={styles.signalGaugeHint}>
+                                <span>{qty} on hand</span>
+                                <span>max {max}</span>
+                              </div>
+                            </div>
+
+                            <div className={styles.signalPrices}>
+                              <span>Cost {fmt(item.unit_cost)}</span>
+                              <span>Price {fmt(item.unit_price)}</span>
+                            </div>
+
+                            <div className={styles.signalActions}>
+                              <Button
+                                size="small"
+                                className={styles.softButton}
+                                icon={<ShoppingCartOutlined />}
+                                onClick={() => {
+                                  setReorderModal({
+                                    id: item.id,
+                                    product_name: item.product_name,
+                                    reorder_quantity: reorderQty,
+                                    unit_cost: toNum(item.unit_cost),
+                                    supplier_name: item.supplier_name,
+                                  });
+                                  setReorderQty(reorderQty);
+                                }}
+                              >
+                                Reorder Qty
+                              </Button>
+                              {canEditInventory && (
+                                <Button
+                                  size="small"
+                                  className={styles.softButton}
+                                  icon={<EditOutlined />}
+                                  onClick={() => navigate(`/inventory/${item.id}/edit`)}
+                                >
+                                  Edit
+                                </Button>
+                              )}
+                              {canDeleteInventory && (
+                                <Popconfirm title="Delete this item?" onConfirm={() => handleDelete(item.id)} okText="Yes" cancelText="No">
+                                  <Button size="small" danger icon={<DeleteOutlined />}>
+                                    Remove
+                                  </Button>
+                                </Popconfirm>
+                              )}
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
+
+                    {!isLoading && filteredItems.length > 0 && (
+                      <div className={styles.commandPagination}>
+                        <Pagination
+                          current={currentInventoryPage}
+                          pageSize={inventoryPageSize}
+                          total={filteredItems.length}
+                          onChange={setInventoryPage}
+                          showSizeChanger={false}
+                          showTotal={(total, range) => `${range[0]}-${range[1]} of ${total} items`}
+                        />
+                      </div>
+                    )}
+                  </div>
                 </div>
               ),
             },
@@ -836,7 +985,7 @@ export default function InventoryPage() {
       >
         {reorderModal && (
           <div>
-            <Row gutter={16} style={{ marginBottom: 16 }}>
+            <Row gutter={16} className={styles.modalMeta}>
               <Col span={12}>
                 <div style={{ fontSize: 12, color: 'var(--app-text-muted)' }}>Supplier</div>
                 <div style={{ fontWeight: 600 }}>{reorderModal.supplier_name || <span style={{ color: 'var(--app-text-soft)' }}>Not assigned</span>}</div>
@@ -854,32 +1003,22 @@ export default function InventoryPage() {
               style={{ width: '100%' }}
               size="large"
             />
-            <div style={{
-              marginTop: 16, padding: '12px 16px', borderRadius: 8,
-              background: 'rgba(82,196,26,0.10)', border: '1px solid rgba(82,196,26,0.24)',
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            }}>
+            <div className={styles.modalEstimate}>
               <span style={{ color: '#52c41a', fontWeight: 500 }}>Estimated Total</span>
               <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 16, color: 'var(--app-text)' }}>
                 ${(reorderQty * Number(reorderModal.unit_cost)).toFixed(2)}
               </span>
             </div>
             <Alert
-              style={{ marginTop: 12, borderRadius: 8 }}
+              className={styles.modalInfo}
               type="info"
-              message="This will create a Purchase Requisition (pending approval) + draft Purchase Transaction + Journal Entry (AP debit)."
+              message="This creates a pending purchase workflow: requisition approval, pending transaction, draft accounting entry, then inbound shipment. Inventory increases only after the shipment is delivered."
               showIcon
             />
           </div>
         )}
       </Modal>
-
-      {/* Row styles */}
-      <style>{`
-        .row-out-of-stock td { background: rgba(255,77,79,0.10) !important; }
-        .row-low-stock td { background: rgba(250,140,22,0.10) !important; }
-        .ant-tabs-content-holder { padding: 0 20px 20px; }
-      `}</style>
+      </div>
     </div>
   );
 }

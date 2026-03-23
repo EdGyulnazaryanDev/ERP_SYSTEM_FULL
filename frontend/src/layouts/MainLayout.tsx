@@ -452,8 +452,8 @@ export default function MainLayout() {
               <div
                 className="flex items-center gap-3 cursor-pointer"
                 style={{
-                  height: isMobile ? 40 : 46,
-                  padding: isMobile ? '0 8px 0 8px' : '0 12px 0 10px',
+                  minHeight: isMobile ? 40 : 46,
+                  padding: isMobile ? '0 8px 0 8px' : '6px 12px 6px 10px',
                   borderRadius: isMobile ? 12 : 15,
                   border: '1px solid rgba(120, 153, 185, 0.12)',
                   background: 'linear-gradient(135deg, rgba(10, 31, 47, 0.54) 0%, rgba(5, 17, 29, 0.44) 100%)',
@@ -507,9 +507,23 @@ export default function MainLayout() {
                   />
                 </div>
                 {!isMobile && (
-                  <div className="text-right">
+                  <div style={{ textAlign: 'right', lineHeight: 1.3 }}>
                     <div style={{ color: '#f8fbff', fontWeight: 600, fontSize: 13 }}>{userName}</div>
-                    <div style={{ color: '#8da3ba', fontSize: 11, lineHeight: 1.1 }}>Executive access</div>
+                    <div style={{
+                      display: 'inline-block',
+                      marginTop: 3,
+                      padding: '2px 16px',
+                      borderRadius: 20,
+                      fontSize: 10,
+                      fontWeight: 700,
+                      letterSpacing: '0.06em',
+                      textTransform: 'uppercase',
+                      background: 'linear-gradient(135deg, rgba(243, 250, 249, 0.41), rgba(254, 255, 255, 0.42))',
+                      border: '1px solid rgba(56, 189, 248, 0.3)',
+                      color: '#31d3dfff',
+                    }}>
+                      {user?.role ?? 'user'}
+                    </div>
                   </div>
                 )}
                 <div

@@ -71,12 +71,23 @@ export default function PurchaseRequisitionsTab() {
   });
   const approveMutation = useMutation({
     mutationFn: (id: string) => procurementApi.approveRequisition(id, {}),
-    onSuccess: () => { message.success('Requisition approved — JE created & inbound shipment opened'); queryClient.invalidateQueries({ queryKey: ['purchase-requisitions'] }); queryClient.invalidateQueries({ queryKey: ['shipments'] }); },
+    onSuccess: () => {
+      message.success('Requisition approved — inbound shipment created. Inventory will increase only after delivery.');
+      queryClient.invalidateQueries({ queryKey: ['purchase-requisitions'] });
+      queryClient.invalidateQueries({ queryKey: ['shipments'] });
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-summary'] });
+    },
     onError: (e: any) => message.error(e?.response?.data?.message || 'Failed to approve'),
   });
   const rejectMutation = useMutation({
     mutationFn: (id: string) => procurementApi.rejectRequisition(id, { rejection_reason: 'Rejected by manager' }),
-    onSuccess: () => { message.success('Requisition rejected'); queryClient.invalidateQueries({ queryKey: ['purchase-requisitions'] }); },
+    onSuccess: () => {
+      message.success('Requisition rejected — linked transaction and draft accounting entry were cancelled.');
+      queryClient.invalidateQueries({ queryKey: ['purchase-requisitions'] });
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+    },
     onError: (e: any) => message.error(e?.response?.data?.message || 'Failed to reject'),
   });
 

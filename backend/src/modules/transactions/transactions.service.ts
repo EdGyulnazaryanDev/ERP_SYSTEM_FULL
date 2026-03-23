@@ -21,6 +21,7 @@ import {
 import type { CreateTransactionDto } from './dto/create-transaction.dto';
 import { AccountingService } from '../accounting/accounting.service';
 import { JournalEntryStatus } from '../accounting/entities/journal-entry.entity';
+import { ShipmentEntity, ShipmentStatus } from '../transportation/entities/shipment.entity';
 
 @Injectable()
 export class TransactionsService {
@@ -31,6 +32,8 @@ export class TransactionsService {
     private transactionItemRepo: Repository<TransactionItemEntity>,
     @InjectRepository(InventoryEntity)
     private inventoryRepo: Repository<InventoryEntity>,
+    @InjectRepository(ShipmentEntity)
+    private shipmentRepo: Repository<ShipmentEntity>,
     private eventEmitter: EventEmitter2,
     private accountingService: AccountingService,
   ) {}
@@ -240,14 +243,30 @@ export class TransactionsService {
       throw new BadRequestException('Transaction already completed');
     }
 
-    // Update inventory based on transaction type
-    for (const item of transaction.items) {
-      await this.updateInventory(
-        tenantId,
-        item.product_id,
-        item.quantity,
-        transaction.type,
-      );
+    if (transaction.type === TransactionType.PURCHASE) {
+      const deliveredShipment = await this.shipmentRepo.findOne({
+        where: {
+          tenant_id: tenantId,
+          transaction_id: transaction.id,
+          status: ShipmentStatus.DELIVERED,
+        },
+      });
+
+      if (!deliveredShipment) {
+        throw new BadRequestException(
+          'Purchase transactions are completed only after the inbound shipment is delivered.',
+        );
+      }
+    } else {
+      // Update inventory based on transaction type
+      for (const item of transaction.items) {
+        await this.updateInventory(
+          tenantId,
+          item.product_id,
+          item.quantity,
+          transaction.type,
+        );
+      }
     }
 
     transaction.status = TransactionStatus.COMPLETED;
@@ -283,22 +302,6 @@ export class TransactionsService {
           stockEvent.reference = transaction.transaction_number;
           this.eventEmitter.emit(FinancialEventType.STOCK_MOVED, stockEvent);
         }
-      }
-    }
-
-    // ── PURCHASE completed: emit BILL_CREATED + STOCK_MOVED IN per item ──
-    if (transaction.type === TransactionType.PURCHASE) {
-      for (const item of transaction.items) {
-        const stockEvent = new StockMovedEvent();
-        stockEvent.tenantId = tenantId;
-        stockEvent.productId = item.product_id;
-        stockEvent.productName = item.product_name;
-        stockEvent.quantity = item.quantity;
-        stockEvent.movementType = 'IN';
-        stockEvent.unitCost = Number(item.unit_price);
-        stockEvent.totalCost = item.quantity * Number(item.unit_price);
-        stockEvent.reference = transaction.transaction_number;
-        this.eventEmitter.emit(FinancialEventType.STOCK_MOVED, stockEvent);
       }
     }
 

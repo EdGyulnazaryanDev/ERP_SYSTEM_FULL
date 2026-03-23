@@ -19,6 +19,14 @@ export const accountingApi = {
   getAccountsReceivable: () => apiClient.get('/accounting/accounts-receivable'),
   getAR: (id: string) => apiClient.get(`/accounting/accounts-receivable/${id}`),
   createAR: (data: any) => apiClient.post('/accounting/accounts-receivable', data),
+  submitAR: (id: string) => apiClient.post(`/accounting/accounts-receivable/${id}/submit`),
+  approveAR: (id: string, data?: any) => apiClient.post(`/accounting/accounts-receivable/${id}/approve`, data || {}),
+  rejectAR: (id: string, data?: any) => apiClient.post(`/accounting/accounts-receivable/${id}/reject`, data || {}),
+  postAR: (id: string) => apiClient.post(`/accounting/accounts-receivable/${id}/post`),
+  signAR: (id: string, data: any) => {
+    const { id: _ignored, ...body } = data || {};
+    return apiClient.post(`/accounting/accounts-receivable/${id}/sign`, body);
+  },
   recordARPayment: (id: string, data: any) => apiClient.post(`/accounting/accounts-receivable/${id}/payment`, data),
 
   // Accounts Payable
