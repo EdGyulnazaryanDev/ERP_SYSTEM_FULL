@@ -4,9 +4,14 @@ import { SettingsController } from './settings.controller';
 import { SettingsService } from './settings.service';
 import { PageAccessEntity } from './entities/page-access.entity';
 import { UserRole } from '../roles/user-role.entity';
+import { Role } from '../roles/role.entity';
+import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([PageAccessEntity, UserRole])],
+  imports: [
+    TypeOrmModule.forFeature([PageAccessEntity, UserRole, Role]),
+    SubscriptionsModule,
+  ],
   controllers: [SettingsController],
   providers: [SettingsService],
   exports: [SettingsService],

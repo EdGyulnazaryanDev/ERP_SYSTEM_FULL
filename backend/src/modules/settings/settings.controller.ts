@@ -19,8 +19,11 @@ export class SettingsController {
   constructor(private readonly settingsService: SettingsService) {}
 
   @Get('page-access/catalog')
-  getPageCatalog() {
-    return this.settingsService.getPageCatalog();
+  getPageCatalog(
+    @CurrentUser() user: JwtUser,
+    @CurrentTenant() tenantId: string,
+  ) {
+    return this.settingsService.getPageCatalog(tenantId, user.sub);
   }
 
   @Get('page-access/role/:roleId')
@@ -34,9 +37,14 @@ export class SettingsController {
   @Get('page-access/role/:roleId/matrix')
   getPageAccessMatrixForRole(
     @Param('roleId') roleId: string,
+    @CurrentUser() user: JwtUser,
     @CurrentTenant() tenantId: string,
   ) {
-    return this.settingsService.getPageAccessMatrixForRole(roleId, tenantId);
+    return this.settingsService.getPageAccessMatrixForRole(
+      roleId,
+      tenantId,
+      user.sub,
+    );
   }
 
   @Get('page-access/me')
@@ -51,6 +59,7 @@ export class SettingsController {
   @Post('page-access/role/:roleId')
   setPageAccess(
     @Param('roleId') roleId: string,
+    @CurrentUser() user: JwtUser,
     @CurrentTenant() tenantId: string,
     @Body()
     body: {
@@ -61,6 +70,7 @@ export class SettingsController {
     return this.settingsService.setPageAccess(
       roleId,
       tenantId,
+      user.sub,
       body.page_key,
       body.permissions,
     );
@@ -69,6 +79,7 @@ export class SettingsController {
   @Post('page-access/role/:roleId/bulk')
   bulkSetPageAccess(
     @Param('roleId') roleId: string,
+    @CurrentUser() user: JwtUser,
     @CurrentTenant() tenantId: string,
     @Body()
     body: {
@@ -81,6 +92,7 @@ export class SettingsController {
     return this.settingsService.bulkSetPageAccess(
       roleId,
       tenantId,
+      user.sub,
       body.accessList,
     );
   }
@@ -88,12 +100,14 @@ export class SettingsController {
   @Post('page-access/role/:roleId/initialize')
   initializeDefaultAccess(
     @Param('roleId') roleId: string,
+    @CurrentUser() user: JwtUser,
     @CurrentTenant() tenantId: string,
     @Body() body: { isAdmin?: boolean },
   ) {
     return this.settingsService.initializeDefaultAccess(
       roleId,
       tenantId,
+      user.sub,
       body.isAdmin,
     );
   }

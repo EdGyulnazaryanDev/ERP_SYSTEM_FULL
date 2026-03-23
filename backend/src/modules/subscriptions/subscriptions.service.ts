@@ -7,6 +7,8 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { User } from '../users/user.entity';
+import { Role } from '../roles/role.entity';
+import { UserRole } from '../roles/user-role.entity';
 import {
   BillingCycle,
   DEFAULT_PLAN_DEFINITIONS,
@@ -43,6 +45,10 @@ export class SubscriptionsService implements OnModuleInit {
     private readonly subscriptionRepository: Repository<CompanySubscription>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(Role)
+    private readonly roleRepository: Repository<Role>,
+    @InjectRepository(UserRole)
+    private readonly userRoleRepository: Repository<UserRole>,
   ) {}
 
   async onModuleInit() {
@@ -118,6 +124,55 @@ export class SubscriptionsService implements OnModuleInit {
     }
 
     return this.mapSubscription(hydrated as ActiveSubscription);
+  }
+
+  async assertSuperAdmin(userId: string, tenantId: string) {
+    if (!(await this.isSuperAdminUser(userId, tenantId))) {
+      throw new ForbiddenException(
+        'Only super admin can change the subscription plan',
+      );
+    }
+  }
+
+  async isSuperAdminUser(userId: string, tenantId: string) {
+    const userRoles = await this.userRoleRepository.find({
+      where: { user_id: userId },
+    });
+
+    if (userRoles.length === 0) {
+      return false;
+    }
+
+    const roles = await this.roleRepository.find({
+      where: userRoles.map((userRole) => ({
+        id: userRole.role_id,
+        tenant_id: tenantId,
+      })),
+    });
+
+    return roles.some((role) => this.normalizeRoleName(role.name) === 'superadmin');
+  }
+
+  async isAdminOrSuperAdminUser(userId: string, tenantId: string) {
+    const userRoles = await this.userRoleRepository.find({
+      where: { user_id: userId },
+    });
+
+    if (userRoles.length === 0) {
+      return false;
+    }
+
+    const roles = await this.roleRepository.find({
+      where: userRoles.map((userRole) => ({
+        id: userRole.role_id,
+        tenant_id: tenantId,
+      })),
+    });
+
+    return roles.some((role) => {
+      const normalized = this.normalizeRoleName(role.name);
+      return normalized === 'admin' || normalized === 'superadmin';
+    });
   }
 
   async createDefaultSubscriptionForTenant(
@@ -333,5 +388,9 @@ export class SubscriptionsService implements OnModuleInit {
       plan: this.mapPlan(subscription.plan),
       metadata: subscription.metadata,
     };
+  }
+
+  private normalizeRoleName(name: string) {
+    return name.trim().toLowerCase().replace(/[\s_-]+/g, '');
   }
 }

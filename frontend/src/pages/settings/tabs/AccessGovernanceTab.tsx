@@ -17,6 +17,7 @@ import {
 } from 'antd';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { rbacApi } from '@/api/rbac';
+import { useAuthStore } from '@/store/authStore';
 import {
   settingsApi,
   type PageAccessMatrixRow,
@@ -51,7 +52,16 @@ function isPrivilegedRoleName(roleName?: string) {
   return normalizedName === 'admin' || normalizedName === 'superadmin';
 }
 
+function isSuperAdminRoleName(roleName?: string) {
+  if (!roleName) {
+    return false;
+  }
+
+  return roleName.trim().toLowerCase().replace(/[\s_-]+/g, '') === 'superadmin';
+}
+
 export default function AccessGovernanceTab() {
+  const { user } = useAuthStore();
   const queryClient = useQueryClient();
   const [selectedRoleId, setSelectedRoleId] = useState<string>();
   const [billingCycle, setBillingCycle] = useState<BillingCycle>('monthly');
@@ -82,6 +92,15 @@ export default function AccessGovernanceTab() {
       const response = await subscriptionsApi.getCurrentSubscription();
       return response.data;
     },
+  });
+
+  const { data: currentUserRoles = [] } = useQuery({
+    queryKey: ['current-user-roles', user?.id],
+    queryFn: async () => {
+      const response = await rbacApi.getUserRoles(user!.id);
+      return response.data;
+    },
+    enabled: !!user?.id,
   });
 
   const { data: roleMatrix = [], isLoading: isMatrixLoading } = useQuery({
@@ -176,6 +195,8 @@ export default function AccessGovernanceTab() {
     () => roles.find((role) => role.id === selectedRoleId),
     [roles, selectedRoleId],
   );
+  const canManagePlan = currentUserRoles.some((role) => isSuperAdminRoleName(role.name));
+  const canManageAccess = currentUserRoles.some((role) => isPrivilegedRoleName(role.name));
 
   const currentFeatures = currentSubscription?.plan.features ?? [];
 
@@ -202,12 +223,25 @@ export default function AccessGovernanceTab() {
       ...current,
       [pageKey]: {
         ...current[pageKey],
+        ...(permissionKey === 'can_view' && !value
+          ? {
+              can_create: false,
+              can_edit: false,
+              can_delete: false,
+              can_export: false,
+            }
+          : {}),
         [permissionKey]: value,
       },
     }));
   };
 
   const handleSaveAccess = () => {
+    if (!canManageAccess) {
+      message.warning('Only admin or super admin can manage page rules');
+      return;
+    }
+
     if (!selectedRoleId) {
       message.warning('Select a role first');
       return;
@@ -228,6 +262,11 @@ export default function AccessGovernanceTab() {
   };
 
   const handlePlanSave = () => {
+    if (!canManagePlan) {
+      message.warning('Only super admin can change the subscription plan');
+      return;
+    }
+
     if (!pendingPlanCode) {
       message.warning('Select a plan');
       return;
@@ -266,11 +305,13 @@ export default function AccessGovernanceTab() {
       title: 'Plan Status',
       key: 'plan_status',
       render: (_: unknown, row: EditableAccessRow) =>
-        row.required_feature ? (
+        row.plan_included === false ? (
+          <Tag color="red">Blocked by subscription</Tag>
+        ) : row.required_feature ? (
           currentFeatures.includes(row.required_feature as any) ? (
             <Tag color="green">Included in plan</Tag>
           ) : (
-            <Tag color="red">Blocked by subscription</Tag>
+            <Tag color="orange">Feature required</Tag>
           )
         ) : (
           <Tag color="default">Not feature-gated</Tag>
@@ -282,6 +323,11 @@ export default function AccessGovernanceTab() {
       render: (_: unknown, row: EditableAccessRow) => (
         <Switch
           checked={row[permissionKey]}
+          disabled={
+            !canManageAccess ||
+            row.plan_included === false ||
+            (permissionKey !== 'can_view' && !row.can_view)
+          }
           onChange={(checked) => updateRow(row.page_key, permissionKey, checked)}
         />
       ),
@@ -303,9 +349,18 @@ export default function AccessGovernanceTab() {
 
       <Card title="Subscription Planning">
         <Space direction="vertical" size={16} style={{ width: '100%' }}>
+          {!canManagePlan && (
+            <Alert
+              type="warning"
+              showIcon
+              message="Plan management is super-admin only"
+              description="Tenant admins can manage roles and page rules only inside the active plan. Only super admin can change that plan."
+            />
+          )}
           <Radio.Group
             value={billingCycle}
             onChange={(event) => setBillingCycle(event.target.value)}
+            disabled={!canManagePlan}
           >
             <Radio.Button value="monthly">Monthly</Radio.Button>
             <Radio.Button value="yearly">Yearly</Radio.Button>
@@ -316,11 +371,12 @@ export default function AccessGovernanceTab() {
               <Col xs={24} md={8} key={plan.code}>
                 <Card
                   size="small"
-                  hoverable
-                  onClick={() => setPendingPlanCode(plan.code)}
+                  hoverable={canManagePlan}
+                  onClick={() => canManagePlan && setPendingPlanCode(plan.code)}
                   style={{
                     borderColor:
                       pendingPlanCode === plan.code ? '#1677ff' : undefined,
+                    opacity: canManagePlan ? 1 : 0.82,
                   }}
                 >
                   <Space direction="vertical" size={8} style={{ width: '100%' }}>
@@ -357,6 +413,7 @@ export default function AccessGovernanceTab() {
             <Button
               type="primary"
               onClick={handlePlanSave}
+              disabled={!canManagePlan}
               loading={savePlanMutation.isPending}
             >
               Save Subscription Plan
@@ -379,6 +436,7 @@ export default function AccessGovernanceTab() {
               }))}
             />
             <Button
+              disabled={!canManageAccess}
               onClick={() =>
                     selectedRoleId
                   ? initializeRoleMutation.mutate({
@@ -393,6 +451,7 @@ export default function AccessGovernanceTab() {
             </Button>
             <Button
               type="primary"
+              disabled={!canManageAccess}
               onClick={handleSaveAccess}
               loading={saveMatrixMutation.isPending}
             >
@@ -406,7 +465,7 @@ export default function AccessGovernanceTab() {
             type="warning"
             showIcon
             message="Role permissions do not bypass subscription limits"
-            description="Even if a role can view a page, users will still be blocked when the current company plan does not include the required feature."
+            description="The active subscription is now the hard ceiling. Admins can grant only pages and actions included in the current plan, while super admin alone can change the plan itself."
           />
 
           <Table
@@ -415,7 +474,6 @@ export default function AccessGovernanceTab() {
             dataSource={tableData}
             loading={isMatrixLoading}
             pagination={{ pageSize: 8 }}
-            scroll={{ x: 1100 }}
           />
         </Space>
       </Card>

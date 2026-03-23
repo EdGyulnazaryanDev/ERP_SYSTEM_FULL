@@ -63,11 +63,7 @@ export function useAccessControl() {
   const enabledFeatures = subscription?.plan.features ?? [];
   const isPrivilegedUser = userRoles.some((role) => {
     const normalizedName = normalizeRoleName(role.name);
-    return (
-      normalizedName === 'admin'
-      || normalizedName === 'superadmin'
-      || (role.is_system && normalizedName.includes('admin'))
-    );
+    return normalizedName === 'superadmin';
   });
 
   const getPageAccess = (pageKey: string) => pageAccessMap.get(pageKey);

@@ -81,13 +81,6 @@ export class RequireFeatureGuard implements CanActivate {
       })),
     });
 
-    return roles.some((role) => {
-      const normalizedName = normalizeRoleName(role.name);
-      return (
-        normalizedName === 'admin'
-        || normalizedName === 'superadmin'
-        || (role.is_system && normalizedName.includes('admin'))
-      );
-    });
+    return roles.some((role) => normalizeRoleName(role.name) === 'superadmin');
   }
 }

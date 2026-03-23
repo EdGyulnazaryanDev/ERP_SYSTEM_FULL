@@ -2,6 +2,8 @@ import { Global, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { User } from '../users/user.entity';
 import { Tenant } from '../tenants/tenant.entity';
+import { Role } from '../roles/role.entity';
+import { UserRole } from '../roles/user-role.entity';
 import { RequireFeatureGuard } from './guards/require-feature.guard';
 import { CompanySubscription } from './entities/company-subscription.entity';
 import { SubscriptionPlanFeature } from './entities/subscription-plan-feature.entity';
@@ -16,6 +18,8 @@ import { SubscriptionsService } from './subscriptions.service';
     TypeOrmModule.forFeature([
       Tenant,
       User,
+      Role,
+      UserRole,
       SubscriptionPlan,
       SubscriptionPlanFeature,
       SubscriptionPlanLimit,

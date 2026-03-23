@@ -1,8 +1,10 @@
 import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { CurrentTenant } from '../../common/decorators/current-tenant.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { SelectPlanDto } from './dto/select-plan.dto';
 import { SubscriptionsService } from './subscriptions.service';
+import type { JwtUser } from '../../types/express';
 
 @UseGuards(JwtAuthGuard)
 @Controller('subscriptions')
@@ -20,10 +22,12 @@ export class SubscriptionsController {
   }
 
   @Post('select-plan')
-  selectPlan(
+  async selectPlan(
     @CurrentTenant() tenantId: string,
+    @CurrentUser() user: JwtUser,
     @Body() dto: SelectPlanDto,
   ) {
+    await this.subscriptionsService.assertSuperAdmin(user.sub, tenantId);
     return this.subscriptionsService.selectPlan(tenantId, dto);
   }
 }

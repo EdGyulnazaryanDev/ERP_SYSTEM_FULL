@@ -14,6 +14,8 @@ export interface PageAccessMatrixRow {
   page_path: string;
   category: string;
   required_feature: string | null;
+  plan_included?: boolean;
+  locked_by_subscription?: boolean;
   can_view: boolean;
   can_create: boolean;
   can_edit: boolean;
