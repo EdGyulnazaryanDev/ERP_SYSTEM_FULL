@@ -23,6 +23,7 @@ import {
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { categoriesApi, type Category, type CreateCategoryDto } from '@/api/categories';
 import { useAccessControl } from '@/hooks/useAccessControl';
+import { usePlanLimits } from '@/hooks/usePlanLimits';
 
 const colorOptions = [
   { label: 'Blue', value: '#1890ff' },
@@ -39,6 +40,7 @@ export default function CategoriesPage() {
   const [form] = Form.useForm();
   const queryClient = useQueryClient();
   const { canPerform } = useAccessControl();
+  const { get: getLimit } = usePlanLimits();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [viewMode, setViewMode] = useState<'list' | 'tree'>('list');
@@ -298,7 +300,14 @@ export default function CategoriesPage() {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold">Categories</h1>
-          <p className="text-gray-600">Manage product and content categories</p>
+          <p className="text-gray-600">
+            Manage product and content categories
+            {getLimit('categories') !== null && (
+              <span style={{ marginLeft: 8, color: '#8a9bb0', fontSize: 13 }}>
+                ({(categories?.length ?? 0)} / {getLimit('categories')} used)
+              </span>
+            )}
+          </p>
         </div>
         <Space>
           <Button.Group>

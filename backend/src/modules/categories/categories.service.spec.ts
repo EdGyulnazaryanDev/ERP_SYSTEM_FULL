@@ -4,6 +4,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import type { Repository } from 'typeorm';
 import { CategoryEntity } from './entities/category.entity';
 import { NotFoundException, ConflictException } from '@nestjs/common';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 
 describe('CategoriesService', () => {
   let service: CategoriesService;
@@ -38,6 +39,12 @@ describe('CategoriesService', () => {
             save: jest.fn(),
             remove: jest.fn(),
             count: jest.fn(),
+          },
+        },
+        {
+          provide: SubscriptionsService,
+          useValue: {
+            assertWithinLimit: jest.fn().mockResolvedValue(undefined),
           },
         },
       ],

@@ -13,11 +13,13 @@ import {
   SafetyCertificateOutlined,
   FileSearchOutlined,
   UnlockOutlined,
+  ControlOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { complianceApi } from '@/api/compliance';
 import AuditLogsTab from './AuditLogsTab';
 import AccessLogsTab from './AccessLogsTab';
+import GovernanceTab from './GovernanceTab';
 import styles from './CompliancePage.module.css';
 
 const { Title, Paragraph } = Typography;
@@ -41,11 +43,26 @@ export default function CompliancePage() {
         .getAuditStatistics(statsRange.start, statsRange.end)
         .then((r) => r.data),
   });
+  const accessLogsQuery = useQuery({
+    queryKey: ['compliance-access-overview'],
+    queryFn: () => complianceApi.getAccessLogs().then((r) => r.data),
+  });
+  const rulesQuery = useQuery({
+    queryKey: ['compliance-rules-overview'],
+    queryFn: () => complianceApi.getRules().then((r) => r.data),
+  });
+  const checksQuery = useQuery({
+    queryKey: ['compliance-checks-overview'],
+    queryFn: () => complianceApi.getChecks().then((r) => r.data),
+  });
 
   const total = statsQuery.data?.total_logs ?? '—';
   const topAction = statsQuery.data?.by_action
     ? Object.entries(statsQuery.data.by_action).sort((a, b) => b[1] - a[1])[0]
     : null;
+  const deniedAccessCount = (accessLogsQuery.data ?? []).filter((row) => row.result !== 'granted').length;
+  const activeRules = (rulesQuery.data ?? []).filter((row) => row.status === 'active').length;
+  const failedChecks = (checksQuery.data ?? []).filter((row) => row.status === 'failed').length;
 
   const items = [
     {
@@ -58,6 +75,19 @@ export default function CompliancePage() {
       children: (
         <div style={{ paddingTop: 8 }}>
           <AuditLogsTab />
+        </div>
+      ),
+    },
+    {
+      key: 'governance',
+      label: (
+        <span>
+          <ControlOutlined /> Governance
+        </span>
+      ),
+      children: (
+        <div style={{ paddingTop: 8 }}>
+          <GovernanceTab />
         </div>
       ),
     },
@@ -115,11 +145,11 @@ export default function CompliancePage() {
               </div>
               <div className={styles.statChip}>
                 <div className={styles.statChipLabel}>Coverage</div>
-                <div className={styles.statChipValue} style={{ fontSize: '1rem' }}>
-                  Tenant-scoped
+                <div className={styles.statChipValue} style={{ fontSize: '1.05rem' }}>
+                  {activeRules} rules active
                 </div>
                 <div className={styles.secondaryText} style={{ fontSize: 12, marginTop: 4 }}>
-                  RBAC + JWT context
+                  {failedChecks} failed checks, {deniedAccessCount} risky access outcomes
                 </div>
               </div>
             </div>

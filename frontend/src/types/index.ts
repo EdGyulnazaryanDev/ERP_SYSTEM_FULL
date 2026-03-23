@@ -6,6 +6,7 @@ export interface User {
   role: string;
   actorType: 'staff' | 'customer' | 'supplier';
   principalId?: string;
+  isSystemAdmin: boolean;
 }
 
 export interface Tenant {

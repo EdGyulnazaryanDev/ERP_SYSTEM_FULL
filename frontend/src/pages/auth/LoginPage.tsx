@@ -13,6 +13,7 @@ interface JwtPayload {
   principalId: string;
   role?: string;
   name?: string;
+  isSystemAdmin?: boolean;
 }
 
 export default function LoginPage() {
@@ -36,6 +37,7 @@ export default function LoginPage() {
           role: decoded.role || (decoded.actorType === 'staff' ? 'user' : decoded.actorType),
           actorType: decoded.actorType,
           principalId: decoded.principalId,
+          isSystemAdmin: decoded.isSystemAdmin ?? false,
         };
 
         setAuth(user, response.data.accessToken);
@@ -65,6 +67,7 @@ export default function LoginPage() {
           role: decoded.role || 'user',
           actorType: decoded.actorType,
           principalId: decoded.principalId,
+          isSystemAdmin: decoded.isSystemAdmin ?? false,
         };
 
         setAuth(user, response.data.accessToken);
@@ -152,7 +155,7 @@ export default function LoginPage() {
 
       <Divider plain>or</Divider>
 
-      {initialActorType === 'staff' && (
+      {/*{initialActorType === 'staff' && (
         <>
           <Button
             type="default"
@@ -165,7 +168,7 @@ export default function LoginPage() {
 
           <Divider plain>or</Divider>
         </>
-      )}
+      )}*/}
 
       <div className="text-center">
         <div>

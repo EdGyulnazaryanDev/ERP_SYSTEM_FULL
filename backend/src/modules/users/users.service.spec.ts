@@ -6,6 +6,7 @@ import { UsersService } from './users.service';
 import { User } from './user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 
 // Mock bcrypt module
 jest.mock('bcrypt', () => ({
@@ -30,6 +31,7 @@ describe('UsersService', () => {
     first_name: 'John',
     last_name: 'Doe',
     is_active: true,
+    isSystemAdmin: false,
     refreshToken: null,
     created_at: new Date(),
     updated_at: new Date(),
@@ -54,6 +56,12 @@ describe('UsersService', () => {
         {
           provide: getRepositoryToken(User),
           useValue: mockRepository,
+        },
+        {
+          provide: SubscriptionsService,
+          useValue: {
+            assertCanAddUser: jest.fn().mockResolvedValue(undefined),
+          },
         },
       ],
     }).compile();
