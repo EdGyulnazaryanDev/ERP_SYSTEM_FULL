@@ -18,12 +18,25 @@ import type { JwtUser } from '../../types/express';
 export class SettingsController {
   constructor(private readonly settingsService: SettingsService) {}
 
+  @Get('page-access/catalog')
+  getPageCatalog() {
+    return this.settingsService.getPageCatalog();
+  }
+
   @Get('page-access/role/:roleId')
   getPageAccessForRole(
     @Param('roleId') roleId: string,
     @CurrentTenant() tenantId: string,
   ) {
     return this.settingsService.getPageAccessForRole(roleId, tenantId);
+  }
+
+  @Get('page-access/role/:roleId/matrix')
+  getPageAccessMatrixForRole(
+    @Param('roleId') roleId: string,
+    @CurrentTenant() tenantId: string,
+  ) {
+    return this.settingsService.getPageAccessMatrixForRole(roleId, tenantId);
   }
 
   @Get('page-access/me')

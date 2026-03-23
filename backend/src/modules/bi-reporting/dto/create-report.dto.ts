@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEnum, IsBoolean, IsObject, IsArray, IsUUID } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsBoolean, IsObject, IsArray, IsUUID, Allow } from 'class-validator';
 import { ReportCategory, ReportFormat } from '../entities/report-template.entity';
 
 export class CreateReportTemplateDto {
@@ -55,6 +55,10 @@ export class UpdateReportTemplateDto {
   description?: string;
 
   @IsOptional()
+  @IsEnum(ReportCategory)
+  category?: ReportCategory;
+
+  @IsOptional()
   @IsString()
   query?: string;
 
@@ -94,7 +98,8 @@ export class ExecuteQueryDto {
   @IsString()
   query: string;
 
+  /** Extra bind values for $2, $3, … (array index 0 → $2). Can also be an object with keys "2","3" or "$2". */
   @IsOptional()
-  @IsObject()
-  parameters?: any;
+  @Allow()
+  parameters?: unknown;
 }

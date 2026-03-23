@@ -4,11 +4,13 @@ import { PlusOutlined, EditOutlined, DeleteOutlined, SafetyOutlined } from '@ant
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { roleService, type Role } from '@/services/RoleService';
 import { permissionService, type Permission } from '@/services/PermissionService';
+import { useAccessControl } from '@/hooks/useAccessControl';
 import type { TransferProps } from 'antd';
 
 export default function RolesTab() {
   const [form] = Form.useForm();
   const queryClient = useQueryClient();
+  const { canPerform } = useAccessControl();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isPermissionModalOpen, setIsPermissionModalOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<Role | null>(null);
@@ -113,6 +115,10 @@ export default function RolesTab() {
     }
   };
 
+  const canCreateRoles = canPerform('rbac', 'create');
+  const canEditRoles = canPerform('rbac', 'edit');
+  const canDeleteRoles = canPerform('rbac', 'delete');
+
   const columns = [
     {
       title: 'Name',
@@ -148,7 +154,7 @@ export default function RolesTab() {
           >
             Permissions
           </Button>
-          {!record.is_system && (
+          {!record.is_system && canEditRoles && (
             <>
               <Button
                 type="link"
@@ -157,6 +163,10 @@ export default function RolesTab() {
               >
                 Edit
               </Button>
+            </>
+          )}
+          {!record.is_system && canDeleteRoles && (
+            <>
               <Button
                 type="link"
                 danger
@@ -182,13 +192,15 @@ export default function RolesTab() {
     <div>
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-semibold">Roles Management</h2>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={() => openModal()}
-        >
-          Create Role
-        </Button>
+        {canCreateRoles && (
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => openModal()}
+          >
+            Create Role
+          </Button>
+        )}
       </div>
 
       <Card>
@@ -202,39 +214,41 @@ export default function RolesTab() {
       </Card>
 
       {/* Create/Edit Modal */}
-      <Modal
-        title={editingRole ? 'Edit Role' : 'Create Role'}
-        open={isModalOpen}
-        onCancel={closeModal}
-        footer={null}
-      >
-        <Form form={form} layout="vertical" onFinish={handleSubmit}>
-          <Form.Item
-            name="name"
-            label="Role Name"
-            rules={[{ required: true, message: 'Please enter role name' }]}
-          >
-            <Input placeholder="e.g., Manager" />
-          </Form.Item>
+      {(canCreateRoles || canEditRoles) && (
+        <Modal
+          title={editingRole ? 'Edit Role' : 'Create Role'}
+          open={isModalOpen}
+          onCancel={closeModal}
+          footer={null}
+        >
+          <Form form={form} layout="vertical" onFinish={handleSubmit}>
+            <Form.Item
+              name="name"
+              label="Role Name"
+              rules={[{ required: true, message: 'Please enter role name' }]}
+            >
+              <Input placeholder="e.g., Manager" />
+            </Form.Item>
 
-          <Form.Item name="description" label="Description">
-            <Input.TextArea rows={3} placeholder="Role description" />
-          </Form.Item>
+            <Form.Item name="description" label="Description">
+              <Input.TextArea rows={3} placeholder="Role description" />
+            </Form.Item>
 
-          <Form.Item>
-            <Space>
-              <Button
-                type="primary"
-                htmlType="submit"
-                loading={createMutation.isPending || updateMutation.isPending}
-              >
-                {editingRole ? 'Update' : 'Create'}
-              </Button>
-              <Button onClick={closeModal}>Cancel</Button>
-            </Space>
-          </Form.Item>
-        </Form>
-      </Modal>
+            <Form.Item>
+              <Space>
+                <Button
+                  type="primary"
+                  htmlType="submit"
+                  loading={createMutation.isPending || updateMutation.isPending}
+                >
+                  {editingRole ? 'Update' : 'Create'}
+                </Button>
+                <Button onClick={closeModal}>Cancel</Button>
+              </Space>
+            </Form.Item>
+          </Form>
+        </Modal>
+      )}
 
       {/* Permissions Modal */}
       <Modal

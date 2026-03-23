@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Form,
   Input,
@@ -11,14 +11,18 @@ import {
   message,
   Row,
   Col,
+  Select,
+  Alert,
 } from 'antd';
 import { SaveOutlined } from '@ant-design/icons';
 import { inventoryApi } from '@/api/inventory';
+import apiClient from '@/api/client';
 
 export default function InventoryFormPage() {
   const navigate = useNavigate();
   const { id } = useParams();
   const [form] = Form.useForm();
+  const queryClient = useQueryClient();
 
   const { data: item, isLoading } = useQuery({
     queryKey: ['inventory', id],
@@ -27,6 +31,16 @@ export default function InventoryFormPage() {
       return response.data;
     },
     enabled: !!id,
+  });
+
+  const { data: warehouses = [] } = useQuery({
+    queryKey: ['warehouses-list'],
+    queryFn: async () => {
+      const res = await apiClient.get<{ data: { id: string; warehouse_name: string; warehouse_code: string }[] }>('/warehouse');
+      const raw = res.data;
+      // GET /warehouse returns { data: [...] }
+      return Array.isArray(raw) ? raw : (raw?.data ?? []);
+    },
   });
 
   const saveMutation = useMutation({
@@ -50,8 +64,17 @@ export default function InventoryFormPage() {
       }
       return inventoryApi.create(payload);
     },
-    onSuccess: () => {
-      message.success(`Inventory item ${id ? 'updated' : 'created'} successfully`);
+    onSuccess: (_data, values) => {
+      const requestedQty = Number(values?.quantity || 0);
+      if (!id && requestedQty > 0) {
+        message.success('Inventory item created. Opening stock is now pending approval and inbound delivery.');
+      } else {
+        message.success(`Inventory item ${id ? 'updated' : 'created'} successfully`);
+      }
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['purchase-requisitions'] });
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
       navigate('/inventory');
     },
     onError: (error: any) => {
@@ -102,6 +125,15 @@ export default function InventoryFormPage() {
           </Space>
         }
       >
+        {!id && (
+          <Alert
+            type="info"
+            showIcon
+            style={{ marginBottom: 16, borderRadius: 10 }}
+            message="New item receiving flow"
+            description="If you enter an opening quantity, the system will create a pending procurement/accounting workflow. Stock will stay at zero until the requisition is approved and the inbound shipment is delivered."
+          />
+        )}
         <Form
           form={form}
           layout="vertical"
@@ -141,7 +173,7 @@ export default function InventoryFormPage() {
           <Row gutter={16}>
             <Col span={8}>
               <Form.Item
-                label="Quantity"
+                label={id ? 'Quantity' : 'Requested Opening Qty'}
                 name="quantity"
                 rules={[{ required: true }]}
               >
@@ -158,6 +190,7 @@ export default function InventoryFormPage() {
                   style={{ width: '100%' }}
                   min={0}
                   placeholder="Reserved"
+                  disabled={!id}
                 />
               </Form.Item>
             </Col>
@@ -235,7 +268,18 @@ export default function InventoryFormPage() {
             </Col>
             <Col span={12}>
               <Form.Item label="Warehouse" name="warehouse">
-                <Input placeholder="Warehouse name" />
+                <Select
+                  placeholder="Select warehouse (optional)"
+                  allowClear
+                  showSearch
+                  optionFilterProp="children"
+                >
+                  {warehouses.map((w: { id: string; warehouse_name: string; warehouse_code: string }) => (
+                    <Select.Option key={w.warehouse_code} value={w.warehouse_name}>
+                      {w.warehouse_code} — {w.warehouse_name}
+                    </Select.Option>
+                  ))}
+                </Select>
               </Form.Item>
             </Col>
           </Row>

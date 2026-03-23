@@ -30,6 +30,16 @@ export class ProcurementController {
     return this.procurementService.findAllRequisitions(tenantId);
   }
 
+  /**
+   * Approval queue — returns all requisitions and POs pending approval.
+   * Intended for managers/CEO role. Role enforcement is handled by the
+   * permission guard on the frontend and can be extended with @RequirePermission.
+   */
+  @Get('pending-approvals')
+  findPendingApprovals(@CurrentTenant() tenantId: string) {
+    return this.procurementService.findPendingApprovals(tenantId);
+  }
+
   @Get('requisitions/:id')
   findOneRequisition(@Param('id') id: string, @CurrentTenant() tenantId: string) {
     return this.procurementService.findOneRequisition(id, tenantId);

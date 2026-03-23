@@ -1,8 +1,8 @@
+import { useState } from 'react';
 import { Table, Button, Space, Modal, Form, Input, Select, message, Popconfirm, Empty } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
+import { PlusOutlined, EditOutlined, DeleteOutlined, UserOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { crmApi } from '@/api/crm';
-import { useState } from 'react';
 
 export default function ContactsTab() {
   const queryClient = useQueryClient();
@@ -11,20 +11,17 @@ export default function ContactsTab() {
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [form] = Form.useForm();
 
-  // Fetch all customers for the filter selector and creating contacts
   const { data: customersRes, isLoading: customersLoading } = useQuery({
     queryKey: ['customers'],
     queryFn: () => crmApi.getCustomers().then(res => res.data),
   });
 
-  const customers = customersRes?.data || [];
+  const customers = Array.isArray(customersRes) ? customersRes : (customersRes?.data || []);
 
-  // Automatically select the first customer if none is selected and customers exist
   if (!selectedCustomerId && customers.length > 0) {
     setSelectedCustomerId(customers[0].id);
   }
 
-  // Fetch contacts for the selected customer
   const { data: contactsRes, isLoading: contactsLoading } = useQuery({
     queryKey: ['contacts', selectedCustomerId],
     queryFn: () => {
@@ -34,97 +31,60 @@ export default function ContactsTab() {
     enabled: !!selectedCustomerId,
   });
 
-  const data = contactsRes?.data || [];
+  const contacts = Array.isArray(contactsRes) ? contactsRes : (contactsRes?.data || []);
 
   const createMutation = useMutation({
     mutationFn: (data: any) => crmApi.createContact(data),
-    onSuccess: () => {
-      message.success('Contact created successfully');
-      setIsModalVisible(false);
-      form.resetFields();
-      queryClient.invalidateQueries({ queryKey: ['contacts', selectedCustomerId] });
-    },
-    onError: (error: any) => {
-      message.error(error.response?.data?.message || 'Failed to create contact');
-    }
+    onSuccess: () => { message.success('Contact created'); setIsModalVisible(false); form.resetFields(); queryClient.invalidateQueries({ queryKey: ['contacts', selectedCustomerId] }); },
+    onError: (e: any) => message.error(e.response?.data?.message || 'Failed to create contact'),
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string, data: any }) => crmApi.updateContact(id, data),
-    onSuccess: () => {
-      message.success('Contact updated successfully');
-      setIsModalVisible(false);
-      setEditingContact(null);
-      form.resetFields();
-      queryClient.invalidateQueries({ queryKey: ['contacts', selectedCustomerId] });
-    },
-    onError: (error: any) => {
-      message.error(error.response?.data?.message || 'Failed to update contact');
-    }
+    mutationFn: ({ id, data }: { id: string; data: any }) => crmApi.updateContact(id, data),
+    onSuccess: () => { message.success('Contact updated'); setIsModalVisible(false); setEditingContact(null); form.resetFields(); queryClient.invalidateQueries({ queryKey: ['contacts', selectedCustomerId] }); },
+    onError: (e: any) => message.error(e.response?.data?.message || 'Failed to update contact'),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => crmApi.deleteContact(id),
-    onSuccess: () => {
-      message.success('Contact deleted successfully');
-      queryClient.invalidateQueries({ queryKey: ['contacts', selectedCustomerId] });
-    },
-    onError: (error: any) => {
-      message.error(error.response?.data?.message || 'Failed to delete contact');
-    }
+    onSuccess: () => { message.success('Contact deleted'); queryClient.invalidateQueries({ queryKey: ['contacts', selectedCustomerId] }); },
+    onError: (e: any) => message.error(e.response?.data?.message || 'Failed to delete contact'),
   });
 
   const handleAdd = () => {
-    setEditingContact(null);
-    setIsModalVisible(true);
-    setTimeout(() => {
-      form.resetFields();
-      if (selectedCustomerId) {
-        form.setFieldsValue({ customer_id: selectedCustomerId });
-      }
-    }, 0);
+    setEditingContact(null); setIsModalVisible(true);
+    setTimeout(() => { form.resetFields(); if (selectedCustomerId) form.setFieldsValue({ customer_id: selectedCustomerId }); }, 0);
   };
-
-  const handleEdit = (record: any) => {
-    setEditingContact(record);
-    setIsModalVisible(true);
-    setTimeout(() => {
-      form.setFieldsValue(record);
-    }, 0);
-  };
-
-  const handleDelete = (id: string) => {
-    deleteMutation.mutate(id);
-  };
-
+  const handleEdit = (record: any) => { setEditingContact(record); setIsModalVisible(true); setTimeout(() => form.setFieldsValue(record), 0); };
   const handleModalOk = () => {
     form.validateFields().then(values => {
-      if (editingContact) {
-        updateMutation.mutate({ id: editingContact.id, data: values });
-      } else {
-        createMutation.mutate(values);
-      }
+      if (editingContact) updateMutation.mutate({ id: editingContact.id, data: values });
+      else createMutation.mutate(values);
     });
   };
 
   const columns = [
-    { title: 'Name', key: 'name', render: (_: any, record: any) => `${record.first_name} ${record.last_name}` },
+    { title: 'Name', key: 'name',
+      render: (_: any, record: any) => (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#e6f4ff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1677ff', fontSize: 12 }}>
+            <UserOutlined />
+          </div>
+          <span style={{ fontWeight: 600 }}>{record.first_name} {record.last_name}</span>
+        </div>
+      )
+    },
     { title: 'Email', dataIndex: 'email', key: 'email' },
     { title: 'Phone', dataIndex: 'phone', key: 'phone' },
     { title: 'Position', dataIndex: 'position', key: 'position' },
+    { title: 'Department', dataIndex: 'department', key: 'department' },
     {
-      title: 'Actions',
-      key: 'actions',
+      title: 'Actions', key: 'actions', width: 90,
       render: (_: any, record: any) => (
-        <Space>
-          <Button icon={<EditOutlined />} size="small" onClick={() => handleEdit(record)} />
-          <Popconfirm
-            title="Delete this contact?"
-            onConfirm={() => handleDelete(record.id)}
-            okText="Yes"
-            cancelText="No"
-          >
-            <Button icon={<DeleteOutlined />} size="small" danger />
+        <Space size={4}>
+          <Button type="link" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)} />
+          <Popconfirm title="Delete this contact?" onConfirm={() => deleteMutation.mutate(record.id)} okText="Yes" cancelText="No">
+            <Button type="link" size="small" danger icon={<DeleteOutlined />} />
           </Popconfirm>
         </Space>
       ),
@@ -132,44 +92,45 @@ export default function ContactsTab() {
   ];
 
   if (customers.length === 0 && !customersLoading) {
-    return (
-      <div className="p-8">
-        <Empty description="No customers found. Please create a customer first to add contacts." />
-      </div>
-    );
+    return <div className="p-8"><Empty description="No customers found. Please create a customer first." /></div>;
   }
 
-  return (
-    <div>
-      <div className="mb-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <h2 className="text-xl font-semibold">Contacts</h2>
+  const selectedCustomer = customers.find((c: any) => c.id === selectedCustomerId);
 
-        <div className="flex gap-4">
+  return (
+    <div style={{ padding: '16px 0' }}>
+      <div style={{ padding: '0 4px 16px', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Space wrap>
           <Select
-            className="w-64"
+            style={{ width: 260, borderRadius: 8 }}
             placeholder="Select a customer"
             options={customers.map((c: any) => ({ value: c.id, label: c.company_name }))}
             value={selectedCustomerId}
-            onChange={(value) => setSelectedCustomerId(value)}
+            onChange={value => setSelectedCustomerId(value)}
             loading={customersLoading}
             showSearch
             optionFilterProp="label"
           />
-          <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd} disabled={!selectedCustomerId}>
-            Add Contact
-          </Button>
-        </div>
+          {selectedCustomer && (
+            <span style={{ color: 'var(--app-text-muted)', fontSize: 13 }}>{contacts.length} contacts</span>
+          )}
+        </Space>
+        <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 8 }} onClick={handleAdd} disabled={!selectedCustomerId}>
+          Add Contact
+        </Button>
       </div>
 
       <Table
         columns={columns}
-        dataSource={data}
+        dataSource={contacts}
         loading={contactsLoading || customersLoading}
         rowKey="id"
+        size="small"
+        pagination={{ pageSize: 10 }}
       />
 
       <Modal
-        title={editingContact ? "Edit Contact" : "Add Contact"}
+        title={editingContact ? 'Edit Contact' : 'Add Contact'}
         open={isModalVisible}
         forceRender
         onOk={handleModalOk}
@@ -179,29 +140,14 @@ export default function ContactsTab() {
       >
         <Form form={form} layout="vertical" className="grid grid-cols-2 gap-x-4">
           <Form.Item name="customer_id" label="Customer" rules={[{ required: true }]} className="col-span-2">
-            <Select
-              options={customers.map((c: any) => ({ value: c.id, label: c.company_name }))}
-              disabled
-            />
+            <Select options={customers.map((c: any) => ({ value: c.id, label: c.company_name }))} disabled />
           </Form.Item>
-          <Form.Item name="first_name" label="First Name" rules={[{ required: true }]}>
-            <Input />
-          </Form.Item>
-          <Form.Item name="last_name" label="Last Name" rules={[{ required: true }]}>
-            <Input />
-          </Form.Item>
-          <Form.Item name="email" label="Email" rules={[{ required: true, type: 'email' }]}>
-            <Input />
-          </Form.Item>
-          <Form.Item name="phone" label="Phone">
-            <Input />
-          </Form.Item>
-          <Form.Item name="position" label="Position">
-            <Input />
-          </Form.Item>
-          <Form.Item name="department" label="Department">
-            <Input />
-          </Form.Item>
+          <Form.Item name="first_name" label="First Name" rules={[{ required: true }]}><Input /></Form.Item>
+          <Form.Item name="last_name" label="Last Name" rules={[{ required: true }]}><Input /></Form.Item>
+          <Form.Item name="email" label="Email" rules={[{ required: true, type: 'email' }]}><Input /></Form.Item>
+          <Form.Item name="phone" label="Phone"><Input /></Form.Item>
+          <Form.Item name="position" label="Position"><Input /></Form.Item>
+          <Form.Item name="department" label="Department"><Input /></Form.Item>
         </Form>
       </Modal>
     </div>

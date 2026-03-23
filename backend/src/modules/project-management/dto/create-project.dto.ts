@@ -2,8 +2,9 @@ import { IsString, IsEnum, IsOptional, IsDateString, IsNumber, IsArray, IsUUID }
 import { ProjectStatus, ProjectPriority } from '../entities/project.entity';
 
 export class CreateProjectDto {
+  @IsOptional()
   @IsString()
-  project_code: string;
+  project_code?: string;
 
   @IsString()
   project_name: string;
@@ -46,6 +47,10 @@ export class CreateProjectDto {
   @IsArray()
   @IsString({ each: true })
   tags?: string[];
+
+  @IsOptional()
+  @IsNumber()
+  progress_percentage?: number;
 
   @IsOptional()
   @IsString()

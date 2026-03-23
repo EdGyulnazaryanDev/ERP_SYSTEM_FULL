@@ -162,12 +162,12 @@ export default function AttendanceTab() {
 
   return (
     <div>
-      <h2 className="text-xl font-semibold mb-4">Attendance Management</h2>
+      <h2 className="text-xl font-semibold mb-4" style={{ color: 'var(--app-text)' }}>Attendance Management</h2>
 
       {/* Quick actions */}
       <Row gutter={16} className="mb-4">
         <Col span={8}>
-          <Card>
+          <Card style={{ background: 'rgba(8, 25, 40, 0.72)', border: '1px solid rgba(134, 166, 197, 0.12)' }}>
             <div className="text-center">
               <ClockCircleOutlined style={{ fontSize: 32, color: '#52c41a' }} />
               <h3 className="mt-2">Quick Clock In</h3>
@@ -196,7 +196,7 @@ export default function AttendanceTab() {
         </Col>
 
         <Col span={8}>
-          <Card>
+          <Card style={{ background: 'rgba(8, 25, 40, 0.72)', border: '1px solid rgba(134, 166, 197, 0.12)' }}>
             <div className="text-center">
               <LogoutOutlined style={{ fontSize: 32, color: '#ff4d4f' }} />
               <h3 className="mt-2">Quick Clock Out</h3>
@@ -225,7 +225,7 @@ export default function AttendanceTab() {
         </Col>
 
         <Col span={8}>
-          <Card>
+          <Card style={{ background: 'rgba(8, 25, 40, 0.72)', border: '1px solid rgba(134, 166, 197, 0.12)' }}>
             <div className="text-center">
               <PlusOutlined style={{ fontSize: 32, color: '#1890ff' }} />
               <h3 className="mt-2">Manual Entry</h3>
@@ -251,6 +251,7 @@ export default function AttendanceTab() {
           </span>
         }
         className="mb-4"
+        style={{ background: 'rgba(8, 25, 40, 0.72)', border: '1px solid rgba(134, 166, 197, 0.12)' }}
       >
         {employeeList.length === 0 ? (
           <Empty description="No employees found" />
@@ -263,7 +264,7 @@ export default function AttendanceTab() {
               const isOnline = rec && rec.clock_in_time && !rec.clock_out_time;
               return (
                 <List.Item>
-                  <Card size="small" bodyStyle={{ padding: '12px' }}>
+                  <Card size="small" styles={{ body: { padding: '12px' } }} style={{ background: 'rgba(7, 20, 34, 0.72)', border: '1px solid rgba(134, 166, 197, 0.12)' }}>
                     <div className="flex items-center gap-2">
                       <Badge
                         dot
@@ -276,7 +277,7 @@ export default function AttendanceTab() {
                         <div className="font-medium text-sm truncate">
                           {emp.first_name} {emp.last_name}
                         </div>
-                        <div className="text-xs text-gray-400 truncate">{emp.employee_code}</div>
+                        <div className="text-xs truncate" style={{ color: 'var(--app-text-muted)' }}>{emp.employee_code}</div>
                         {isOnline ? (
                           <Tag color="success" style={{ fontSize: 11, marginTop: 2 }}>
                             Online · {rec.clock_in_time}

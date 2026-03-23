@@ -16,7 +16,6 @@ import {
   Row,
   Col,
   Statistic,
-  Badge,
 } from 'antd';
 import {
   PlusOutlined,
@@ -26,7 +25,6 @@ import {
   TruckOutlined,
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import dayjs from 'dayjs';
 import apiClient from '@/api/client';
 
 // Types
@@ -128,17 +126,55 @@ export default function TransportationPage() {
   // Shipments Table Columns
   const shipmentColumns = [
     {
-      title: 'Tracking Number',
+      title: 'Tracking #',
       dataIndex: 'tracking_number',
       key: 'tracking_number',
-      render: (text: string) => <Badge count={text} style={{ backgroundColor: '#1890ff' }} />,
+      render: (text: string) => (
+        <span
+          style={{
+            fontSize: 10,
+            fontFamily: 'monospace',
+            background: '#5db878ff',
+            color: '#e4e9ecff',
+            border: '1px solid #5db878ff',
+            borderRadius: 4,
+            padding: '2px 6px',
+            cursor: 'pointer',
+            userSelect: 'none',
+            whiteSpace: 'nowrap',
+            display: 'inline-block',
+          }}
+          onClick={() => {
+            navigator.clipboard.writeText(text);
+            message.success('Copied!');
+          }}
+          title="Click to copy"
+        >
+          {text}
+        </span>
+      ),
     },
     {
       title: 'Status',
       dataIndex: 'status',
       key: 'status',
       render: (status: string) => (
-        <Tag color={statusColors[status] || 'default'}>{status?.toUpperCase()}</Tag>
+        <span
+          style={{
+            fontSize: 10,
+            fontFamily: 'monospace',
+            background: statusColors[status],
+            color: '#e4e9ecff',
+            borderRadius: 4,
+            padding: '2px 6px',
+            userSelect: 'none',
+            whiteSpace: 'nowrap',
+            display: 'inline-block',
+          }}
+        >
+          {status?.toUpperCase()}
+        </span>
+        
       ),
     },
     {
@@ -157,34 +193,32 @@ export default function TransportationPage() {
       title: 'Weight (kg)',
       dataIndex: 'weight',
       key: 'weight',
-      render: (weight: number) => `${weight} kg`,
+      render: (weight: number) => weight != null ? `${weight} kg` : '-',
     },
     {
       title: 'Cost',
       dataIndex: 'shipping_cost',
       key: 'shipping_cost',
-      render: (cost: number) => `$${cost.toFixed(2)}`,
+      render: (cost: number) => cost != null ? `$${Number(cost).toFixed(2)}` : '-',
     },
     {
       title: 'Delivery Date',
       dataIndex: 'delivery_date',
       key: 'delivery_date',
-      render: (date: string) => (date ? dayjs(date).format('YYYY-MM-DD') : '-'),
+      render: (date: string) => date ? new Date(date).toLocaleDateString() : '-',
     },
     {
       title: 'Actions',
       key: 'actions',
-      width: 150,
+      width: 80,
       render: () => (
         <Space>
           <Button
             type="link"
             icon={<EyeOutlined />}
-            onClick={() => {
-              setModalType('shipment');
-            }}
+            onClick={() => setModalType('shipment')}
           />
-          <Popconfirm title="Delete shipment?" onConfirm={() => { }}>
+          <Popconfirm title="Delete shipment?" onConfirm={() => {}}>
             <Button type="link" danger icon={<DeleteOutlined />} />
           </Popconfirm>
         </Space>
@@ -239,7 +273,7 @@ export default function TransportationPage() {
   };
 
   return (
-    <div style={{ padding: '24px' }}>
+    <div style={{ padding: '8px' }}>
       <h1 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '24px' }}>
         Transportation & Shipping
       </h1>

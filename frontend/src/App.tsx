@@ -1,9 +1,10 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import MainLayout from '@/layouts/MainLayout';
 import AuthLayout from '@/layouts/AuthLayout';
 import LoginPage from '@/pages/auth/LoginPage';
 import RegisterPage from '@/pages/auth/RegisterPage';
+import ActivatePortalPage from '@/pages/auth/ActivatePortalPage';
 import DashboardPage from '@/pages/DashboardPage';
 import ModulesPage from '@/pages/modules/ModulesPage';
 import ModuleBuilderPage from '@/pages/modules/ModuleBuilderPage';
@@ -35,94 +36,122 @@ import AssetsPage from '@/pages/assets/AssetsPage';
 import PaymentsPage from '@/pages/payments/PaymentsPage';
 import CommunicationPage from '@/pages/communication/CommunicationPage';
 import CompliancePage from '@/pages/compliance/CompliancePage';
+import BiReportingPage from '@/pages/bi/BiReportingPage';
 import ServicesPage from '@/pages/services/ServicesPage';
+import PageAccessGuard from '@/components/common/PageAccessGuard';
+import PortalHomePage from '@/pages/PortalHomePage';
+
+function guarded(pageKey: string, element: JSX.Element) {
+  return <PageAccessGuard pageKey={pageKey}>{element}</PageAccessGuard>;
+}
 
 function App() {
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore();
+  const isStaffUser = user?.actorType !== 'customer' && user?.actorType !== 'supplier';
+  const defaultAuthenticatedPath = isStaffUser ? '/' : '/portal';
+  const location = useLocation();
+  const isPortalActivationPath = location.pathname === '/auth/activate';
 
   return (
     <Routes>
       <Route
         path="/auth/*"
         element={
-          isAuthenticated ? <Navigate to="/" replace /> : <AuthLayout />
+          isAuthenticated && !isPortalActivationPath
+            ? <Navigate to={defaultAuthenticatedPath} replace />
+            : <AuthLayout />
         }
       >
         <Route path="login" element={<LoginPage />} />
         <Route path="register" element={<RegisterPage />} />
+        <Route path="activate" element={<ActivatePortalPage />} />
       </Route>
 
       <Route
         path="/*"
         element={
-          isAuthenticated ? <MainLayout /> : <Navigate to="/auth/login" replace />
+          isAuthenticated
+            ? (isStaffUser ? <MainLayout /> : <Navigate to="/portal" replace />)
+            : <Navigate to="/auth/login" replace />
         }
       >
-        <Route index element={<DashboardPage />} />
-        <Route path="products" element={<ProductsPage />} />
-        <Route path="suppliers" element={<SuppliersPage />} />
-        <Route path="users" element={<UsersPage />} />
-        <Route path="categories" element={<CategoriesPage />} />
-        <Route path="modules" element={<ModulesPage />} />
-        <Route path="modules/builder" element={<ModuleBuilderPage />} />
-        <Route path="modules/:moduleName/data" element={<ModuleDataPageEnhanced />} />
-        <Route path="rbac" element={<RBACPage />} />
-        <Route path="settings" element={<SettingsPage />} />
+        <Route index element={guarded('dashboard', <DashboardPage />)} />
+        <Route path="products" element={guarded('products', <ProductsPage />)} />
+        <Route path="suppliers" element={guarded('suppliers', <SuppliersPage />)} />
+        <Route path="users" element={guarded('users', <UsersPage />)} />
+        <Route path="categories" element={guarded('categories', <CategoriesPage />)} />
+        <Route path="modules" element={guarded('modules', <ModulesPage />)} />
+        <Route path="modules/builder" element={guarded('modules', <ModuleBuilderPage />)} />
+        <Route path="modules/:moduleName/data" element={guarded('modules', <ModuleDataPageEnhanced />)} />
+        <Route path="rbac" element={guarded('rbac', <RBACPage />)} />
+        <Route path="settings" element={guarded('settings', <SettingsPage />)} />
 
         {/* Transactions */}
-        <Route path="transactions" element={<TransactionsPage />} />
-        <Route path="transactions/create" element={<TransactionFormPage />} />
-        <Route path="transactions/:id/edit" element={<TransactionFormPage />} />
-        <Route path="transactions/analytics" element={<TransactionAnalyticsPage />} />
+        <Route path="transactions" element={guarded('transactions', <TransactionsPage />)} />
+        <Route path="transactions/create" element={guarded('transactions', <TransactionFormPage />)} />
+        <Route path="transactions/:id/edit" element={guarded('transactions', <TransactionFormPage />)} />
+        <Route path="transactions/analytics" element={guarded('transactions', <TransactionAnalyticsPage />)} />
 
         {/* Inventory */}
-        <Route path="inventory" element={<InventoryPage />} />
-        <Route path="inventory/create" element={<InventoryFormPage />} />
-        <Route path="inventory/:id/edit" element={<InventoryFormPage />} />
+        <Route path="inventory" element={guarded('inventory', <InventoryPage />)} />
+        <Route path="inventory/create" element={guarded('inventory', <InventoryFormPage />)} />
+        <Route path="inventory/:id/edit" element={guarded('inventory', <InventoryFormPage />)} />
 
         {/* Transportation */}
-        <Route path="transportation" element={<TransportationPage />} />
-        <Route path="transportation/shipments" element={<ShipmentsPage />} />
-        <Route path="transportation/shipments/create" element={<ShipmentFormPage />} />
-        <Route path="transportation/shipments/:id" element={<ShipmentTrackingPage />} />
-        <Route path="transportation/couriers" element={<CouriersPage />} />
+        <Route path="transportation" element={guarded('transportation', <TransportationPage />)} />
+        <Route path="transportation/shipments" element={guarded('transportation', <ShipmentsPage />)} />
+        <Route path="transportation/shipments/create" element={guarded('transportation', <ShipmentFormPage />)} />
+        <Route path="transportation/shipments/:id" element={guarded('transportation', <ShipmentTrackingPage />)} />
+        <Route path="transportation/couriers" element={guarded('transportation', <CouriersPage />)} />
 
         {/* Accounting */}
-        <Route path="accounting" element={<AccountingPage />} />
+        <Route path="accounting" element={guarded('accounting', <AccountingPage />)} />
 
         {/* HR */}
-        <Route path="hr" element={<HRPage />} />
+        <Route path="hr" element={guarded('hr', <HRPage />)} />
 
         {/* CRM */}
-        <Route path="crm" element={<CRMPage />} />
+        <Route path="crm" element={guarded('crm', <CRMPage />)} />
 
         {/* Procurement */}
-        <Route path="procurement" element={<ProcurementPage />} />
+        <Route path="procurement" element={guarded('procurement', <ProcurementPage />)} />
 
         {/* Warehouse */}
-        <Route path="warehouse" element={<WarehousePage />} />
+        <Route path="warehouse" element={guarded('warehouse', <WarehousePage />)} />
 
         {/* Projects */}
-        <Route path="projects" element={<ProjectsPage />} />
+        <Route path="projects" element={guarded('projects', <ProjectsPage />)} />
 
         {/* Manufacturing */}
-        <Route path="manufacturing" element={<ManufacturingPage />} />
+        <Route path="manufacturing" element={guarded('manufacturing', <ManufacturingPage />)} />
 
         {/* Equipment/Assets */}
-        <Route path="equipment" element={<AssetsPage />} />
+        <Route path="equipment" element={guarded('equipment', <AssetsPage />)} />
 
         {/* Payments */}
-        <Route path="payments" element={<PaymentsPage />} />
+        <Route path="payments" element={guarded('payments', <PaymentsPage />)} />
 
         {/* Communication */}
-        <Route path="communication" element={<CommunicationPage />} />
+        <Route path="communication" element={guarded('communication', <CommunicationPage />)} />
 
         {/* Compliance */}
-        <Route path="compliance" element={<CompliancePage />} />
+        <Route path="compliance" element={guarded('compliance', <CompliancePage />)} />
+
+        {/* BI & reporting */}
+        <Route path="bi" element={guarded('bi', <BiReportingPage />)} />
 
         {/* Services */}
-        <Route path="services" element={<ServicesPage />} />
+        <Route path="services" element={guarded('services', <ServicesPage />)} />
       </Route>
+
+      <Route
+        path="/portal"
+        element={
+          isAuthenticated
+            ? (!isStaffUser ? <PortalHomePage /> : <Navigate to="/" replace />)
+            : <Navigate to="/auth/login" replace />
+        }
+      />
 
       {/* Public tracking page */}
       <Route path="/track/:trackingNumber" element={<ShipmentTrackingPage />} />

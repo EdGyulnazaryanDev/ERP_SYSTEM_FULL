@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between } from 'typeorm';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   TransactionEntity,
   TransactionType,
@@ -12,7 +13,15 @@ import {
 } from './entities/transaction.entity';
 import { TransactionItemEntity } from './entities/transaction-item.entity';
 import { InventoryEntity } from '../inventory/entities/inventory.entity';
+import {
+  FinancialEventType,
+  StockMovedEvent,
+  InvoiceCreatedEvent,
+} from '../accounting/events/financial.events';
 import type { CreateTransactionDto } from './dto/create-transaction.dto';
+import { AccountingService } from '../accounting/accounting.service';
+import { JournalEntryStatus } from '../accounting/entities/journal-entry.entity';
+import { ShipmentEntity, ShipmentStatus } from '../transportation/entities/shipment.entity';
 
 @Injectable()
 export class TransactionsService {
@@ -23,6 +32,10 @@ export class TransactionsService {
     private transactionItemRepo: Repository<TransactionItemEntity>,
     @InjectRepository(InventoryEntity)
     private inventoryRepo: Repository<InventoryEntity>,
+    @InjectRepository(ShipmentEntity)
+    private shipmentRepo: Repository<ShipmentEntity>,
+    private eventEmitter: EventEmitter2,
+    private accountingService: AccountingService,
   ) {}
 
   async create(
@@ -230,18 +243,69 @@ export class TransactionsService {
       throw new BadRequestException('Transaction already completed');
     }
 
-    // Update inventory based on transaction type
-    for (const item of transaction.items) {
-      await this.updateInventory(
-        tenantId,
-        item.product_id,
-        item.quantity,
-        transaction.type,
-      );
+    if (transaction.type === TransactionType.PURCHASE) {
+      const deliveredShipment = await this.shipmentRepo.findOne({
+        where: {
+          tenant_id: tenantId,
+          transaction_id: transaction.id,
+          status: ShipmentStatus.DELIVERED,
+        },
+      });
+
+      if (!deliveredShipment) {
+        throw new BadRequestException(
+          'Purchase transactions are completed only after the inbound shipment is delivered.',
+        );
+      }
+    } else {
+      // Update inventory based on transaction type
+      for (const item of transaction.items) {
+        await this.updateInventory(
+          tenantId,
+          item.product_id,
+          item.quantity,
+          transaction.type,
+        );
+      }
     }
 
     transaction.status = TransactionStatus.COMPLETED;
-    return this.transactionRepo.save(transaction);
+    const saved = await this.transactionRepo.save(transaction);
+
+    const dateStr = new Date(transaction.transaction_date).toISOString().split('T')[0];
+
+    // ── SALE completed: emit INVOICE_CREATED + STOCK_MOVED OUT per item ──
+    if (transaction.type === TransactionType.SALE) {
+      const invoiceEvent = new InvoiceCreatedEvent();
+      invoiceEvent.tenantId = tenantId;
+      invoiceEvent.invoiceId = transaction.id;
+      invoiceEvent.invoiceNumber = transaction.transaction_number;
+      invoiceEvent.customerId = transaction.customer_id;
+      invoiceEvent.amount = Number(transaction.total_amount);
+      invoiceEvent.date = dateStr;
+      invoiceEvent.description = `Sale transaction ${transaction.transaction_number}`;
+      this.eventEmitter.emit(FinancialEventType.INVOICE_CREATED, invoiceEvent);
+
+      // COGS: emit STOCK_MOVED OUT for each item
+      for (const item of transaction.items) {
+        const inv = await this.findInventoryByProductRef(tenantId, item.product_id);
+        const unitCost = inv ? Number(inv.unit_cost) : 0;
+        if (unitCost > 0) {
+          const stockEvent = new StockMovedEvent();
+          stockEvent.tenantId = tenantId;
+          stockEvent.productId = item.product_id;
+          stockEvent.productName = item.product_name;
+          stockEvent.quantity = item.quantity;
+          stockEvent.movementType = 'OUT';
+          stockEvent.unitCost = unitCost;
+          stockEvent.totalCost = item.quantity * unitCost;
+          stockEvent.reference = transaction.transaction_number;
+          this.eventEmitter.emit(FinancialEventType.STOCK_MOVED, stockEvent);
+        }
+      }
+    }
+
+    return saved;
   }
 
   async cancel(id: string, tenantId: string): Promise<TransactionEntity> {
@@ -250,13 +314,15 @@ export class TransactionsService {
     if (transaction.status === TransactionStatus.COMPLETED) {
       // Reverse inventory changes
       for (const item of transaction.items) {
-        await this.updateInventory(
+        await this.reverseInventory(
           tenantId,
           item.product_id,
-          -item.quantity,
+          item.quantity,
           transaction.type,
         );
       }
+
+      await this.reverseTransactionJournalEntries(transaction, tenantId);
     }
 
     transaction.status = TransactionStatus.CANCELLED;
@@ -334,8 +400,8 @@ export class TransactionsService {
         analytics.purchaseCount++;
       }
 
-      // Daily sales
-      const dateKey = transaction.transaction_date.toISOString().split('T')[0];
+      // Daily sales — transaction_date may be a string or Date depending on DB driver
+      const dateKey = new Date(transaction.transaction_date).toISOString().split('T')[0];
       dailySalesMap.set(
         dateKey,
         (dailySalesMap.get(dateKey) || 0) + Number(transaction.total_amount),
@@ -390,15 +456,28 @@ export class TransactionsService {
     return analytics;
   }
 
+  private async findInventoryByProductRef(
+    tenantId: string,
+    productId: string,
+  ): Promise<InventoryEntity | null> {
+    // product_id on the item may be the inventory row's own `id` OR its `product_id` column
+    return (
+      (await this.inventoryRepo.findOne({
+        where: { product_id: productId, tenant_id: tenantId },
+      })) ??
+      (await this.inventoryRepo.findOne({
+        where: { id: productId, tenant_id: tenantId },
+      }))
+    );
+  }
+
   private async updateInventory(
     tenantId: string,
     productId: string,
     quantity: number,
     transactionType: TransactionType,
   ): Promise<void> {
-    const inventory = await this.inventoryRepo.findOne({
-      where: { product_id: productId, tenant_id: tenantId },
-    });
+    const inventory = await this.findInventoryByProductRef(tenantId, productId);
 
     if (!inventory) {
       throw new NotFoundException(
@@ -429,6 +508,73 @@ export class TransactionsService {
     }
 
     await this.inventoryRepo.save(inventory);
+  }
+
+  private async reverseInventory(
+    tenantId: string,
+    productId: string,
+    quantity: number,
+    transactionType: TransactionType,
+  ): Promise<void> {
+    const inventory = await this.findInventoryByProductRef(tenantId, productId);
+
+    if (!inventory) {
+      throw new NotFoundException(
+        `Inventory not found for product ${productId}`,
+      );
+    }
+
+    let adjustment = 0;
+    if (transactionType === TransactionType.SALE) {
+      adjustment = quantity;
+    } else if (transactionType === TransactionType.PURCHASE) {
+      adjustment = -quantity;
+    } else if (transactionType === TransactionType.RETURN) {
+      adjustment = -quantity;
+    } else if (transactionType === TransactionType.ADJUSTMENT) {
+      adjustment = -quantity;
+    }
+
+    inventory.quantity += adjustment;
+    inventory.available_quantity =
+      inventory.quantity - inventory.reserved_quantity;
+
+    if (inventory.available_quantity < 0) {
+      throw new BadRequestException(
+        `Cannot cancel transaction; insufficient stock remains for ${inventory.product_name}`,
+      );
+    }
+
+    await this.inventoryRepo.save(inventory);
+  }
+
+  private async reverseTransactionJournalEntries(
+    transaction: TransactionEntity,
+    tenantId: string,
+  ): Promise<void> {
+    const entries = await this.accountingService.findJournalEntriesByReference(
+      transaction.transaction_number,
+      tenantId,
+    );
+
+    for (const entry of entries) {
+      if (
+        entry.status !== JournalEntryStatus.POSTED ||
+        entry.reversed_entry_id
+      ) {
+        continue;
+      }
+
+      await this.accountingService.reverseJournalEntry(
+        entry.id,
+        {
+          reversal_date: new Date().toISOString().split('T')[0],
+          reason: `Transaction ${transaction.transaction_number} cancelled`,
+          reversed_by: '00000000-0000-0000-0000-000000000000',
+        },
+        tenantId,
+      );
+    }
   }
 
   private async generateTransactionNumber(

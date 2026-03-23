@@ -9,6 +9,7 @@ import {
   Select,
   Space,
   Spin,
+  Alert,
 } from 'antd';
 import {
   ArrowUpOutlined,
@@ -46,7 +47,7 @@ export default function TransactionAnalyticsPage() {
     dayjs(),
   ]);
 
-  const { data: analytics, isLoading } = useQuery({
+  const { data: analytics, isLoading, isError, error } = useQuery({
     queryKey: ['transaction-analytics', dateRange],
     queryFn: async () => {
       const response = await transactionsApi.getAnalytics(
@@ -55,15 +56,8 @@ export default function TransactionAnalyticsPage() {
       );
       return response.data;
     },
+    retry: 1,
   });
-
-  if (isLoading) {
-    return (
-      <div style={{ padding: 24, textAlign: 'center' }}>
-        <Spin size="large" />
-      </div>
-    );
-  }
 
   const profitMargin = analytics?.totalRevenue
     ? ((analytics.totalProfit / analytics.totalRevenue) * 100).toFixed(2)
@@ -102,6 +96,20 @@ export default function TransactionAnalyticsPage() {
           </Row>
         </Card>
 
+        {/* KPI Cards */}
+        {isError && (
+          <Alert
+            type="error"
+            showIcon
+            message="Failed to load analytics"
+            description={(error as { response?: { data?: { message?: string } } })?.response?.data?.message || (error as Error)?.message || 'Could not fetch analytics data. Check that the backend is running.'}
+          />
+        )}
+        {isLoading && (
+          <div style={{ textAlign: 'center', padding: 40 }}>
+            <Spin size="large" tip="Loading analytics..." />
+          </div>
+        )}
         {/* KPI Cards */}
         <Row gutter={16}>
           <Col span={6}>

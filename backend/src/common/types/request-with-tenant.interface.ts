@@ -1,7 +1,7 @@
 import type { Request } from 'express';
-import type { JwtPayload } from '../../modules/auth/interfaces/jwt-payload.interface';
+import type { JwtUser } from '../../types/express';
 
 export interface RequestWithTenantInterface extends Request {
-  user: JwtPayload;
-  tenantId: string;
+  user?: JwtUser;
+  tenantId?: string;
 }

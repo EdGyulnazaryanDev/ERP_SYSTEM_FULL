@@ -6,6 +6,8 @@ import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { JwtUser } from '../../../types/express';
 import { RefreshDto } from '../dto/refresh.dto';
+import { ActivatePortalAccountDto } from '../dto/activate-portal-account.dto';
+import { SetPortalCredentialsDto } from '../dto/set-portal-credentials.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -15,6 +17,12 @@ export class AuthController {
   @Get('me')
   getProfile(@CurrentUser() user: JwtUser) {
     return user;
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('portal-summary')
+  getPortalSummary(@CurrentUser() user: JwtUser) {
+    return this.authService.getPortalSummary(user);
   }
 
   @Post('login')
@@ -27,10 +35,21 @@ export class AuthController {
     return this.authService.register(dto);
   }
 
+  @Post('activate')
+  activatePortalAccount(@Body() dto: ActivatePortalAccountDto) {
+    return this.authService.activatePortalAccount(dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('portal-accounts')
+  setPortalCredentials(@CurrentUser() user: JwtUser, @Body() dto: SetPortalCredentialsDto) {
+    return this.authService.setPortalCredentials(dto, user.tenantId);
+  }
+
   @UseGuards(JwtAuthGuard)
   @Post('logout')
   logout(@CurrentUser() user: JwtUser) {
-    return this.authService.logout(user.sub);
+    return this.authService.logout(user.sub, user.tenantId);
   }
 
   @Post('refresh')

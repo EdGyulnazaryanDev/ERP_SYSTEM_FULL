@@ -4,7 +4,10 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
+import { SupplierEntity } from '../../suppliers/supplier.entity';
 
 export enum APStatus {
   OPEN = 'open',
@@ -27,6 +30,10 @@ export class AccountPayableEntity {
 
   @Column({ type: 'uuid' })
   vendor_id: string;
+
+  @ManyToOne(() => SupplierEntity, { nullable: true, eager: false, createForeignKeyConstraints: false })
+  @JoinColumn({ name: 'vendor_id' })
+  supplier: SupplierEntity;
 
   @Column({ type: 'date' })
   bill_date: Date;

@@ -1,4 +1,5 @@
-import { IsString, IsNumber, IsOptional, IsBoolean } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsBoolean, IsEnum } from 'class-validator';
+import { BankAccountType } from '../entities/bank-account.entity';
 
 export class CreateBankAccountDto {
   @IsString()
@@ -9,6 +10,10 @@ export class CreateBankAccountDto {
 
   @IsString()
   bank_name: string;
+
+  @IsOptional()
+  @IsEnum(BankAccountType)
+  account_type?: BankAccountType;
 
   @IsOptional()
   @IsString()

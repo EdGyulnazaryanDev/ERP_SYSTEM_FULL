@@ -37,11 +37,16 @@ export class PermissionGuard implements CanActivate {
       throw new ForbiddenException('User not authenticated');
     }
 
+    const tenantId = request.tenantId ?? user.tenantId;
+    if (!tenantId) {
+      throw new ForbiddenException('Missing tenant context');
+    }
+
     const hasPermission = await this.permissionsService.checkUserPermission(
       user.sub,
       requiredPermission.resource,
       requiredPermission.action,
-      request.tenantId,
+      tenantId,
     );
 
     if (!hasPermission) {

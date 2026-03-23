@@ -1,4 +1,8 @@
-import { createParamDecorator, ExecutionContext } from '@nestjs/common';
+import {
+  createParamDecorator,
+  ExecutionContext,
+  UnauthorizedException,
+} from '@nestjs/common';
 import type { RequestWithTenantInterface } from '../types/request-with-tenant.interface';
 
 export const CurrentTenant = createParamDecorator(
@@ -6,6 +10,10 @@ export const CurrentTenant = createParamDecorator(
     const request = ctx
       .switchToHttp()
       .getRequest<RequestWithTenantInterface>();
-    return request.tenantId || request.user?.tenantId;
+    const tenantId = request.tenantId ?? request.user?.tenantId;
+    if (!tenantId) {
+      throw new UnauthorizedException('Missing tenant context');
+    }
+    return tenantId;
   },
 );

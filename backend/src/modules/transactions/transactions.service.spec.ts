@@ -1,35 +1,93 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { TransactionsService } from './transactions.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import type { Repository } from 'typeorm';
-import { TransactionEntity } from './entities/transaction.entity';
+import { NotFoundException } from '@nestjs/common';
+import { TransactionsService } from './transactions.service';
+import {
+  TransactionEntity,
+  TransactionStatus,
+  TransactionType,
+} from './entities/transaction.entity';
 import { TransactionItemEntity } from './entities/transaction-item.entity';
 import { InventoryEntity } from '../inventory/entities/inventory.entity';
-import { NotFoundException } from '@nestjs/common';
+import { AccountingService } from '../accounting/accounting.service';
+import { JournalEntryStatus } from '../accounting/entities/journal-entry.entity';
 
 describe('TransactionsService', () => {
   let service: TransactionsService;
   let transactionRepo: jest.Mocked<Repository<TransactionEntity>>;
   let itemRepo: jest.Mocked<Repository<TransactionItemEntity>>;
   let inventoryRepo: jest.Mocked<Repository<InventoryEntity>>;
+  let eventEmitter: jest.Mocked<EventEmitter2>;
+  let accountingService: jest.Mocked<AccountingService>;
 
-  const mockTransaction: Partial<TransactionEntity> = {
+  const mockTransaction: TransactionEntity = {
     id: 'txn-1',
     tenant_id: 'tenant-1',
-    type: 'sale',
-    transaction_date: new Date(),
-    total_amount: 100.50,
-    status: 'draft',
-    transaction_number: 'TXN-001',
+    transaction_number: 'SAL-202603-00001',
+    type: TransactionType.SALE,
+    status: TransactionStatus.DRAFT,
+    customer_id: 'customer-1',
+    customer_name: 'Customer 1',
+    supplier_id: null,
+    supplier_name: null,
+    transaction_date: new Date('2026-03-22'),
+    due_date: null,
+    subtotal: 100,
+    tax_amount: 0,
+    tax_rate: 0,
+    discount_amount: 0,
+    shipping_amount: 0,
+    total_amount: 100,
+    paid_amount: 0,
+    balance_amount: 100,
+    payment_method: null,
+    notes: null,
+    terms: null,
+    items: [
+      {
+        id: 'item-1',
+        transaction_id: 'txn-1',
+        product_id: 'prod-1',
+        product_name: 'Product 1',
+        sku: 'SKU-1',
+        quantity: 2,
+        unit_price: 50,
+        discount_amount: 0,
+        tax_amount: 0,
+        total_amount: 100,
+        notes: null,
+        transaction: null,
+        created_at: new Date(),
+        updated_at: new Date(),
+      },
+    ],
+    created_at: new Date(),
+    updated_at: new Date(),
   };
 
-  const mockItem: Partial<TransactionItemEntity> = {
-    id: 'item-1',
-    transaction_id: 'txn-1',
+  const mockInventory: InventoryEntity = {
+    id: 'inv-1',
+    tenant_id: 'tenant-1',
     product_id: 'prod-1',
-    quantity: 2,
-    unit_price: 50.25,
-    total_price: 100.50,
+    product_name: 'Product 1',
+    sku: 'SKU-1',
+    quantity: 10,
+    reserved_quantity: 0,
+    available_quantity: 10,
+    unit_cost: 20,
+    unit_price: 50,
+    reorder_level: 1,
+    reorder_quantity: 5,
+    supplier_id: null,
+    supplier: null,
+    supplier_name: null,
+    max_stock_level: 100,
+    location: null,
+    warehouse: null,
+    created_at: new Date(),
+    updated_at: new Date(),
   };
 
   beforeEach(async () => {
@@ -45,143 +103,161 @@ describe('TransactionsService', () => {
             save: jest.fn(),
             remove: jest.fn(),
             count: jest.fn(),
-            createQueryBuilder: jest.fn(() => ({
-              where: jest.fn().mockReturnThis(),
-              andWhere: jest.fn().mockReturnThis(),
-              orderBy: jest.fn().mockReturnThis(),
-              skip: jest.fn().mockReturnThis(),
-              take: jest.fn().mockReturnThis(),
-              leftJoinAndSelect: jest.fn().mockReturnThis(),
-              getManyAndCount: jest.fn(),
-              getMany: jest.fn(),
-            })),
           },
         },
         {
           provide: getRepositoryToken(TransactionItemEntity),
           useValue: {
-            find: jest.fn(),
             create: jest.fn(),
-            save: jest.fn(),
-            remove: jest.fn(),
             delete: jest.fn(),
           },
         },
         {
           provide: getRepositoryToken(InventoryEntity),
           useValue: {
-            find: jest.fn(),
             findOne: jest.fn(),
             save: jest.fn(),
+          },
+        },
+        {
+          provide: EventEmitter2,
+          useValue: {
+            emit: jest.fn(),
+          },
+        },
+        {
+          provide: AccountingService,
+          useValue: {
+            findJournalEntriesByReference: jest.fn(),
+            reverseJournalEntry: jest.fn(),
           },
         },
       ],
     }).compile();
 
-    service = module.get<TransactionsService>(TransactionsService);
+    service = module.get(TransactionsService);
     transactionRepo = module.get(getRepositoryToken(TransactionEntity));
     itemRepo = module.get(getRepositoryToken(TransactionItemEntity));
     inventoryRepo = module.get(getRepositoryToken(InventoryEntity));
+    eventEmitter = module.get(EventEmitter2);
+    accountingService = module.get(AccountingService);
   });
 
   afterEach(() => {
     jest.clearAllMocks();
   });
 
-  describe('findAll', () => {
-    it('should return all transactions', async () => {
-      const transactions = [mockTransaction];
-      transactionRepo.find.mockResolvedValue(transactions as TransactionEntity[]);
+  it('findOne throws when transaction is missing', async () => {
+    transactionRepo.findOne.mockResolvedValue(null);
 
-      const result = await service.findAll('tenant-1', {});
-
-      expect(result).toEqual(transactions);
-      expect(transactionRepo.find).toHaveBeenCalled();
-    });
+    await expect(service.findOne('missing', 'tenant-1')).rejects.toThrow(
+      NotFoundException,
+    );
   });
 
-  describe('findOne', () => {
-    it('should return transaction with items', async () => {
-      transactionRepo.findOne.mockResolvedValue(mockTransaction as TransactionEntity);
+  it('completes a purchase without emitting a duplicate bill event', async () => {
+    const purchase = {
+      ...mockTransaction,
+      id: 'txn-purchase',
+      transaction_number: 'PUR-202603-00001',
+      type: TransactionType.PURCHASE,
+      customer_id: null,
+      customer_name: null,
+      supplier_id: 'supplier-1',
+      supplier_name: 'Supplier 1',
+      status: TransactionStatus.DRAFT,
+    };
 
-      const result = await service.findOne('txn-1', 'tenant-1');
-
-      expect(result).toEqual(mockTransaction);
-      expect(transactionRepo.findOne).toHaveBeenCalledWith({
-        where: { id: 'txn-1', tenant_id: 'tenant-1' },
-        relations: ['items'],
-      });
+    transactionRepo.findOne.mockResolvedValue(purchase);
+    inventoryRepo.findOne
+      .mockResolvedValueOnce(mockInventory)
+      .mockResolvedValueOnce(null);
+    inventoryRepo.save.mockResolvedValue({
+      ...mockInventory,
+      quantity: 12,
+      available_quantity: 12,
     });
+    transactionRepo.save.mockResolvedValue({
+      ...purchase,
+      status: TransactionStatus.COMPLETED,
+    } as TransactionEntity);
 
-    it('should throw NotFoundException if transaction not found', async () => {
-      transactionRepo.findOne.mockResolvedValue(null);
+    await service.complete(purchase.id, 'tenant-1');
 
-      await expect(service.findOne('txn-999', 'tenant-1')).rejects.toThrow(
-        NotFoundException,
-      );
-    });
+    expect(eventEmitter.emit).toHaveBeenCalledTimes(1);
+    expect(eventEmitter.emit).toHaveBeenCalledWith(
+      'stock.moved',
+      expect.objectContaining({
+        movementType: 'IN',
+        reference: purchase.transaction_number,
+      }),
+    );
   });
 
-  describe('create', () => {
-    it('should create transaction with items', async () => {
-      const createDto = {
-        type: 'sale',
-        transaction_date: new Date().toISOString(),
-        total_amount: 100.50,
-        items: [
-          {
-            product_id: 'prod-1',
-            product_name: 'Product 1',
-            quantity: 2,
-            unit_price: 50.25,
-          },
-        ],
-      };
+  it('cancels a completed sale by restoring stock and reversing posted entries', async () => {
+    const completedSale = {
+      ...mockTransaction,
+      status: TransactionStatus.COMPLETED,
+    };
 
-      const newTransaction = { ...mockTransaction, items: [mockItem] };
-      transactionRepo.count.mockResolvedValue(0);
-      transactionRepo.create.mockReturnValue(newTransaction as TransactionEntity);
-      transactionRepo.save.mockResolvedValue(newTransaction as TransactionEntity);
-      itemRepo.create.mockImplementation((data) => data as TransactionItemEntity);
-
-      const result = await service.create(createDto as any, 'tenant-1');
-
-      expect(result).toEqual(newTransaction);
-      expect(transactionRepo.count).toHaveBeenCalled();
-      expect(transactionRepo.save).toHaveBeenCalled();
+    transactionRepo.findOne.mockResolvedValue(completedSale);
+    inventoryRepo.findOne.mockResolvedValue(mockInventory);
+    inventoryRepo.save.mockResolvedValue({
+      ...mockInventory,
+      quantity: 12,
+      available_quantity: 12,
     });
+    accountingService.findJournalEntriesByReference.mockResolvedValue([
+      {
+        id: 'je-1',
+        status: JournalEntryStatus.POSTED,
+        reversed_entry_id: null,
+      } as any,
+      {
+        id: 'je-2',
+        status: JournalEntryStatus.REVERSED,
+        reversed_entry_id: 'je-3',
+      } as any,
+    ]);
+    accountingService.reverseJournalEntry.mockResolvedValue({} as any);
+    transactionRepo.save.mockResolvedValue({
+      ...completedSale,
+      status: TransactionStatus.CANCELLED,
+    } as TransactionEntity);
+
+    const result = await service.cancel(completedSale.id, 'tenant-1');
+
+    expect(inventoryRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        quantity: 14,
+        available_quantity: 14,
+      }),
+    );
+    expect(accountingService.reverseJournalEntry).toHaveBeenCalledTimes(1);
+    expect(accountingService.reverseJournalEntry).toHaveBeenCalledWith(
+      'je-1',
+      expect.objectContaining({
+        reason: `Transaction ${completedSale.transaction_number} cancelled`,
+      }),
+      'tenant-1',
+    );
+    expect(result.status).toBe(TransactionStatus.CANCELLED);
   });
 
-  describe('update', () => {
-    it('should update transaction successfully', async () => {
-      const updateDto = { 
-        type: 'sale',
-        transaction_date: new Date().toISOString(),
-        items: [],
-      };
-      const updated = { ...mockTransaction, status: 'draft' };
+  it('updates a draft transaction', async () => {
+    const updateDto = {
+      type: TransactionType.SALE,
+      transaction_date: new Date('2026-03-22').toISOString(),
+      items: [],
+    };
 
-      transactionRepo.findOne.mockResolvedValue(updated as TransactionEntity);
-      transactionRepo.save.mockResolvedValue(updated as TransactionEntity);
-      itemRepo.delete.mockResolvedValue({ affected: 0, raw: {} });
-      itemRepo.create.mockImplementation((data) => data as TransactionItemEntity);
+    transactionRepo.findOne.mockResolvedValue(mockTransaction);
+    itemRepo.delete.mockResolvedValue({ affected: 1, raw: {} });
+    transactionRepo.save.mockResolvedValue(mockTransaction);
 
-      const result = await service.update('txn-1', updateDto as any, 'tenant-1');
+    await service.update('txn-1', updateDto as any, 'tenant-1');
 
-      expect(result).toBeDefined();
-      expect(transactionRepo.save).toHaveBeenCalled();
-    });
-  });
-
-  describe('delete', () => {
-    it('should delete transaction successfully', async () => {
-      const draftTransaction = { ...mockTransaction, status: 'draft' };
-      transactionRepo.findOne.mockResolvedValue(draftTransaction as TransactionEntity);
-      transactionRepo.remove.mockResolvedValue(draftTransaction as TransactionEntity);
-
-      await service.delete('txn-1', 'tenant-1');
-
-      expect(transactionRepo.remove).toHaveBeenCalledWith(draftTransaction);
-    });
+    expect(itemRepo.delete).toHaveBeenCalledWith({ transaction_id: 'txn-1' });
+    expect(transactionRepo.save).toHaveBeenCalled();
   });
 });

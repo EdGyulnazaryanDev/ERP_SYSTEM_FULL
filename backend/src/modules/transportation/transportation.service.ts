@@ -2,17 +2,25 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between } from 'typeorm';
+import { Repository, Between, In } from 'typeorm';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ShipmentEntity, ShipmentStatus } from './entities/shipment.entity';
 import { ShipmentItemEntity } from './entities/shipment-item.entity';
 import { CourierEntity } from './entities/courier.entity';
 import { DeliveryRouteEntity, RouteStatus } from './entities/delivery-route.entity';
+import { InventoryEntity } from '../inventory/entities/inventory.entity';
 import type { CreateShipmentDto } from './dto/create-shipment.dto';
+import { FinancialEventType, ShipmentDeliveredEvent, StockMovedEvent } from '../accounting/events/financial.events';
+import { AccountingService } from '../accounting/accounting.service';
+import { TransactionEntity, TransactionStatus } from '../transactions/entities/transaction.entity';
 
 @Injectable()
 export class TransportationService {
+  private readonly logger = new Logger(TransportationService.name);
+
   constructor(
     @InjectRepository(ShipmentEntity)
     private shipmentRepo: Repository<ShipmentEntity>,
@@ -22,6 +30,12 @@ export class TransportationService {
     private courierRepo: Repository<CourierEntity>,
     @InjectRepository(DeliveryRouteEntity)
     private routeRepo: Repository<DeliveryRouteEntity>,
+    @InjectRepository(InventoryEntity)
+    private inventoryRepo: Repository<InventoryEntity>,
+    @InjectRepository(TransactionEntity)
+    private transactionRepo: Repository<TransactionEntity>,
+    private eventEmitter: EventEmitter2,
+    private accountingService: AccountingService,
   ) {}
 
   // Shipments
@@ -164,29 +178,25 @@ export class TransportationService {
     location?: string,
   ): Promise<ShipmentEntity> {
     const shipment = await this.findOneShipment(id, tenantId);
+    const wasDelivered = shipment.status === ShipmentStatus.DELIVERED;
 
     shipment.status = status;
 
-    // Add to tracking history
-    const trackingEntry = {
-      status,
-      timestamp: new Date(),
-      location: location || shipment.destination_address,
-      notes: notes || `Status updated to ${status}`,
-    };
-
     shipment.tracking_history = [
       ...(shipment.tracking_history || []),
-      trackingEntry,
+      {
+        status,
+        timestamp: new Date(),
+        location: location || shipment.destination_address,
+        notes: notes || `Status updated to ${status}`,
+      },
     ];
 
-    // Update delivery date if delivered
     if (status === ShipmentStatus.DELIVERED) {
-      shipment.actual_delivery_date = new Date();
+      shipment.actual_delivery_date = shipment.actual_delivery_date || new Date();
 
-      // Update courier stats
-      if (shipment.courier_id) {
-        await this.updateCourierStats(shipment.courier_id);
+      if (!wasDelivered) {
+        await this.processDeliveredShipment(shipment, tenantId);
       }
     }
 
@@ -204,15 +214,135 @@ export class TransportationService {
     },
   ): Promise<ShipmentEntity> {
     const shipment = await this.findOneShipment(id, tenantId);
+    const wasDelivered = shipment.status === ShipmentStatus.DELIVERED;
 
     shipment.delivered_to = data.delivered_to;
     if (data.signature) shipment.delivery_signature = data.signature;
     if (data.photos) shipment.delivery_photos = data.photos;
     if (data.notes) shipment.delivery_notes = data.notes;
     shipment.status = ShipmentStatus.DELIVERED;
-    shipment.actual_delivery_date = new Date();
+    shipment.actual_delivery_date = shipment.actual_delivery_date || new Date();
+
+    if (!wasDelivered) {
+      shipment.tracking_history = [
+        ...(shipment.tracking_history || []),
+        {
+          status: ShipmentStatus.DELIVERED,
+          timestamp: new Date(),
+          location: shipment.destination_address,
+          notes: data.notes || 'Proof of delivery recorded',
+        },
+      ];
+
+      await this.processDeliveredShipment(shipment, tenantId);
+    }
 
     return this.shipmentRepo.save(shipment);
+  }
+
+  private async processDeliveredShipment(
+    shipment: ShipmentEntity,
+    tenantId: string,
+  ): Promise<void> {
+    if (shipment.courier_id) {
+      await this.updateCourierStats(shipment.courier_id);
+    }
+
+    const shippingCost =
+      Number(shipment.shipping_cost || 0) + Number(shipment.insurance_cost || 0);
+    if (shippingCost > 0) {
+      const shippingEvent = new ShipmentDeliveredEvent();
+      shippingEvent.tenantId = tenantId;
+      shippingEvent.shipmentId = shipment.id;
+      shippingEvent.trackingNumber = shipment.tracking_number;
+      shippingEvent.shippingCost = shippingCost;
+      shippingEvent.date = new Date().toISOString().split('T')[0];
+      this.eventEmitter.emit(FinancialEventType.SHIPMENT_DELIVERED, shippingEvent);
+    }
+
+    const isInbound =
+      shipment.origin_name?.toLowerCase().includes('supplier') ||
+      shipment.tracking_number?.startsWith('SHP-REQ');
+
+    if (!isInbound || !shipment.items?.length) {
+      return;
+    }
+
+    let linkedTransaction: TransactionEntity | null = null;
+    if (shipment.transaction_id) {
+      linkedTransaction = await this.transactionRepo.findOne({
+        where: { id: shipment.transaction_id, tenant_id: tenantId },
+        relations: ['items'],
+      });
+    }
+
+    for (const item of shipment.items) {
+      if (!item.product_id) continue;
+
+      try {
+        let inv = await this.inventoryRepo.findOne({
+          where: { id: item.product_id, tenant_id: tenantId },
+        });
+        if (!inv) {
+          inv = await this.inventoryRepo.findOne({
+            where: { product_id: item.product_id, tenant_id: tenantId },
+          });
+        }
+
+        if (inv) {
+          const qty = Number(item.quantity);
+          inv.quantity += qty;
+          inv.available_quantity = inv.quantity - inv.reserved_quantity;
+          await this.inventoryRepo.save(inv);
+
+          const unitCost = Number(inv.unit_cost);
+          const totalCost = qty * unitCost;
+
+          if (totalCost > 0 && !linkedTransaction) {
+            const stockEvent = new StockMovedEvent();
+            stockEvent.tenantId = tenantId;
+            stockEvent.productId = inv.id;
+            stockEvent.productName = inv.product_name;
+            stockEvent.quantity = qty;
+            stockEvent.movementType = 'IN';
+            stockEvent.unitCost = unitCost;
+            stockEvent.totalCost = totalCost;
+            stockEvent.reference = shipment.tracking_number;
+            this.eventEmitter.emit(FinancialEventType.STOCK_MOVED, stockEvent);
+          }
+
+          this.logger.log(
+            `[DELIVERY] Inventory updated: ${inv.product_name} +${qty} → new qty ${inv.quantity} (shipment ${shipment.tracking_number})`,
+          );
+        } else {
+          this.logger.warn(
+            `[DELIVERY] Product ${item.product_id} not found in inventory — skipping stock update`,
+          );
+        }
+      } catch (e: any) {
+        this.logger.error(
+          `[DELIVERY] Failed to update inventory for item ${item.product_id}: ${e.message}`,
+        );
+      }
+    }
+
+    if (linkedTransaction) {
+      if (linkedTransaction.status !== TransactionStatus.COMPLETED) {
+        linkedTransaction.status = TransactionStatus.COMPLETED;
+        linkedTransaction.notes = `${linkedTransaction.notes || ''} Received via shipment ${shipment.tracking_number}`.trim();
+        await this.transactionRepo.save(linkedTransaction);
+      }
+
+      const draftEntries = await this.accountingService.findJournalEntriesByReference(
+        linkedTransaction.transaction_number,
+        tenantId,
+      );
+      for (const entry of draftEntries) {
+        if (entry.status === 'draft') {
+          await this.accountingService.postJournalEntry(entry.id, {}, tenantId);
+        }
+      }
+    }
   }
 
   // Couriers
@@ -277,6 +407,12 @@ export class TransportationService {
       );
     }
 
+    // Detach courier from non-active shipments before deleting
+    await this.shipmentRepo.update({ courier_id: id }, { courier_id: null as any });
+
+    // Delete any routes assigned to this courier
+    await this.routeRepo.delete({ courier_id: id });
+
     await this.courierRepo.remove(courier);
   }
 
@@ -301,7 +437,7 @@ export class TransportationService {
 
     // Update shipments to assign courier
     await this.shipmentRepo.update(
-      { id: shipmentIds as any },
+      { id: In(shipmentIds) },
       { courier_id: courierId },
     );
 

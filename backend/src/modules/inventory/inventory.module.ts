@@ -3,9 +3,23 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { InventoryController } from './inventory.controller';
 import { InventoryService } from './inventory.service';
 import { InventoryEntity } from './entities/inventory.entity';
+import { PurchaseRequisitionEntity } from '../procurement/entities/purchase-requisition.entity';
+import { PurchaseRequisitionItemEntity } from '../procurement/entities/purchase-requisition-item.entity';
+import { TransactionEntity } from '../transactions/entities/transaction.entity';
+import { TransactionItemEntity } from '../transactions/entities/transaction-item.entity';
+import { AccountingModule } from '../accounting/accounting.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([InventoryEntity])],
+  imports: [
+    AccountingModule,
+    TypeOrmModule.forFeature([
+      InventoryEntity,
+      PurchaseRequisitionEntity,
+      PurchaseRequisitionItemEntity,
+      TransactionEntity,
+      TransactionItemEntity,
+    ]),
+  ],
   controllers: [InventoryController],
   providers: [InventoryService],
   exports: [InventoryService],

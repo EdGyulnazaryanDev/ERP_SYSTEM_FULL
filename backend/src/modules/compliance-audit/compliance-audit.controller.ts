@@ -28,6 +28,7 @@ import type {
   ExecuteRetentionPolicyDto,
 } from './dto/create-retention-policy.dto';
 import type { CreateComplianceReportDto } from './dto/create-compliance-report.dto';
+import type { CreateAccessLogDto } from './dto/create-access-log.dto';
 
 @Controller('compliance-audit')
 @UseGuards(JwtAuthGuard)
@@ -59,11 +60,7 @@ export class ComplianceAuditController {
     return this.complianceAuditService.getAuditLogs(query, tenantId);
   }
 
-  @Get('audit-logs/:id')
-  getAuditLog(@Param('id') id: string, @CurrentTenant() tenantId: string) {
-    return this.complianceAuditService.getAuditLog(id, tenantId);
-  }
-
+  /** Must be registered before :id so "statistics" is not parsed as an id. */
   @Get('audit-logs/statistics')
   getAuditStatistics(
     @Query('start_date') startDate: string,
@@ -75,6 +72,11 @@ export class ComplianceAuditController {
       new Date(startDate),
       new Date(endDate),
     );
+  }
+
+  @Get('audit-logs/:id')
+  getAuditLog(@Param('id') id: string, @CurrentTenant() tenantId: string) {
+    return this.complianceAuditService.getAuditLog(id, tenantId);
   }
 
   // ==================== COMPLIANCE RULE ENDPOINTS ====================
@@ -229,6 +231,23 @@ export class ComplianceAuditController {
   }
 
   // ==================== ACCESS LOG ENDPOINTS ====================
+
+  @Post('access-logs')
+  createAccessLog(
+    @Body() body: CreateAccessLogDto,
+    @Request() req: any,
+    @CurrentTenant() tenantId: string,
+  ) {
+    return this.complianceAuditService.logAccess(
+      req.user.userId,
+      body.access_type,
+      body.resource_type,
+      body.resource_id ?? '',
+      body.result,
+      tenantId,
+      body.metadata,
+    );
+  }
 
   @Get('access-logs')
   getAccessLogs(

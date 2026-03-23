@@ -104,7 +104,7 @@ describe('AuthController', () => {
       const response = await controller.logout(user as any);
 
       expect(response).toEqual(result);
-      expect(authService.logout).toHaveBeenCalledWith(user.sub);
+      expect(authService.logout).toHaveBeenCalledWith(user.sub, user.tenantId);
     });
   });
 

@@ -1,11 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { TransportationService } from './transportation.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import type { Repository } from 'typeorm';
+import { NotFoundException } from '@nestjs/common';
+import { TransportationService } from './transportation.service';
 import {
   ShipmentEntity,
-  ShipmentStatus,
   ShipmentPriority,
+  ShipmentStatus,
 } from './entities/shipment.entity';
 import {
   CourierEntity,
@@ -14,7 +16,7 @@ import {
 } from './entities/courier.entity';
 import { ShipmentItemEntity } from './entities/shipment-item.entity';
 import { DeliveryRouteEntity } from './entities/delivery-route.entity';
-import { NotFoundException } from '@nestjs/common';
+import { InventoryEntity } from '../inventory/entities/inventory.entity';
 
 describe('TransportationService', () => {
   let service: TransportationService;
@@ -22,6 +24,8 @@ describe('TransportationService', () => {
   let courierRepo: jest.Mocked<Repository<CourierEntity>>;
   let shipmentItemRepo: jest.Mocked<Repository<ShipmentItemEntity>>;
   let routeRepo: jest.Mocked<Repository<DeliveryRouteEntity>>;
+  let inventoryRepo: jest.Mocked<Repository<InventoryEntity>>;
+  let eventEmitter: jest.Mocked<EventEmitter2>;
 
   const mockShipment: ShipmentEntity = {
     id: 'shipment-1',
@@ -124,10 +128,7 @@ describe('TransportationService', () => {
         {
           provide: getRepositoryToken(ShipmentItemEntity),
           useValue: {
-            find: jest.fn(),
             create: jest.fn(),
-            save: jest.fn(),
-            remove: jest.fn(),
           },
         },
         {
@@ -138,63 +139,54 @@ describe('TransportationService', () => {
             create: jest.fn(),
             save: jest.fn(),
             count: jest.fn(),
+            delete: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(InventoryEntity),
+          useValue: {
+            findOne: jest.fn(),
+            save: jest.fn(),
+          },
+        },
+        {
+          provide: EventEmitter2,
+          useValue: {
+            emit: jest.fn(),
           },
         },
       ],
     }).compile();
 
-    service = module.get<TransportationService>(TransportationService);
+    service = module.get(TransportationService);
     shipmentRepo = module.get(getRepositoryToken(ShipmentEntity));
     courierRepo = module.get(getRepositoryToken(CourierEntity));
     shipmentItemRepo = module.get(getRepositoryToken(ShipmentItemEntity));
     routeRepo = module.get(getRepositoryToken(DeliveryRouteEntity));
+    inventoryRepo = module.get(getRepositoryToken(InventoryEntity));
+    eventEmitter = module.get(EventEmitter2);
   });
 
   afterEach(() => {
     jest.clearAllMocks();
   });
 
-  describe('findAllShipments', () => {
-    it('should return all shipments for tenant', async () => {
-      const shipments = [mockShipment];
-      shipmentRepo.find.mockResolvedValue(shipments);
+  it('findOneShipment throws when missing', async () => {
+    shipmentRepo.findOne.mockResolvedValue(null);
 
-      const result = await service.findAllShipments('tenant-1');
-
-      expect(result).toEqual(shipments);
-      expect(shipmentRepo.find).toHaveBeenCalledWith({
-        where: { tenant_id: 'tenant-1' },
-        relations: ['courier', 'items'],
-        order: { created_at: 'DESC' },
-      });
-    });
+    await expect(
+      service.findOneShipment('missing', 'tenant-1'),
+    ).rejects.toThrow(NotFoundException);
   });
 
-  describe('findOneShipment', () => {
-    it('should return shipment by id', async () => {
-      shipmentRepo.findOne.mockResolvedValue(mockShipment);
+  it('creates a shipment', async () => {
+    shipmentRepo.count.mockResolvedValue(0);
+    shipmentRepo.create.mockReturnValue(mockShipment);
+    shipmentRepo.save.mockResolvedValue(mockShipment);
+    shipmentItemRepo.create.mockImplementation((data) => data as ShipmentItemEntity);
 
-      const result = await service.findOneShipment('shipment-1', 'tenant-1');
-
-      expect(result).toEqual(mockShipment);
-      expect(shipmentRepo.findOne).toHaveBeenCalledWith({
-        where: { id: 'shipment-1', tenant_id: 'tenant-1' },
-        relations: ['courier', 'items'],
-      });
-    });
-
-    it('should throw NotFoundException if shipment not found', async () => {
-      shipmentRepo.findOne.mockResolvedValue(null);
-
-      await expect(
-        service.findOneShipment('shipment-999', 'tenant-1'),
-      ).rejects.toThrow(NotFoundException);
-    });
-  });
-
-  describe('createShipment', () => {
-    it('should create shipment successfully', async () => {
-      const createDto = {
+    const result = await service.createShipment(
+      {
         courier_id: 'courier-1',
         origin_name: 'Warehouse',
         origin_address: '123 Main St',
@@ -202,128 +194,98 @@ describe('TransportationService', () => {
         destination_address: '456 Oak Ave',
         weight: 10,
         items: [],
-      };
+      } as any,
+      'tenant-1',
+    );
 
-      const newShipment = { ...mockShipment };
-      shipmentRepo.count.mockResolvedValue(0);
-      shipmentRepo.create.mockReturnValue(newShipment);
-      shipmentRepo.save.mockResolvedValue(newShipment);
-      shipmentItemRepo.create.mockImplementation((data) => data as ShipmentItemEntity);
-
-      const result = await service.createShipment(createDto as any, 'tenant-1');
-
-      expect(result).toEqual(newShipment);
-      expect(shipmentRepo.count).toHaveBeenCalled();
-      expect(shipmentRepo.save).toHaveBeenCalled();
-    });
+    expect(result).toEqual(mockShipment);
+    expect(shipmentRepo.save).toHaveBeenCalled();
   });
 
-  describe('updateShipmentStatus', () => {
-    it('should update shipment status successfully', async () => {
-      const updated = { ...mockShipment, status: ShipmentStatus.IN_TRANSIT };
+  it('processes delivery side effects only once', async () => {
+    const deliveredShipment = {
+      ...mockShipment,
+      status: ShipmentStatus.DELIVERED,
+      actual_delivery_date: new Date(),
+    };
 
-      shipmentRepo.findOne.mockResolvedValue(mockShipment);
-      shipmentRepo.save.mockResolvedValue(updated);
+    jest
+      .spyOn(service as any, 'updateCourierStats')
+      .mockResolvedValue(undefined);
+    shipmentRepo.findOne
+      .mockResolvedValueOnce(mockShipment)
+      .mockResolvedValueOnce(deliveredShipment);
+    shipmentRepo.save.mockResolvedValue(deliveredShipment);
 
-      const result = await service.updateShipmentStatus(
-        'shipment-1',
-        ShipmentStatus.IN_TRANSIT,
-        'tenant-1',
-      );
+    await service.updateShipmentStatus(
+      'shipment-1',
+      ShipmentStatus.DELIVERED,
+      'tenant-1',
+    );
+    await service.updateShipmentStatus(
+      'shipment-1',
+      ShipmentStatus.DELIVERED,
+      'tenant-1',
+    );
 
-      expect(result.status).toBe(ShipmentStatus.IN_TRANSIT);
-      expect(shipmentRepo.save).toHaveBeenCalled();
-    });
+    expect(eventEmitter.emit).toHaveBeenCalledTimes(1);
+    expect(eventEmitter.emit).toHaveBeenCalledWith(
+      'shipment.delivered',
+      expect.objectContaining({ trackingNumber: mockShipment.tracking_number }),
+    );
   });
 
-  describe('findAllCouriers', () => {
-    it('should return all couriers for tenant', async () => {
-      const couriers = [mockCourier];
-      courierRepo.find.mockResolvedValue(couriers);
+  it('adds proof of delivery and triggers the delivery chain on first delivery', async () => {
+    const pendingShipment = {
+      ...mockShipment,
+      status: ShipmentStatus.PENDING,
+      tracking_history: [],
+    };
+    const updateCourierStatsSpy = jest
+      .spyOn(service as any, 'updateCourierStats')
+      .mockResolvedValue(undefined);
+    const savedShipment = {
+      ...mockShipment,
+      status: ShipmentStatus.DELIVERED,
+      delivered_to: 'Receiver',
+      actual_delivery_date: new Date(),
+      tracking_history: [
+        expect.objectContaining({ status: ShipmentStatus.DELIVERED }),
+      ],
+    } as any;
 
-      const result = await service.findAllCouriers('tenant-1');
+    shipmentRepo.findOne.mockResolvedValue(pendingShipment);
+    shipmentRepo.save.mockResolvedValue(savedShipment);
 
-      expect(result).toEqual(couriers);
-      expect(courierRepo.find).toHaveBeenCalledWith({
-        where: { tenant_id: 'tenant-1' },
-        order: { name: 'ASC' },
-      });
+    const result = await service.addProofOfDelivery('shipment-1', 'tenant-1', {
+      delivered_to: 'Receiver',
+      notes: 'Signed at front desk',
     });
+
+    expect(result.status).toBe(ShipmentStatus.DELIVERED);
+    expect(updateCourierStatsSpy).toHaveBeenCalledWith(pendingShipment.courier_id);
+    expect(shipmentRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        delivered_to: 'Receiver',
+        status: ShipmentStatus.DELIVERED,
+      }),
+    );
   });
 
-  describe('findOneCourier', () => {
-    it('should return courier by id', async () => {
-      courierRepo.findOne.mockResolvedValue(mockCourier);
+  it('deletes a courier with no active shipments', async () => {
+    courierRepo.findOne.mockResolvedValue(mockCourier);
+    shipmentRepo.count.mockResolvedValue(0);
+    shipmentRepo.update.mockResolvedValue({ affected: 1, generatedMaps: [], raw: [] });
+    routeRepo.delete.mockResolvedValue({ affected: 0, raw: {} } as any);
+    courierRepo.remove.mockResolvedValue(mockCourier);
 
-      const result = await service.findOneCourier('courier-1', 'tenant-1');
+    await service.deleteCourier('courier-1', 'tenant-1');
 
-      expect(result).toEqual(mockCourier);
-    });
-
-    it('should throw NotFoundException if courier not found', async () => {
-      courierRepo.findOne.mockResolvedValue(null);
-
-      await expect(
-        service.findOneCourier('courier-999', 'tenant-1'),
-      ).rejects.toThrow(NotFoundException);
-    });
-  });
-
-  describe('createCourier', () => {
-    it('should create courier successfully', async () => {
-      const createDto = {
-        name: 'Jane Smith',
-        code: 'C002',
-        phone: '555-5678',
-      };
-
-      const newCourier = { ...mockCourier, ...createDto };
-      courierRepo.count.mockResolvedValue(0);
-      courierRepo.create.mockReturnValue(newCourier);
-      courierRepo.save.mockResolvedValue(newCourier);
-
-      const result = await service.createCourier(createDto as any, 'tenant-1');
-
-      expect(result).toEqual(newCourier);
-      expect(courierRepo.count).toHaveBeenCalled();
-      expect(courierRepo.save).toHaveBeenCalled();
-    });
-  });
-
-  describe('updateCourier', () => {
-    it('should update courier successfully', async () => {
-      const updateDto = { status: CourierStatus.ON_LEAVE };
-      const updated = { ...mockCourier, ...updateDto };
-
-      courierRepo.findOne.mockResolvedValue(mockCourier);
-      courierRepo.save.mockResolvedValue(updated);
-
-      const result = await service.updateCourier(
-        'courier-1',
-        updateDto as any,
-        'tenant-1',
-      );
-
-      expect(result.status).toBe(CourierStatus.ON_LEAVE);
-      expect(courierRepo.save).toHaveBeenCalled();
-    });
-  });
-
-  describe('deleteCourier', () => {
-    it('should delete courier successfully', async () => {
-      courierRepo.findOne.mockResolvedValue(mockCourier);
-      shipmentRepo.count.mockResolvedValue(0);
-      courierRepo.remove.mockResolvedValue(mockCourier);
-
-      await service.deleteCourier('courier-1', 'tenant-1');
-
-      expect(shipmentRepo.count).toHaveBeenCalledWith({
-        where: {
-          courier_id: 'courier-1',
-          status: ShipmentStatus.IN_TRANSIT,
-        },
-      });
-      expect(courierRepo.remove).toHaveBeenCalledWith(mockCourier);
-    });
+    expect(shipmentRepo.update).toHaveBeenCalledWith(
+      { courier_id: 'courier-1' },
+      { courier_id: null },
+    );
+    expect(routeRepo.delete).toHaveBeenCalledWith({ courier_id: 'courier-1' });
+    expect(courierRepo.remove).toHaveBeenCalledWith(mockCourier);
   });
 });

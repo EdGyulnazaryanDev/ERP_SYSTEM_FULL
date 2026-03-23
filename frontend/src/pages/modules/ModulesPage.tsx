@@ -3,10 +3,15 @@ import { PlusOutlined, EditOutlined, DeleteOutlined, DatabaseOutlined } from '@a
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { modulesApi, type ModuleDefinition } from '@/api/modules';
+import { useAccessControl } from '@/hooks/useAccessControl';
 
 export default function ModulesPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { canPerform } = useAccessControl();
+  const canCreateModules = canPerform('modules', 'create');
+  const canEditModules = canPerform('modules', 'edit');
+  const canDeleteModules = canPerform('modules', 'delete');
 
   const { data: modules, isLoading } = useQuery({
     queryKey: ['dynamic-modules'],
@@ -91,22 +96,26 @@ export default function ModulesPage() {
           >
             Data
           </Button>
-          <Button
-            type="link"
-            icon={<EditOutlined />}
-            onClick={() => navigate(`/modules/builder?id=${record.id}`)}
-          >
-            Edit
-          </Button>
-          <Button
-            type="link"
-            danger
-            icon={<DeleteOutlined />}
-            onClick={() => handleDelete(record)}
-            loading={deleteMutation.isPending}
-          >
-            Delete
-          </Button>
+          {canEditModules && (
+            <Button
+              type="link"
+              icon={<EditOutlined />}
+              onClick={() => navigate(`/modules/builder?id=${record.id}`)}
+            >
+              Edit
+            </Button>
+          )}
+          {canDeleteModules && (
+            <Button
+              type="link"
+              danger
+              icon={<DeleteOutlined />}
+              onClick={() => handleDelete(record)}
+              loading={deleteMutation.isPending}
+            >
+              Delete
+            </Button>
+          )}
         </Space>
       ),
     },
@@ -119,13 +128,15 @@ export default function ModulesPage() {
           <h1 className="text-2xl font-bold">Modules</h1>
           <p className="text-gray-600">Create and manage custom modules for your ERP system</p>
         </div>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={() => navigate('/modules/builder')}
-        >
-          Create Module
-        </Button>
+        {canCreateModules && (
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => navigate('/modules/builder')}
+          >
+            Create Module
+          </Button>
+        )}
       </div>
 
       <Card>

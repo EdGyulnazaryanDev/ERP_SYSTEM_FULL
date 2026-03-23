@@ -6,6 +6,8 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between } from 'typeorm';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { FinancialEventType, PayrollProcessedEvent } from '../accounting/events/financial.events';
 import { EmployeeEntity } from './entities/employee.entity';
 import { AttendanceEntity, AttendanceStatus } from './entities/attendance.entity';
 import { LeaveTypeEntity } from './entities/leave-type.entity';
@@ -41,6 +43,7 @@ export class HrService {
     private employeeSalaryRepo: Repository<EmployeeSalaryEntity>,
     @InjectRepository(PayslipEntity)
     private payslipRepo: Repository<PayslipEntity>,
+    private eventEmitter: EventEmitter2,
   ) {}
 
   // ==================== EMPLOYEE METHODS ====================
@@ -663,6 +666,15 @@ export class HrService {
     payslip.status = status;
     if (status === PayslipStatus.PAID) {
       payslip.payment_date = new Date();
+
+      // Emit financial event so FinancialBrainService auto-creates the JE
+      const event = new PayrollProcessedEvent();
+      event.tenantId = payslip.tenant_id;
+      event.payslipId = payslip.id;
+      event.employeeId = payslip.employee_id;
+      event.netAmount = Number(payslip.net_salary);
+      event.date = new Date().toISOString().split('T')[0];
+      this.eventEmitter.emit(FinancialEventType.PAYROLL_PROCESSED, event);
     }
 
     return this.payslipRepo.save(payslip);

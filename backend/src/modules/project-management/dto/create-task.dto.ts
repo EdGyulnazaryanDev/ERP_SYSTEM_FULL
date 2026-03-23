@@ -5,8 +5,9 @@ export class CreateTaskDto {
   @IsUUID()
   project_id: string;
 
+  @IsOptional()
   @IsString()
-  task_code: string;
+  task_code?: string;
 
   @IsString()
   task_name: string;

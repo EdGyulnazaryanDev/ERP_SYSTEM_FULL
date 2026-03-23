@@ -4,11 +4,19 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between, In } from 'typeorm';
+import { Repository, Between, In, LessThan } from 'typeorm';
 import { AuditLogEntity, AuditSeverity } from './entities/audit-log.entity';
-import { ComplianceRuleEntity, RuleStatus } from './entities/compliance-rule.entity';
+import {
+  ComplianceRuleEntity,
+  RuleStatus,
+  RuleType,
+} from './entities/compliance-rule.entity';
 import { ComplianceCheckEntity, CheckStatus, CheckTrigger } from './entities/compliance-check.entity';
-import { DataRetentionPolicyEntity, PolicyStatus } from './entities/data-retention-policy.entity';
+import {
+  DataRetentionPolicyEntity,
+  PolicyStatus,
+  RetentionAction,
+} from './entities/data-retention-policy.entity';
 import { ComplianceReportEntity, ReportType, ReportStatus } from './entities/compliance-report.entity';
 import { AccessLogEntity, AccessResult } from './entities/access-log.entity';
 import type {
@@ -48,12 +56,12 @@ export class ComplianceAuditService {
 
   async createAuditLog(
     data: CreateAuditLogDto,
-    userId: string,
+    userId: string | null | undefined,
     tenantId: string,
   ): Promise<AuditLogEntity> {
     const auditLog = this.auditLogRepo.create({
       ...data,
-      user_id: userId,
+      user_id: userId ?? undefined,
       tenant_id: tenantId,
       severity: data.severity || AuditSeverity.LOW,
     });
@@ -213,15 +221,20 @@ export class ComplianceAuditService {
     let resultMessage = 'Compliance check passed';
 
     try {
-      // Execute compliance check based on rule conditions
-      const checkResult = await this.performComplianceCheck(rule, data.context);
-      
+      const checkResult = await this.performComplianceCheck(
+        rule,
+        data.context,
+        tenantId,
+      );
+
       status = checkResult.status;
       violations = checkResult.violations;
       resultMessage = checkResult.message;
     } catch (error) {
       status = CheckStatus.FAILED;
-      resultMessage = `Check failed: ${error.message}`;
+      resultMessage = `Check failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`;
     }
 
     const check = this.checkRepo.create({
@@ -242,31 +255,104 @@ export class ComplianceAuditService {
 
   private async performComplianceCheck(
     rule: ComplianceRuleEntity,
-    context: any,
+    context: Record<string, any> | undefined,
+    tenantId: string,
   ): Promise<{ status: CheckStatus; violations: any[]; message: string }> {
-    // Implement compliance check logic based on rule type
-    // This is a placeholder - actual implementation would depend on specific requirements
-    
     const violations: any[] = [];
-    let status = CheckStatus.PASSED;
-    let message = 'Compliance check passed';
+    const tid = (context?.tenant_id as string) || tenantId;
 
-    // Example: Check data retention compliance
-    if (rule.rule_type === 'data_retention') {
-      // Implement data retention check logic
-    }
+    switch (rule.rule_type) {
+      case RuleType.DATA_RETENTION: {
+        const maxAgeDays = Number(rule.conditions?.max_age_days ?? 90);
+        const entity = String(rule.conditions?.entity_type ?? 'audit_log');
 
-    // Example: Check access control compliance
-    if (rule.rule_type === 'access_control') {
-      // Implement access control check logic
+        if (entity === 'audit_log') {
+          const oldest = await this.auditLogRepo
+            .createQueryBuilder('a')
+            .select('MIN(a.created_at)', 'min')
+            .where('a.tenant_id = :tid', { tid })
+            .getRawOne<{ min: Date | null }>();
+
+          const minDate = oldest?.min ? new Date(oldest.min) : null;
+          if (minDate) {
+            const ageDays =
+              (Date.now() - minDate.getTime()) / (86400 * 1000);
+            if (ageDays > maxAgeDays) {
+              violations.push({
+                code: 'RETENTION_MAX_AGE',
+                message: `Oldest audit log is ${Math.floor(ageDays)} days old (max allowed ${maxAgeDays})`,
+                oldest: minDate.toISOString(),
+              });
+            }
+          }
+        } else if (entity === 'access_log') {
+          const oldest = await this.accessLogRepo
+            .createQueryBuilder('a')
+            .select('MIN(a.accessed_at)', 'min')
+            .where('a.tenant_id = :tid', { tid })
+            .getRawOne<{ min: Date | null }>();
+
+          const minDate = oldest?.min ? new Date(oldest.min) : null;
+          if (minDate) {
+            const ageDays =
+              (Date.now() - minDate.getTime()) / (86400 * 1000);
+            if (ageDays > maxAgeDays) {
+              violations.push({
+                code: 'RETENTION_MAX_AGE_ACCESS',
+                message: `Oldest access log is ${Math.floor(ageDays)} days old (max allowed ${maxAgeDays})`,
+                oldest: minDate.toISOString(),
+              });
+            }
+          }
+        }
+        break;
+      }
+
+      case RuleType.ACCESS_CONTROL: {
+        const maxDeniedRatio = Number(rule.conditions?.max_denied_ratio ?? 0.25);
+        const lookbackDays = Number(rule.conditions?.lookback_days ?? 7);
+        const since = new Date();
+        since.setDate(since.getDate() - lookbackDays);
+        const until = new Date();
+
+        const logs = await this.accessLogRepo.find({
+          where: { tenant_id: tid, accessed_at: Between(since, until) },
+        });
+
+        const total = logs.length;
+        const denied = logs.filter((l) => l.result === AccessResult.DENIED)
+          .length;
+        const ratio = total > 0 ? denied / total : 0;
+
+        if (total > 0 && ratio > maxDeniedRatio) {
+          violations.push({
+            code: 'ACCESS_DENIED_RATIO',
+            message: `Denied ratio ${(ratio * 100).toFixed(1)}% exceeds max ${(maxDeniedRatio * 100).toFixed(1)}%`,
+            denied,
+            total,
+            lookback_days: lookbackDays,
+          });
+        }
+        break;
+      }
+
+      default:
+        break;
     }
 
     if (violations.length > 0) {
-      status = CheckStatus.FAILED;
-      message = `Found ${violations.length} violation(s)`;
+      return {
+        status: CheckStatus.FAILED,
+        violations,
+        message: `Found ${violations.length} violation(s)`,
+      };
     }
 
-    return { status, violations, message };
+    return {
+      status: CheckStatus.PASSED,
+      violations: [],
+      message: 'Compliance check passed',
+    };
   }
 
   async getComplianceChecks(
@@ -353,26 +439,101 @@ export class ComplianceAuditService {
       throw new BadRequestException('Policy is not active');
     }
 
-    // Calculate cutoff date
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - policy.retention_days);
 
-    // Implement retention policy execution
-    // This is a placeholder - actual implementation would query and process records
-    const processed = 0;
+    let processed = 0;
+    let message = '';
 
-    if (!data.dry_run) {
+    const dryRun = data.dry_run === true;
+
+    if (policy.action === RetentionAction.ARCHIVE) {
+      return {
+        processed: 0,
+        message:
+          'Archive action is not implemented in-app; export data to cold storage externally.',
+      };
+    }
+
+    if (policy.entity_type === 'audit_log') {
+      const count = await this.auditLogRepo.count({
+        where: { tenant_id: tenantId, created_at: LessThan(cutoffDate) },
+      });
+
+      if (dryRun) {
+        processed = count;
+        message = `Dry run: would affect ${processed} audit log row(s) before ${cutoffDate.toISOString()}`;
+      } else if (policy.action === RetentionAction.DELETE) {
+        const result = await this.auditLogRepo
+          .createQueryBuilder()
+          .delete()
+          .from(AuditLogEntity)
+          .where('tenant_id = :tid', { tid: tenantId })
+          .andWhere('created_at < :cutoff', { cutoff: cutoffDate })
+          .execute();
+        processed = result.affected ?? 0;
+        message = `Deleted ${processed} audit log row(s)`;
+      } else if (policy.action === RetentionAction.ANONYMIZE) {
+        const result = await this.auditLogRepo
+          .createQueryBuilder()
+          .update(AuditLogEntity)
+          .set({
+            old_values: null as any,
+            new_values: null as any,
+            metadata: { anonymized: true } as any,
+          })
+          .where('tenant_id = :tid', { tid: tenantId })
+          .andWhere('created_at < :cutoff', { cutoff: cutoffDate })
+          .execute();
+        processed = result.affected ?? 0;
+        message = `Anonymized ${processed} audit log row(s)`;
+      }
+    } else if (policy.entity_type === 'access_log') {
+      const count = await this.accessLogRepo.count({
+        where: { tenant_id: tenantId, accessed_at: LessThan(cutoffDate) },
+      });
+
+      if (dryRun) {
+        processed = count;
+        message = `Dry run: would affect ${processed} access log row(s) before ${cutoffDate.toISOString()}`;
+      } else if (policy.action === RetentionAction.DELETE) {
+        const result = await this.accessLogRepo
+          .createQueryBuilder()
+          .delete()
+          .from(AccessLogEntity)
+          .where('tenant_id = :tid', { tid: tenantId })
+          .andWhere('accessed_at < :cutoff', { cutoff: cutoffDate })
+          .execute();
+        processed = result.affected ?? 0;
+        message = `Deleted ${processed} access log row(s)`;
+      } else if (policy.action === RetentionAction.ANONYMIZE) {
+        const result = await this.accessLogRepo
+          .createQueryBuilder()
+          .update(AccessLogEntity)
+          .set({
+            metadata: { anonymized: true } as any,
+            reason: 'Anonymized per retention policy',
+          })
+          .where('tenant_id = :tid', { tid: tenantId })
+          .andWhere('accessed_at < :cutoff', { cutoff: cutoffDate })
+          .execute();
+        processed = result.affected ?? 0;
+        message = `Tagged ${processed} access log row(s) as anonymized`;
+      }
+    } else {
+      message = `No built-in retention handler for entity_type "${policy.entity_type}"`;
+    }
+
+    if (
+      !dryRun &&
+      (policy.entity_type === 'audit_log' || policy.entity_type === 'access_log')
+    ) {
       policy.last_executed_at = new Date();
       policy.records_processed = policy.records_processed + processed;
       await this.policyRepo.save(policy);
     }
 
-    return {
-      processed,
-      message: data.dry_run
-        ? `Dry run: Would process ${processed} records`
-        : `Processed ${processed} records`,
-    };
+    return { processed, message: message || `Processed ${processed} records` };
   }
 
   // ==================== COMPLIANCE REPORT METHODS ====================

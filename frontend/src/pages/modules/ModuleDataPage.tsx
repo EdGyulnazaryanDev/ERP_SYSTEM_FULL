@@ -5,13 +5,18 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
 import { modulesApi } from '@/api/modules';
 import type { ModuleInstance } from '@/types';
+import { useAccessControl } from '@/hooks/useAccessControl';
 
 export default function ModuleDataPage() {
   const { moduleId } = useParams<{ moduleId: string }>();
   const [form] = Form.useForm();
   const queryClient = useQueryClient();
+  const { canPerform } = useAccessControl();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<ModuleInstance | null>(null);
+  const canCreateModuleRecords = canPerform('modules', 'create');
+  const canEditModuleRecords = canPerform('modules', 'edit');
+  const canDeleteModuleRecords = canPerform('modules', 'delete');
 
   const { data: module } = useQuery({
     queryKey: ['module', moduleId],
@@ -97,21 +102,25 @@ export default function ModuleDataPage() {
       key: 'actions',
       render: (_: unknown, record: ModuleInstance) => (
         <Space>
-          <Button
-            type="link"
-            icon={<EditOutlined />}
-            onClick={() => openModal(record)}
-          >
-            Edit
-          </Button>
-          <Button
-            type="link"
-            danger
-            icon={<DeleteOutlined />}
-            onClick={() => deleteMutation.mutate(record.id)}
-          >
-            Delete
-          </Button>
+          {canEditModuleRecords && (
+            <Button
+              type="link"
+              icon={<EditOutlined />}
+              onClick={() => openModal(record)}
+            >
+              Edit
+            </Button>
+          )}
+          {canDeleteModuleRecords && (
+            <Button
+              type="link"
+              danger
+              icon={<DeleteOutlined />}
+              onClick={() => deleteMutation.mutate(record.id)}
+            >
+              Delete
+            </Button>
+          )}
         </Space>
       ),
     },
@@ -121,13 +130,15 @@ export default function ModuleDataPage() {
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">{module?.displayName} Data</h1>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={() => openModal()}
-        >
-          Add Record
-        </Button>
+        {canCreateModuleRecords && (
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => openModal()}
+          >
+            Add Record
+          </Button>
+        )}
       </div>
 
       <Card>
@@ -140,49 +151,51 @@ export default function ModuleDataPage() {
         />
       </Card>
 
-      <Modal
-        title={editingRecord ? 'Edit Record' : 'Add Record'}
-        open={isModalOpen}
-        onCancel={closeModal}
-        footer={null}
-        forceRender
-      >
-        <Form form={form} layout="vertical" onFinish={handleSubmit}>
-          {module?.fields.map((field) => (
-            <Form.Item
-              key={field.name}
-              label={field.displayName}
-              name={field.name}
-              rules={[
-                { required: field.required, message: `${field.displayName} is required` },
-              ]}
-            >
-              {field.type === 'number' ? (
-                <Input type="number" />
-              ) : field.type === 'boolean' ? (
-                <Select options={[
-                  { value: true, label: 'Yes' },
-                  { value: false, label: 'No' },
-                ]} />
-              ) : (
-                <Input />
-              )}
-            </Form.Item>
-          ))}
-          <Form.Item>
-            <Space>
-              <Button
-                type="primary"
-                htmlType="submit"
-                loading={createMutation.isPending || updateMutation.isPending}
+      {(canCreateModuleRecords || canEditModuleRecords) && (
+        <Modal
+          title={editingRecord ? 'Edit Record' : 'Add Record'}
+          open={isModalOpen}
+          onCancel={closeModal}
+          footer={null}
+          forceRender
+        >
+          <Form form={form} layout="vertical" onFinish={handleSubmit}>
+            {module?.fields.map((field) => (
+              <Form.Item
+                key={field.name}
+                label={field.displayName}
+                name={field.name}
+                rules={[
+                  { required: field.required, message: `${field.displayName} is required` },
+                ]}
               >
-                {editingRecord ? 'Update' : 'Create'}
-              </Button>
-              <Button onClick={closeModal}>Cancel</Button>
-            </Space>
-          </Form.Item>
-        </Form>
-      </Modal>
+                {field.type === 'number' ? (
+                  <Input type="number" />
+                ) : field.type === 'boolean' ? (
+                  <Select options={[
+                    { value: true, label: 'Yes' },
+                    { value: false, label: 'No' },
+                  ]} />
+                ) : (
+                  <Input />
+                )}
+              </Form.Item>
+            ))}
+            <Form.Item>
+              <Space>
+                <Button
+                  type="primary"
+                  htmlType="submit"
+                  loading={createMutation.isPending || updateMutation.isPending}
+                >
+                  {editingRecord ? 'Update' : 'Create'}
+                </Button>
+                <Button onClick={closeModal}>Cancel</Button>
+              </Space>
+            </Form.Item>
+          </Form>
+        </Modal>
+      )}
     </div>
   );
 }

@@ -13,15 +13,18 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentTenant } from '../../common/decorators/current-tenant.decorator';
 import { BiReportingService } from './bi-reporting.service';
-import type {
+import { RequireFeature } from '../subscriptions/decorators/require-feature.decorator';
+import { RequireFeatureGuard } from '../subscriptions/guards/require-feature.guard';
+import { PlanFeature } from '../subscriptions/subscription.constants';
+import {
   CreateDashboardDto,
   UpdateDashboardDto,
 } from './dto/create-dashboard.dto';
-import type {
+import {
   CreateWidgetDto,
   UpdateWidgetDto,
 } from './dto/create-widget.dto';
-import type {
+import {
   CreateReportTemplateDto,
   UpdateReportTemplateDto,
   GenerateReportDto,
@@ -29,7 +32,8 @@ import type {
 } from './dto/create-report.dto';
 
 @Controller('bi-reporting')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RequireFeatureGuard)
+@RequireFeature(PlanFeature.REPORTS)
 export class BiReportingController {
   constructor(private readonly biReportingService: BiReportingService) {}
 

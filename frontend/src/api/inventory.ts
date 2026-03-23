@@ -12,7 +12,10 @@ export interface Inventory {
   unit_cost: number;
   unit_price: number;
   reorder_level: number;
+  reorder_quantity?: number;
   max_stock_level: number;
+  supplier_id?: string;
+  supplier_name?: string;
   location?: string;
   warehouse?: string;
   created_at: string;
