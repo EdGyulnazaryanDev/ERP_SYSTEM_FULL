@@ -394,36 +394,48 @@ export class SubscriptionsService implements OnModuleInit {
 
   private async seedDefaultPlans() {
     for (const definition of DEFAULT_PLAN_DEFINITIONS) {
-      const exists = await this.planRepository.existsBy({
-        code: definition.code,
+      let plan = await this.planRepository.findOne({
+        where: { code: definition.code },
       });
 
-      if (exists) continue; // skip — never overwrite admin-managed plans
+      if (!plan) {
+        plan = this.planRepository.create({
+          code: definition.code,
+          name: definition.name,
+          description: definition.description,
+          monthlyPrice: definition.monthlyPrice.toFixed(2),
+          yearlyPrice: definition.yearlyPrice.toFixed(2),
+          isActive: true,
+        });
+        plan = await this.planRepository.save(plan);
+      } else {
+        // Always sync plan metadata and features/limits from constants
+        plan.name = definition.name;
+        plan.description = definition.description;
+        plan.monthlyPrice = definition.monthlyPrice.toFixed(2);
+        plan.yearlyPrice = definition.yearlyPrice.toFixed(2);
+        plan = await this.planRepository.save(plan);
+      }
 
-      const plan = this.planRepository.create({
-        code: definition.code,
-        name: definition.name,
-        description: definition.description,
-        monthlyPrice: definition.monthlyPrice.toFixed(2),
-        yearlyPrice: definition.yearlyPrice.toFixed(2),
-        isActive: true,
-      });
+      // Sync features: delete existing and re-insert from constants
+      await this.featureRepository.delete({ planId: plan.id });
+      if (definition.features.length > 0) {
+        await this.featureRepository.save(
+          definition.features.map((feature) =>
+            this.featureRepository.create({
+              planId: plan.id,
+              key: feature,
+            }),
+          ),
+        );
+      }
 
-      const savedPlan = await this.planRepository.save(plan);
-
-      await this.featureRepository.save(
-        definition.features.map((feature) =>
-          this.featureRepository.create({
-            planId: savedPlan.id,
-            key: feature,
-          }),
-        ),
-      );
-
+      // Sync limits: delete existing and re-insert from constants
+      await this.limitRepository.delete({ planId: plan.id });
       await this.limitRepository.save(
         definition.limits.map((limit) =>
           this.limitRepository.create({
-            planId: savedPlan.id,
+            planId: plan.id,
             key: limit.key,
             value: limit.value,
           }),

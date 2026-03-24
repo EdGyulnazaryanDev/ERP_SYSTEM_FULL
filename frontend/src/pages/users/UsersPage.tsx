@@ -18,6 +18,7 @@ import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { userService, roleService, type PaginatedResponse } from '@/services';
 import { useAccessControl } from '@/hooks/useAccessControl';
+import { usePlanLimits } from '@/hooks/usePlanLimits';
 
 interface User {
   id: string;
@@ -34,6 +35,7 @@ export default function UsersPage() {
   const queryClient = useQueryClient();
   const [filters, setFilters] = useState({ page: 1, pageSize: 10, search: '' });
   const { canPerform } = useAccessControl();
+  const { get: getLimit } = usePlanLimits();
   const canCreate = canPerform('users', 'create');
   const canEdit = canPerform('users', 'edit');
   const canDelete = canPerform('users', 'delete');
@@ -131,6 +133,10 @@ export default function UsersPage() {
     },
   });
 
+  const userLimit = getLimit('users');
+  const currentUserCount = users?.total ?? 0;
+  const atUserLimit = userLimit !== null && currentUserCount >= userLimit;
+
   const openCreate = () => {
     setEditingUser(null);
     setIsModalOpen(true);
@@ -193,7 +199,17 @@ export default function UsersPage() {
             onSearch={(q) => setFilters({ ...filters, search: q as string, page: 1 })}
             style={{ width: 240 }}
           />
-          {canCreate && <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>Create User</Button>}
+          {canCreate && (
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={openCreate}
+              disabled={atUserLimit}
+              title={atUserLimit ? `User limit reached (${userLimit} max on your plan)` : undefined}
+            >
+              Create User {userLimit !== null && `(${currentUserCount}/${userLimit})`}
+            </Button>
+          )}
         </Space>
       </div>
 

@@ -68,7 +68,7 @@ export function useAccessControl() {
 
   const enabledFeatures = subscription?.plan?.features ?? [];
   const isSystemAdmin = user?.isSystemAdmin === true;
-  // System admin, superadmin, and tenant Admin role bypass all restrictions
+  // isPrivilegedUser: bypasses RBAC page-access checks only (not subscription gating)
   const isPrivilegedUser = isSystemAdmin || userRoles.some((role) => {
     const normalizedName = normalizeRoleName(role.name);
     return normalizedName === 'superadmin' || normalizedName === 'admin';
@@ -80,30 +80,28 @@ export function useAccessControl() {
     if (isSystemAdmin) return true;
     // No subscription — only settings is accessible
     if (!subscription) return pageKey === 'settings';
+
+    // If the page isn't in the catalog at all, it's not allowed by the plan
+    if (!pageCatalogMap.has(pageKey)) return false;
+
+    // Subscription feature gate: check requiredFeature against plan features
+    const page = pageCatalogMap.get(pageKey);
+    if (page?.requiredFeature && !enabledFeatures.includes(page.requiredFeature as any)) {
+      return false;
+    }
+
+    // RBAC check — privileged users (admin/superadmin) bypass role-based page restrictions
     if (isPrivilegedUser) return true;
 
-    const page = pageCatalogMap.get(pageKey);
     const access = pageAccessMap.get(pageKey);
-
-    // Feature gate check
-    const featureAllowed = !page?.requiredFeature
-      || enabledFeatures.includes(page.requiredFeature as any);
-
-    // No access row → deny
-    const canView = access?.can_view ?? false;
-
-    return canView && featureAllowed;
+    return access?.can_view ?? false;
   };
 
   const canPerform = (pageKey: string, action: PageAction) => {
-    // system admin can do everything
     if (isSystemAdmin) return true;
-    // superadmin bypasses all restrictions
     if (isPrivilegedUser) return true;
 
     const access = getPageAccess(pageKey);
-
-    // No access row configured → deny by default for non-privileged users
     if (!access) return false;
 
     switch (action) {
@@ -117,9 +115,12 @@ export function useAccessControl() {
   };
 
   const isLockedBySubscription = (pageKey: string): boolean => {
-    // No subscription at all — everything is locked except settings
+    if (isSystemAdmin) return false;
+    // No subscription — everything locked except settings
     if (!subscription) return pageKey !== 'settings';
-    if (isPrivilegedUser) return false;
+    // If page not in catalog, it's locked by plan
+    if (!pageCatalogMap.has(pageKey)) return true;
+    // Subscription gating applies to ALL tenant users
     const page = pageCatalogMap.get(pageKey);
     if (!page?.requiredFeature) return false;
     return !enabledFeatures.includes(page.requiredFeature as any);

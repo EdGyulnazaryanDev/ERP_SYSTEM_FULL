@@ -96,7 +96,10 @@ export default function MainLayout() {
       subscriptionsApi.selectPlan({ planCode, billingCycle: yearly ? 'yearly' : 'monthly', autoRenew: true }),
     onSuccess: () => {
       notification.success({ message: 'Plan selected! Welcome aboard.' });
+      // Invalidate all access-related caches so sidebar reflects the new plan immediately
       queryClient.invalidateQueries({ queryKey: ['current-subscription'] });
+      queryClient.invalidateQueries({ queryKey: ['page-catalog'] });
+      queryClient.invalidateQueries({ queryKey: ['my-page-access'] });
     },
     onError: () => notification.error({ message: 'Failed to select plan' }),
   });
@@ -287,9 +290,7 @@ export default function MainLayout() {
   const visibleMenuItems = menuItems
     .filter((item) => {
       if (!item.pageKey) return true;
-      // superadmin sees everything
-      if (isPrivilegedUser) return true;
-      // others: only show pages allowed by RBAC AND included in subscription plan
+      // Subscription gating applies to everyone — only system admin bypasses
       return canAccessPage(item.pageKey) && !isLockedBySubscription(item.pageKey);
     })
     .map(({ pageKey: _pageKey, ...item }) => item);
