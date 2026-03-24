@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
-import { Layout, Menu, Avatar, Dropdown, Spin, Drawer, Grid, theme } from 'antd';
+import { Layout, Menu, Avatar, Dropdown, Spin, Drawer, Grid, theme, Button, Row, Col, Tag, Switch, Modal, notification, Divider, Typography } from 'antd';
 import {
   DashboardOutlined,
   UserOutlined,
@@ -27,23 +27,85 @@ import {
   CreditCardOutlined,
   BarChartOutlined,
   DownOutlined,
+  CrownOutlined,
+  StopOutlined,
+  CheckCircleFilled,
 } from '@ant-design/icons';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/authStore';
 import { useAccessControl } from '@/hooks/useAccessControl';
+import { subscriptionsApi, type SubscriptionPlan } from '@/api/subscriptions';
 
 const { Header, Sider, Content } = Layout;
+const { Text } = Typography;
+
+const PLAN_COLORS = ['#52c41a', '#1677ff', '#722ed1', '#fa8c16'];
+const FEATURE_LABELS: Record<string, string> = {
+  warehouse: 'Warehouse', accounting: 'Accounting', reports: 'BI & Reports',
+};
+const LIMIT_LABELS: Record<string, string> = {
+  users: 'Users', products: 'Products', categories: 'Categories',
+  transactions_per_month: 'Transactions/mo', storage_gb: 'Storage (GB)',
+};
 
 export default function MainLayout() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [isSuspended, setIsSuspended] = useState(
+    () => sessionStorage.getItem('tenant_suspended') === '1',
+  );
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
-  const { canAccessPage, isLockedBySubscription, isPrivilegedUser, isLoading, userRoles } = useAccessControl();
+  const { canAccessPage, isLockedBySubscription, isPrivilegedUser, isLoading, userRoles, subscription } = useAccessControl();
   const screens = Grid.useBreakpoint();
   const isMobile = !screens.lg;
   const {
     token: { borderRadiusLG },
   } = theme.useToken();
+
+  // Plan selection hooks - MUST be declared before any conditional returns
+  const queryClient = useQueryClient();
+  const [yearly, setYearly] = useState(false);
+
+  // Force plan selection when tenant has no active subscription (only after loading completes)
+  // ALL tenant users (including Admin role) must select a plan — only system admins bypass this
+  const needsPlanSelection =
+    !isLoading &&
+    !user?.isSystemAdmin &&
+    (subscription === null || subscription === undefined);
+
+  console.log('🔍 Plan Selection Debug:', {
+    isLoading,
+    isSystemAdmin: user?.isSystemAdmin,
+    subscription,
+    subscriptionIsNull: subscription === null,
+    subscriptionIsUndefined: subscription === undefined,
+    subscriptionType: typeof subscription,
+    needsPlanSelection,
+    userEmail: user?.email,
+  });
+
+  const { data: plans = [], isLoading: plansLoading } = useQuery({
+    queryKey: ['available-plans'],
+    queryFn: async () => (await subscriptionsApi.getPlans()).data,
+    enabled: needsPlanSelection,
+  });
+
+  const selectMutation = useMutation({
+    mutationFn: (planCode: string) =>
+      subscriptionsApi.selectPlan({ planCode, billingCycle: yearly ? 'yearly' : 'monthly', autoRenew: true }),
+    onSuccess: () => {
+      notification.success({ message: 'Plan selected! Welcome aboard.' });
+      queryClient.invalidateQueries({ queryKey: ['current-subscription'] });
+    },
+    onError: () => notification.error({ message: 'Failed to select plan' }),
+  });
+
+  useEffect(() => {
+    const handler = () => setIsSuspended(true);
+    window.addEventListener('tenant-suspended', handler);
+    return () => window.removeEventListener('tenant-suspended', handler);
+  }, []);
 
   const menuItems = [
     {
@@ -239,6 +301,227 @@ export default function MainLayout() {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Spin size="large" />
+      </div>
+    );
+  }
+
+  // Tenant account suspended by platform admin
+  if (isSuspended) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 32,
+          background: 'radial-gradient(ellipse at 30% 40%, rgba(239,68,68,0.07) 0%, transparent 60%), radial-gradient(ellipse at 70% 60%, rgba(14,165,233,0.05) 0%, transparent 55%)',
+        }}
+      >
+        <div
+          style={{
+            maxWidth: 480,
+            width: '100%',
+            textAlign: 'center',
+            padding: '48px 40px',
+            borderRadius: 24,
+            background: 'rgba(8, 25, 40, 0.82)',
+            border: '1px solid rgba(239, 68, 68, 0.25)',
+            boxShadow: '0 40px 80px rgba(2, 10, 19, 0.4)',
+            backdropFilter: 'blur(20px)',
+          }}
+        >
+          <div
+            style={{
+              width: 72,
+              height: 72,
+              borderRadius: '50%',
+              background: 'rgba(239, 68, 68, 0.12)',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              display: 'grid',
+              placeItems: 'center',
+              margin: '0 auto 24px',
+            }}
+          >
+            <StopOutlined style={{ fontSize: 32, color: '#ef4444' }} />
+          </div>
+          <div style={{ color: '#f0f6ff', fontSize: 22, fontWeight: 700, marginBottom: 12 }}>
+            Account Suspended
+          </div>
+          <div style={{ color: '#8a9bb0', fontSize: 14, lineHeight: 1.7, marginBottom: 32 }}>
+            Your organization's access has been suspended by the platform administrator.
+            All data is preserved. Please contact support to restore access.
+          </div>
+          <div
+            style={{
+              padding: '12px 20px',
+              borderRadius: 12,
+              background: 'rgba(239, 68, 68, 0.08)',
+              border: '1px solid rgba(239, 68, 68, 0.15)',
+              color: '#fca5a5',
+              fontSize: 13,
+              marginBottom: 32,
+              textAlign: 'left',
+            }}
+          >
+            <span style={{ fontWeight: 600 }}>Account:</span> {user?.email ?? '—'}
+          </div>
+          <Button
+            size="large"
+            onClick={() => {
+              sessionStorage.removeItem('tenant_suspended');
+              logout();
+              navigate('/auth/login');
+            }}
+            style={{
+              width: '100%',
+              height: 46,
+              borderRadius: 12,
+              background: 'rgba(255,255,255,0.06)',
+              border: '1px solid rgba(255,255,255,0.12)',
+              color: '#e2e8f0',
+              fontWeight: 600,
+            }}
+          >
+            Sign out
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (needsPlanSelection) {
+    const popularIdx = plans.length >= 3 ? Math.floor(plans.length / 2) : 0;
+    return (
+      <div style={{ minHeight: '100vh', overflowY: 'auto', background: 'linear-gradient(135deg, #020c16 0%, #041525 40%, #061d30 100%)', position: 'relative' }}>
+        {/* Ambient blobs */}
+        <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0 }}>
+          <div style={{ position: 'absolute', top: '-10%', left: '-5%', width: 600, height: 600, borderRadius: '50%', background: 'radial-gradient(circle, rgba(14,165,233,0.08) 0%, transparent 70%)' }} />
+          <div style={{ position: 'absolute', bottom: '-10%', right: '-5%', width: 700, height: 700, borderRadius: '50%', background: 'radial-gradient(circle, rgba(20,184,166,0.06) 0%, transparent 70%)' }} />
+        </div>
+        <div style={{ position: 'relative', zIndex: 1, padding: '52px 20px 60px' }}>
+          {/* Header */}
+          <div style={{ textAlign: 'center', marginBottom: 48 }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 18px', borderRadius: 999, background: 'rgba(250,173,20,0.1)', border: '1px solid rgba(250,173,20,0.25)', marginBottom: 20 }}>
+              <CrownOutlined style={{ color: '#faad14', fontSize: 14 }} />
+              <Text style={{ color: '#faad14', fontSize: 12, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const }}>Subscription Required</Text>
+            </div>
+            <div style={{ fontSize: 'clamp(28px, 5vw, 44px)', fontWeight: 800, background: 'linear-gradient(135deg, #f0f6ff 0%, #7dd3fc 50%, #5eead4 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', lineHeight: 1.15, marginBottom: 14 }}>
+              Choose Your Plan
+            </div>
+            <Text style={{ color: '#8a9bb0', fontSize: 15, display: 'block', marginBottom: 28 }}>
+              Select a plan to unlock the platform and start using your ERP.
+            </Text>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 12, padding: '8px 20px', borderRadius: 999, background: 'rgba(8,25,40,0.6)', border: '1px solid rgba(134,166,197,0.12)' }}>
+              <Text style={{ color: yearly ? '#3a5060' : '#f0f6ff', fontSize: 14, fontWeight: 500 }}>Monthly</Text>
+              <Switch checked={yearly} onChange={setYearly} style={{ background: yearly ? '#0ea5e9' : undefined }} />
+              <Text style={{ color: yearly ? '#f0f6ff' : '#3a5060', fontSize: 14, fontWeight: 500 }}>Yearly</Text>
+              <Tag style={{ background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.3)', color: '#34d399', borderRadius: 999, fontSize: 11, fontWeight: 700, padding: '1px 10px', margin: 0 }}>Save 17%</Tag>
+            </div>
+          </div>
+
+          {plansLoading ? (
+            <div style={{ display: 'flex', justifyContent: 'center', padding: 80 }}><Spin size="large" /></div>
+          ) : (
+            <div style={{ maxWidth: 1280, margin: '0 auto' }}>
+              <Row gutter={[16, 24]} justify="center" align="stretch">
+                {plans.map((plan: SubscriptionPlan, idx: number) => {
+                  const price = yearly ? plan.pricing.yearly : plan.pricing.monthly;
+                  const accentColor = PLAN_COLORS[idx % PLAN_COLORS.length];
+                  const isPopular = idx === popularIdx;
+                  const isLast = idx === plans.length - 1 && plans.length > 2;
+                  const colProps = isLast
+                    ? { xs: 24, sm: 24, md: 24, lg: 8, xl: 7 }
+                    : isPopular
+                    ? { xs: 24, sm: 24, md: 12, lg: 7, xl: 6 }
+                    : { xs: 24, sm: 12, md: 12, lg: 5, xl: 5 };
+                  return (
+                    <Col key={plan.id} {...colProps}>
+                      <div style={{
+                        height: '100%', position: 'relative',
+                        borderRadius: isPopular ? 24 : 18,
+                        padding: isPopular ? '2px' : '1px',
+                        background: isPopular ? `linear-gradient(135deg, ${accentColor}80, ${accentColor}30, transparent)` : 'rgba(134,166,197,0.1)',
+                        transform: isPopular ? 'scale(1.03)' : 'scale(1)',
+                        boxShadow: isPopular ? `0 0 60px ${accentColor}20, 0 30px 60px rgba(2,10,19,0.4)` : '0 20px 40px rgba(2,10,19,0.3)',
+                      }}>
+                        {isPopular && (
+                          <div style={{ position: 'absolute', top: -14, left: '50%', transform: 'translateX(-50%)', padding: '4px 20px', borderRadius: 999, zIndex: 2, background: `linear-gradient(135deg, ${accentColor}, ${accentColor}cc)`, fontSize: 11, fontWeight: 800, color: '#fff', letterSpacing: '0.1em', textTransform: 'uppercase' as const, boxShadow: `0 4px 20px ${accentColor}50`, whiteSpace: 'nowrap' as const }}>
+                            Most Popular
+                          </div>
+                        )}
+                        <div style={{ height: '100%', borderRadius: isPopular ? 22 : 17, background: isPopular ? 'linear-gradient(160deg, rgba(12,32,52,0.95) 0%, rgba(8,22,38,0.98) 100%)' : 'rgba(8,22,38,0.85)', padding: isLast ? '32px 28px' : isPopular ? '36px 28px' : '28px 22px', display: 'flex', flexDirection: 'column' as const, backdropFilter: 'blur(20px)' }}>
+                          {/* Icon + name */}
+                          <div style={{ marginBottom: isPopular ? 20 : 16 }}>
+                            <div style={{ width: isPopular ? 48 : 40, height: isPopular ? 48 : 40, borderRadius: isPopular ? 16 : 12, background: `linear-gradient(135deg, ${accentColor}25, ${accentColor}10)`, border: `1px solid ${accentColor}30`, display: 'grid', placeItems: 'center', marginBottom: 14 }}>
+                              <CrownOutlined style={{ color: accentColor, fontSize: isPopular ? 22 : 18 }} />
+                            </div>
+                            <div style={{ fontSize: isPopular ? 20 : 17, fontWeight: 700, color: '#f0f6ff', marginBottom: 6 }}>{plan.name}</div>
+                            {plan.description && <Text style={{ color: '#6a8090', fontSize: 13, lineHeight: 1.5 }}>{plan.description}</Text>}
+                          </div>
+                          {/* Price */}
+                          <div style={{ marginBottom: 20 }}>
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                              <span style={{ fontSize: isPopular ? 44 : 36, fontWeight: 800, color: accentColor, lineHeight: 1 }}>${price}</span>
+                              <span style={{ color: '#4a6070', fontSize: 14 }}>/{yearly ? 'yr' : 'mo'}</span>
+                            </div>
+                            {yearly && <Text style={{ color: '#34d399', fontSize: 12, marginTop: 4, display: 'block' }}>~${Math.round(price / 12)}/mo billed annually</Text>}
+                          </div>
+                          <Divider style={{ margin: '0 0 16px', borderColor: 'rgba(134,166,197,0.08)' }} />
+                          {/* Features */}
+                          {plan.features.length > 0 && (
+                            <div style={{ marginBottom: 16, flex: 1 }}>
+                              {plan.features.map((f) => (
+                                <div key={f} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                                  <div style={{ width: 18, height: 18, borderRadius: '50%', flexShrink: 0, background: `${accentColor}18`, display: 'grid', placeItems: 'center' }}>
+                                    <CheckCircleFilled style={{ color: accentColor, fontSize: 11 }} />
+                                  </div>
+                                  <Text style={{ fontSize: 13, color: '#c8dff0' }}>{FEATURE_LABELS[f] ?? f}</Text>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {/* Limits */}
+                          {Object.keys(plan.limits).length > 0 && (
+                            <div style={{ marginBottom: 20, padding: '12px 14px', borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(134,166,197,0.07)' }}>
+                              {Object.entries(plan.limits).map(([key, value]) => (
+                                <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                                  <Text style={{ fontSize: 12, color: '#4a6070' }}>{LIMIT_LABELS[key] ?? key}</Text>
+                                  <Text style={{ fontSize: 12, fontWeight: 600, color: value === null ? '#34d399' : '#c8dff0' }}>{value === null ? '\u221e Unlimited' : (value as number).toLocaleString()}</Text>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {/* CTA */}
+                          <Button
+                            type="primary" block size="large"
+                            loading={selectMutation.isPending}
+                            onClick={() => Modal.confirm({
+                              title: `Confirm ${plan.name} Plan`,
+                              content: `You'll be on the ${plan.name} plan at $${price}/${yearly ? 'yr' : 'mo'}.`,
+                              okText: 'Confirm & Continue',
+                              onOk: () => selectMutation.mutate(plan.code),
+                            })}
+                            style={{ height: 46, borderRadius: 12, fontWeight: 700, fontSize: 14, border: 'none', background: isPopular ? `linear-gradient(135deg, ${accentColor}, ${accentColor}cc)` : `${accentColor}20`, color: isPopular ? '#fff' : accentColor, boxShadow: isPopular ? `0 8px 24px ${accentColor}40` : 'none' }}
+                          >
+                            {isPopular ? `Get ${plan.name}` : `Select ${plan.name}`}
+                          </Button>
+                        </div>
+                      </div>
+                    </Col>
+                  );
+                })}
+              </Row>
+            </div>
+          )}
+
+          <div style={{ textAlign: 'center', marginTop: 48 }}>
+            <Button type="text" onClick={() => { logout(); navigate('/auth/login'); }} style={{ color: '#3a5060', fontSize: 13 }}>
+              Sign out of {user?.email}
+            </Button>
+          </div>
+        </div>
       </div>
     );
   }

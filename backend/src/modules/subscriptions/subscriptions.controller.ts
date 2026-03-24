@@ -27,7 +27,7 @@ export class SubscriptionsController {
     @CurrentUser() user: JwtUser,
     @Body() dto: SelectPlanDto,
   ) {
-    await this.subscriptionsService.assertSuperAdmin(user.sub, tenantId);
+    await this.subscriptionsService.assertAdminOrSuperAdmin(user.sub, tenantId, user.role);
     return this.subscriptionsService.selectPlan(tenantId, dto);
   }
 }

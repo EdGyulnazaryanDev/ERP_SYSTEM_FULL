@@ -198,7 +198,7 @@ export default function AccessGovernanceTab() {
   const canManagePlan = user?.isSystemAdmin || currentUserRoles.some((role) => isSuperAdminRoleName(role.name));
   const canManageAccess = user?.isSystemAdmin || currentUserRoles.some((role) => isSuperAdminRoleName(role.name));
 
-  const currentFeatures = currentSubscription?.plan.features ?? [];
+  const currentFeatures = currentSubscription?.plan?.features ?? [];
 
   const planCards = useMemo(
     () =>

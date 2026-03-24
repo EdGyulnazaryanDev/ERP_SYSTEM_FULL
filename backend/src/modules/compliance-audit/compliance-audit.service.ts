@@ -61,7 +61,7 @@ export class ComplianceAuditService {
   ): Promise<AuditLogEntity> {
     const auditLog = this.auditLogRepo.create({
       ...data,
-      user_id: userId ?? undefined,
+      user_id: userId ?? null,
       tenant_id: tenantId,
       severity: data.severity || AuditSeverity.LOW,
     });

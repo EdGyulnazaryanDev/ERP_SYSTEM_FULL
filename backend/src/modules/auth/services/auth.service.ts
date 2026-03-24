@@ -115,7 +115,7 @@ export class AuthService {
           description: 'Platform Super Admin login',
           severity: AuditSeverity.LOW,
         },
-        systemAdmin.id,
+        null,
         'system',
       );
 
@@ -174,7 +174,7 @@ export class AuthService {
       user.email,
       'staff',
       user.id,
-      'user',
+      await this.getPrimaryRoleName(user.id, user.tenantId),
       [user.first_name, user.last_name].filter(Boolean).join(' ').trim() || user.email,
       user.isSystemAdmin,
     );
@@ -295,8 +295,6 @@ export class AuthService {
       name: dto.companyName,
     });
 
-    await this.subscriptionsService.createDefaultSubscriptionForTenant(tenant.id);
-
     // Seed default RBAC for new tenant
     await this.rbacSeeder.seed(tenant.id);
 
@@ -409,7 +407,7 @@ export class AuthService {
           user.email,
           'staff',
           user.id,
-          payload.role ?? 'user',
+          await this.getPrimaryRoleName(user.id, user.tenantId),
           payload.name,
         );
 
@@ -457,6 +455,21 @@ export class AuthService {
     }
 
     return this.getSupplierPortalSummary(user);
+  }
+
+  private async getPrimaryRoleName(userId: string, tenantId: string): Promise<string> {
+    const userRoles = await this.userRoleRepo.find({ where: { user_id: userId } });
+    if (userRoles.length === 0) return 'user';
+    const roleIds = userRoles.map((ur) => ur.role_id);
+    const roles = await this.roleRepo.find({
+      where: roleIds.map((id) => ({ id, tenant_id: tenantId })),
+    });
+    if (roles.length === 0) return 'user';
+    // Prefer superadmin > admin > first role
+    const normalized = roles.map((r) => r.name.trim().toLowerCase().replace(/[\s_-]+/g, ''));
+    if (normalized.includes('superadmin')) return 'superadmin';
+    if (normalized.includes('admin')) return 'admin';
+    return roles[0].name;
   }
 
   private async generateTokens(

@@ -36,7 +36,7 @@ export class AdminSubscriptionsController {
         description: `Assigned plan "${body.planCode}" to tenant ${tenantId}`,
         severity: AuditSeverity.LOW,
       },
-      user.sub,
+      null,
       'system',
     );
 

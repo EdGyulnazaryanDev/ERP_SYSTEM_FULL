@@ -2,6 +2,7 @@ import {
   Body,
   ConflictException,
   Controller,
+  Delete,
   Get,
   NotFoundException,
   Param,
@@ -54,7 +55,7 @@ export class AdminTenantsController {
         let planName: string | null = null;
         try {
           const sub = await this.subscriptionsService.getCurrentSubscriptionForTenant(t.id);
-          planName = sub.plan.name;
+          planName = sub?.plan?.name ?? null;
         } catch {
           planName = null;
         }
@@ -80,14 +81,64 @@ export class AdminTenantsController {
     const tenant = await this.tenantRepo.save(
       this.tenantRepo.create({ name: body.name, domain: body.domain }),
     );
-    await this.subscriptionsService.createDefaultSubscriptionForTenant(tenant.id);
 
     await this.complianceAuditService.createAuditLog(
       { action: AuditAction.CREATE, entity_type: 'tenant', entity_id: tenant.id, description: `Created tenant "${tenant.name}"`, severity: AuditSeverity.LOW },
-      user.sub, 'system',
+      null, 'system',
     );
 
     return tenant;
+  }
+
+  // Specific sub-routes MUST come before the generic :id route to avoid route shadowing
+  @Patch(':id/deactivate')
+  async deactivate(@Param('id') id: string, @CurrentUser() user: JwtUser) {
+    const tenant = await this.tenantRepo.findOne({ where: { id } });
+    if (!tenant) throw new NotFoundException('Tenant not found');
+    if (!tenant.isActive) throw new ConflictException('Tenant is already inactive');
+
+    tenant.isActive = false;
+    await this.tenantRepo.save(tenant);
+
+    await this.complianceAuditService.createAuditLog(
+      { action: AuditAction.UPDATE, entity_type: 'tenant', entity_id: id, description: `Deactivated tenant "${tenant.name}"`, severity: AuditSeverity.MEDIUM },
+      null, 'system',
+    );
+
+    return { message: 'Tenant deactivated', id };
+  }
+
+  @Patch(':id/activate')
+  async activate(@Param('id') id: string, @CurrentUser() user: JwtUser) {
+    const tenant = await this.tenantRepo.findOne({ where: { id } });
+    if (!tenant) throw new NotFoundException('Tenant not found');
+    if (tenant.isActive) throw new ConflictException('Tenant is already active');
+
+    tenant.isActive = true;
+    await this.tenantRepo.save(tenant);
+
+    await this.complianceAuditService.createAuditLog(
+      { action: AuditAction.UPDATE, entity_type: 'tenant', entity_id: id, description: `Activated tenant "${tenant.name}"`, severity: AuditSeverity.LOW },
+      null, 'system',
+    );
+
+    return { message: 'Tenant activated', id };
+  }
+
+  @Delete(':id')
+  async deleteTenant(@Param('id') id: string, @CurrentUser() user: JwtUser) {
+    const tenant = await this.tenantRepo.findOne({ where: { id } });
+    if (!tenant) throw new NotFoundException('Tenant not found');
+
+    await this.complianceAuditService.createAuditLog(
+      { action: AuditAction.DELETE, entity_type: 'tenant', entity_id: id, description: `Deleted tenant "${tenant.name}" and all related data`, severity: AuditSeverity.HIGH },
+      null, 'system',
+    );
+
+    // Delete the tenant - cascade deletes will handle related data
+    await this.tenantRepo.remove(tenant);
+
+    return { message: 'Tenant and all related data deleted', id };
   }
 
   @Patch(':id')
@@ -105,26 +156,9 @@ export class AdminTenantsController {
 
     await this.complianceAuditService.createAuditLog(
       { action: AuditAction.UPDATE, entity_type: 'tenant', entity_id: id, description: `Updated tenant "${tenant.name}"`, severity: AuditSeverity.LOW },
-      user.sub, 'system',
+      null, 'system',
     );
 
     return tenant;
-  }
-
-  @Patch(':id/deactivate')
-  async deactivate(@Param('id') id: string, @CurrentUser() user: JwtUser) {
-    const tenant = await this.tenantRepo.findOne({ where: { id } });
-    if (!tenant) throw new NotFoundException('Tenant not found');
-    if (!tenant.isActive) throw new ConflictException('Tenant is already inactive');
-
-    tenant.isActive = false;
-    await this.tenantRepo.save(tenant);
-
-    await this.complianceAuditService.createAuditLog(
-      { action: AuditAction.UPDATE, entity_type: 'tenant', entity_id: id, description: `Deactivated tenant "${tenant.name}"`, severity: AuditSeverity.MEDIUM },
-      user.sub, 'system',
-    );
-
-    return { message: 'Tenant deactivated', id };
   }
 }

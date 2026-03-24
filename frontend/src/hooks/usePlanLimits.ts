@@ -7,7 +7,7 @@ export type PlanLimitKey = 'users' | 'products' | 'categories' | 'transactions_p
  */
 export function usePlanLimits() {
   const { subscription } = useAccessControl();
-  const limits: Record<string, number | null> = subscription?.plan.limits ?? {};
+  const limits: Record<string, number | null> = subscription?.plan?.limits ?? {};
 
   const get = (key: PlanLimitKey): number | null => {
     const value = limits[key];

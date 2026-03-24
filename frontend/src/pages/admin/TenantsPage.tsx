@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Table, Button, Tag, Space, Modal, Form, Input, Typography, notification, Tooltip } from 'antd';
-import { PlusOutlined, EditOutlined, StopOutlined } from '@ant-design/icons';
+import { Table, Button, Tag, Space, Modal, Form, Input, Typography, notification, Tooltip, Popconfirm } from 'antd';
+import { PlusOutlined, EditOutlined, StopOutlined, CheckCircleOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminTenantsApi, type TenantRecord } from '@/api/admin';
 
@@ -38,7 +38,19 @@ export default function TenantsPage() {
   const deactivateMutation = useMutation({
     mutationFn: (id: string) => adminTenantsApi.deactivate(id),
     onSuccess: () => { notification.success({ message: 'Tenant deactivated' }); invalidate(); },
-    onError: () => notification.error({ message: 'Tenant is already inactive or not found' }),
+    onError: () => notification.error({ message: 'Failed to deactivate tenant' }),
+  });
+
+  const activateMutation = useMutation({
+    mutationFn: (id: string) => adminTenantsApi.activate(id),
+    onSuccess: () => { notification.success({ message: 'Tenant activated' }); invalidate(); },
+    onError: () => notification.error({ message: 'Failed to activate tenant' }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => adminTenantsApi.delete(id),
+    onSuccess: () => { notification.success({ message: 'Tenant and all data deleted' }); invalidate(); },
+    onError: () => notification.error({ message: 'Failed to delete tenant' }),
   });
 
   const handleSubmit = (values: { name: string; domain?: string }) => {
@@ -93,7 +105,7 @@ export default function TenantsPage() {
           <Tooltip title="Edit">
             <Button type="text" icon={<EditOutlined />} onClick={() => openEdit(record)} style={{ color: '#1677ff' }} />
           </Tooltip>
-          {record.isActive && (
+          {record.isActive ? (
             <Tooltip title="Deactivate">
               <Button type="text" icon={<StopOutlined />} danger
                 onClick={() => Modal.confirm({
@@ -104,7 +116,30 @@ export default function TenantsPage() {
                 })}
               />
             </Tooltip>
+          ) : (
+            <Tooltip title="Activate">
+              <Button type="text" icon={<CheckCircleOutlined />} style={{ color: '#52c41a' }}
+                onClick={() => Modal.confirm({
+                  title: `Activate "${record.name}"?`,
+                  content: 'Tenant users will regain access.',
+                  okText: 'Activate',
+                  onOk: () => activateMutation.mutate(record.id),
+                })}
+              />
+            </Tooltip>
           )}
+          <Tooltip title="Delete All Data">
+            <Popconfirm
+              title={`Delete "${record.name}" and ALL data?`}
+              description="This will permanently delete the tenant and all related data (users, transactions, products, etc.). This action cannot be undone!"
+              onConfirm={() => deleteMutation.mutate(record.id)}
+              okText="Yes, Delete Everything"
+              cancelText="Cancel"
+              okButtonProps={{ danger: true }}
+            >
+              <Button type="text" icon={<DeleteOutlined />} danger loading={deleteMutation.isPending} />
+            </Popconfirm>
+          </Tooltip>
         </Space>
       ),
     },

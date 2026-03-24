@@ -38,8 +38,8 @@ export class AuditLogEntity {
   @Column()
   tenant_id: string;
 
-  @Column({ nullable: true })
-  user_id: string;
+  @Column({ nullable: true, type: 'uuid' })
+  user_id: string | null;
 
   @ManyToOne(() => User, { nullable: true })
   @JoinColumn({ name: 'user_id' })

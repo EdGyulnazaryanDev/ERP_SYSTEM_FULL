@@ -35,8 +35,15 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      useAuthStore.getState().logout();
-      window.location.href = '/auth/login';
+      const message = error.response?.data?.message ?? '';
+      if (message === 'TENANT_DEACTIVATED') {
+        // Don't log out — just flag the session as suspended so UI can show the screen
+        sessionStorage.setItem('tenant_suspended', '1');
+        window.dispatchEvent(new Event('tenant-suspended'));
+      } else {
+        useAuthStore.getState().logout();
+        window.location.href = '/auth/login';
+      }
     }
 
     // Handle network errors

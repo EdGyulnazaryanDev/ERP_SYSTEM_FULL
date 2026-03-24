@@ -22,6 +22,12 @@ export const adminTenantsApi = {
 
   deactivate: (id: string) =>
     apiClient.patch<{ message: string; id: string }>(`/admin/tenants/${id}/deactivate`),
+
+  activate: (id: string) =>
+    apiClient.patch<{ message: string; id: string }>(`/admin/tenants/${id}/activate`),
+
+  delete: (id: string) =>
+    apiClient.delete<{ message: string; id: string }>(`/admin/tenants/${id}`),
 };
 
 export const adminSubscriptionsApi = {

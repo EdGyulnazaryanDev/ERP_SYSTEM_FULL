@@ -58,7 +58,7 @@ export const subscriptionsApi = {
   getPlans: () => apiClient.get<SubscriptionPlan[]>('/subscriptions/plans'),
 
   getCurrentSubscription: () =>
-    apiClient.get<CurrentSubscription>('/subscriptions/current'),
+    apiClient.get<CurrentSubscription | null>('/subscriptions/current'),
 
   selectPlan: (data: {
     planCode: string;

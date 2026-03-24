@@ -36,7 +36,13 @@ export function useAccessControl() {
     queryKey: ['current-subscription'],
     queryFn: async () => {
       const response = await subscriptionsApi.getCurrentSubscription();
-      return response.data;
+      console.log('📦 Subscription API Response:', response.data);
+      // Handle null, undefined, empty string, or empty object
+      const data = response.data;
+      if (!data || data === '' || (typeof data === 'object' && Object.keys(data).length === 0)) {
+        return null;
+      }
+      return data;
     },
     enabled: isAuthenticated,
   });
@@ -60,18 +66,20 @@ export function useAccessControl() {
     [pageCatalog],
   );
 
-  const enabledFeatures = subscription?.plan.features ?? [];
+  const enabledFeatures = subscription?.plan?.features ?? [];
   const isSystemAdmin = user?.isSystemAdmin === true;
-  // Only superadmin (and system admin) bypass all restrictions
+  // System admin, superadmin, and tenant Admin role bypass all restrictions
   const isPrivilegedUser = isSystemAdmin || userRoles.some((role) => {
     const normalizedName = normalizeRoleName(role.name);
-    return normalizedName === 'superadmin';
+    return normalizedName === 'superadmin' || normalizedName === 'admin';
   });
 
   const getPageAccess = (pageKey: string) => pageAccessMap.get(pageKey);
 
   const canAccessPage = (pageKey: string) => {
     if (isSystemAdmin) return true;
+    // No subscription — only settings is accessible
+    if (!subscription) return pageKey === 'settings';
     if (isPrivilegedUser) return true;
 
     const page = pageCatalogMap.get(pageKey);
@@ -109,6 +117,8 @@ export function useAccessControl() {
   };
 
   const isLockedBySubscription = (pageKey: string): boolean => {
+    // No subscription at all — everything is locked except settings
+    if (!subscription) return pageKey !== 'settings';
     if (isPrivilegedUser) return false;
     const page = pageCatalogMap.get(pageKey);
     if (!page?.requiredFeature) return false;

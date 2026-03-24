@@ -319,6 +319,9 @@ export class SettingsService {
   private async getPlanAllowedPageKeys(tenantId: string) {
     const subscription =
       await this.subscriptionsService.getCurrentSubscriptionForTenant(tenantId);
+    if (!subscription) {
+      return new Set<string>();
+    }
     const enabledFeatures = new Set(subscription.plan.features);
 
     return new Set(

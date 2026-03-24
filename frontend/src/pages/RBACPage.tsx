@@ -11,37 +11,196 @@ import {
   Space,
   Tag,
   Transfer,
+  Select,
+  Checkbox,
+  Spin,
+  Typography,
 } from 'antd';
 import {
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
   SafetyOutlined,
+  SaveOutlined,
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { rbacApi, type Role, type Permission } from '@/api/rbac';
+import { settingsApi, type PageAccessMatrixRow } from '@/api/settings';
 import { useAccessControl } from '@/hooks/useAccessControl';
+
+const { Text } = Typography;
+
+// ─── Page Access Tab ────────────────────────────────────────────────────────
+
+function PageAccessTab({ roles }: { roles: Role[] }) {
+  const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
+  const [dirty, setDirty] = useState<Record<string, Partial<PageAccessMatrixRow>>>({});
+
+  // Exclude Admin (tenant admin) and superadmin from the list — they have full access
+  const editableRoles = roles.filter((r) => {
+    const n = r.name.trim().toLowerCase().replace(/[\s_-]+/g, '');
+    return n !== 'admin' && n !== 'superadmin';
+  });
+
+  const { data: matrix = [], isLoading } = useQuery({
+    queryKey: ['role-page-access', selectedRoleId],
+    queryFn: async () => {
+      const res = await settingsApi.getRolePageAccessMatrix(selectedRoleId!);
+      return res.data;
+    },
+    enabled: !!selectedRoleId,
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedRoleId) return;
+      const accessList = Object.entries(dirty).map(([page_key, perms]) => ({
+        page_key,
+        permissions: perms,
+      }));
+      await settingsApi.bulkSetRolePageAccess(selectedRoleId, accessList);
+    },
+    onSuccess: () => {
+      message.success('Page access saved');
+      setDirty({});
+    },
+    onError: () => message.error('Failed to save page access'),
+  });
+
+  const getVal = (row: PageAccessMatrixRow, field: keyof PageAccessMatrixRow) => {
+    const override = dirty[row.page_key];
+    if (override && field in override) return override[field as keyof typeof override];
+    return row[field];
+  };
+
+  const toggle = (pageKey: string, field: string, current: boolean) => {
+    setDirty((prev) => ({
+      ...prev,
+      [pageKey]: { ...prev[pageKey], [field]: !current },
+    }));
+  };
+
+  const columns = [
+    {
+      title: 'Page',
+      dataIndex: 'page_name',
+      key: 'page_name',
+      width: 180,
+      render: (name: string, row: PageAccessMatrixRow) => (
+        <div>
+          <Text strong style={{ fontSize: 13 }}>{name}</Text>
+          {row.required_feature && (
+            <div><Tag color="purple" style={{ fontSize: 10, marginTop: 2 }}>{row.required_feature}</Tag></div>
+          )}
+        </div>
+      ),
+    },
+    {
+      title: 'Category',
+      dataIndex: 'category',
+      key: 'category',
+      width: 120,
+      render: (c: string) => <Tag>{c}</Tag>,
+    },
+    ...(['can_view', 'can_create', 'can_edit', 'can_delete', 'can_export'] as const).map((field) => ({
+      title: field.replace('can_', '').replace(/^\w/, (c) => c.toUpperCase()),
+      key: field,
+      width: 80,
+      align: 'center' as const,
+      render: (_: unknown, row: PageAccessMatrixRow) => {
+        const val = getVal(row, field) as boolean;
+        return (
+          <Checkbox
+            checked={val}
+            onChange={() => toggle(row.page_key, field, val)}
+          />
+        );
+      },
+    })),
+  ];
+
+  // Group by category
+  const grouped = matrix.reduce<Record<string, PageAccessMatrixRow[]>>((acc, row) => {
+    const cat = row.category || 'Other';
+    if (!acc[cat]) acc[cat] = [];
+    acc[cat].push(row);
+    return acc;
+  }, {});
+
+  const tableData = Object.entries(grouped).flatMap(([cat, rows]) => [
+    { page_key: `__header__${cat}`, page_name: cat, _isHeader: true } as any,
+    ...rows,
+  ]);
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 16 }}>
+        <Select
+          placeholder="Select a role to manage page access"
+          style={{ width: 280 }}
+          value={selectedRoleId}
+          onChange={(v) => { setSelectedRoleId(v); setDirty({}); }}
+          options={editableRoles.map((r) => ({ value: r.id, label: r.name }))}
+        />
+        {selectedRoleId && Object.keys(dirty).length > 0 && (
+          <Button
+            type="primary"
+            icon={<SaveOutlined />}
+            loading={saveMutation.isPending}
+            onClick={() => saveMutation.mutate()}
+          >
+            Save Changes
+          </Button>
+        )}
+      </div>
+
+      {!selectedRoleId && (
+        <div style={{ textAlign: 'center', padding: '48px 0', color: '#8a9bb0' }}>
+          Select a role above to manage its page-level permissions
+        </div>
+      )}
+
+      {selectedRoleId && isLoading && (
+        <div style={{ textAlign: 'center', padding: 48 }}><Spin /></div>
+      )}
+
+      {selectedRoleId && !isLoading && (
+        <Table
+          dataSource={tableData}
+          columns={columns}
+          rowKey="page_key"
+          pagination={false}
+          size="small"
+          rowClassName={(row) => row._isHeader ? 'rbac-category-header' : ''}
+          onRow={(row) => ({
+            style: row._isHeader
+              ? { background: 'rgba(22, 119, 255, 0.06)', fontWeight: 700, pointerEvents: 'none' }
+              : {},
+          })}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Main RBAC Page ──────────────────────────────────────────────────────────
 
 export default function RBACPage() {
   const queryClient = useQueryClient();
-  const { canPerform, isPrivilegedUser } = useAccessControl();
-  // Role/permission structural changes are superadmin-only (isPrivilegedUser = superadmin or system admin)
+  const { isPrivilegedUser } = useAccessControl();
   const canManageRoles = isPrivilegedUser;
   const [roleForm] = Form.useForm();
   const [permForm] = Form.useForm();
 
-  // Modals
   const [roleModalOpen, setRoleModalOpen] = useState(false);
   const [permModalOpen, setPermModalOpen] = useState(false);
   const [assignModalOpen, setAssignModalOpen] = useState(false);
 
-  // Edit states
   const [editingRole, setEditingRole] = useState<Role | null>(null);
   const [editingPerm, setEditingPerm] = useState<Permission | null>(null);
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
   const [selectedPermIds, setSelectedPermIds] = useState<string[]>([]);
 
-  // Queries
   const { data: roles = [], isLoading: rolesLoading } = useQuery({
     queryKey: ['rbac-roles'],
     queryFn: async () => {
@@ -58,7 +217,6 @@ export default function RBACPage() {
     },
   });
 
-  // Role mutations
   const createRoleMutation = useMutation({
     mutationFn: rbacApi.createRole,
     onSuccess: () => {
@@ -71,8 +229,7 @@ export default function RBACPage() {
   });
 
   const updateRoleMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) =>
-      rbacApi.updateRole(id, data),
+    mutationFn: ({ id, data }: { id: string; data: any }) => rbacApi.updateRole(id, data),
     onSuccess: () => {
       message.success('Role updated');
       queryClient.invalidateQueries({ queryKey: ['rbac-roles'] });
@@ -92,7 +249,6 @@ export default function RBACPage() {
     onError: () => message.error('Failed to delete role'),
   });
 
-  // Permission mutations
   const createPermMutation = useMutation({
     mutationFn: rbacApi.createPermission,
     onSuccess: () => {
@@ -105,8 +261,7 @@ export default function RBACPage() {
   });
 
   const updatePermMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) =>
-      rbacApi.updatePermission(id, data),
+    mutationFn: ({ id, data }: { id: string; data: any }) => rbacApi.updatePermission(id, data),
     onSuccess: () => {
       message.success('Permission updated');
       queryClient.invalidateQueries({ queryKey: ['rbac-permissions'] });
@@ -136,20 +291,13 @@ export default function RBACPage() {
     onError: () => message.error('Failed to assign permissions'),
   });
 
-  // Handlers
   const openRoleModal = (role?: Role) => {
-    if (role) {
-      setEditingRole(role);
-      roleForm.setFieldsValue(role);
-    }
+    if (role) { setEditingRole(role); roleForm.setFieldsValue(role); }
     setRoleModalOpen(true);
   };
 
   const openPermModal = (perm?: Permission) => {
-    if (perm) {
-      setEditingPerm(perm);
-      permForm.setFieldsValue(perm);
-    }
+    if (perm) { setEditingPerm(perm); permForm.setFieldsValue(perm); }
     setPermModalOpen(true);
   };
 
@@ -161,31 +309,15 @@ export default function RBACPage() {
   };
 
   const handleRoleSubmit = (values: any) => {
-    if (editingRole) {
-      updateRoleMutation.mutate({ id: editingRole.id, data: values });
-    } else {
-      createRoleMutation.mutate(values);
-    }
+    if (editingRole) updateRoleMutation.mutate({ id: editingRole.id, data: values });
+    else createRoleMutation.mutate(values);
   };
 
   const handlePermSubmit = (values: any) => {
-    if (editingPerm) {
-      updatePermMutation.mutate({ id: editingPerm.id, data: values });
-    } else {
-      createPermMutation.mutate(values);
-    }
+    if (editingPerm) updatePermMutation.mutate({ id: editingPerm.id, data: values });
+    else createPermMutation.mutate(values);
   };
 
-  const handleAssignSubmit = () => {
-    if (selectedRole) {
-      assignPermsMutation.mutate({
-        roleId: selectedRole.id,
-        permissionIds: selectedPermIds,
-      });
-    }
-  };
-
-  // Tables
   const roleColumns = [
     {
       title: 'Name',
@@ -198,41 +330,23 @@ export default function RBACPage() {
         </Space>
       ),
     },
-    {
-      title: 'Description',
-      dataIndex: 'description',
-      key: 'description',
-    },
+    { title: 'Description', dataIndex: 'description', key: 'description' },
     {
       title: 'Actions',
       key: 'actions',
       render: (_: any, record: Role) => (
         <Space>
-          <Button
-            size="small"
-            icon={<SafetyOutlined />}
-            onClick={() => openAssignModal(record)}
-          >
+          <Button size="small" icon={<SafetyOutlined />} onClick={() => openAssignModal(record)}>
             Permissions
           </Button>
           {canManageRoles && !record.is_system && (
             <>
-              <Button
-                size="small"
-                icon={<EditOutlined />}
-                onClick={() => openRoleModal(record)}
-              />
-              <Button
-                size="small"
-                danger
-                icon={<DeleteOutlined />}
-                onClick={() => {
-                  Modal.confirm({
-                    title: 'Delete Role',
-                    content: 'Are you sure?',
-                    onOk: () => deleteRoleMutation.mutate(record.id),
-                  });
-                }}
+              <Button size="small" icon={<EditOutlined />} onClick={() => openRoleModal(record)} />
+              <Button size="small" danger icon={<DeleteOutlined />}
+                onClick={() => Modal.confirm({
+                  title: 'Delete Role', content: 'Are you sure?',
+                  onOk: () => deleteRoleMutation.mutate(record.id),
+                })}
               />
             </>
           )}
@@ -242,28 +356,10 @@ export default function RBACPage() {
   ];
 
   const permColumns = [
-    {
-      title: 'Name',
-      dataIndex: 'name',
-      key: 'name',
-    },
-    {
-      title: 'Resource',
-      dataIndex: 'resource',
-      key: 'resource',
-      render: (text: string) => <Tag color="blue">{text}</Tag>,
-    },
-    {
-      title: 'Action',
-      dataIndex: 'action',
-      key: 'action',
-      render: (text: string) => <Tag color="green">{text}</Tag>,
-    },
-    {
-      title: 'Description',
-      dataIndex: 'description',
-      key: 'description',
-    },
+    { title: 'Name', dataIndex: 'name', key: 'name' },
+    { title: 'Resource', dataIndex: 'resource', key: 'resource', render: (t: string) => <Tag color="blue">{t}</Tag> },
+    { title: 'Action', dataIndex: 'action', key: 'action', render: (t: string) => <Tag color="green">{t}</Tag> },
+    { title: 'Description', dataIndex: 'description', key: 'description' },
     {
       title: 'Actions',
       key: 'actions',
@@ -271,22 +367,12 @@ export default function RBACPage() {
         <Space>
           {canManageRoles && (
             <>
-              <Button
-                size="small"
-                icon={<EditOutlined />}
-                onClick={() => openPermModal(record)}
-              />
-              <Button
-                size="small"
-                danger
-                icon={<DeleteOutlined />}
-                onClick={() => {
-                  Modal.confirm({
-                    title: 'Delete Permission',
-                    content: 'Are you sure?',
-                    onOk: () => deletePermMutation.mutate(record.id),
-                  });
-                }}
+              <Button size="small" icon={<EditOutlined />} onClick={() => openPermModal(record)} />
+              <Button size="small" danger icon={<DeleteOutlined />}
+                onClick={() => Modal.confirm({
+                  title: 'Delete Permission', content: 'Are you sure?',
+                  onOk: () => deletePermMutation.mutate(record.id),
+                })}
               />
             </>
           )}
@@ -298,7 +384,6 @@ export default function RBACPage() {
   return (
     <div className="p-6">
       <h1 className="text-2xl font-bold mb-6">Roles & Permissions</h1>
-
       <Card>
         <Tabs
           items={[
@@ -308,21 +393,11 @@ export default function RBACPage() {
               children: (
                 <div>
                   {canManageRoles && (
-                    <Button
-                      type="primary"
-                      icon={<PlusOutlined />}
-                      onClick={() => openRoleModal()}
-                      className="mb-4"
-                    >
+                    <Button type="primary" icon={<PlusOutlined />} onClick={() => openRoleModal()} className="mb-4">
                       Create Role
                     </Button>
                   )}
-                  <Table
-                    columns={roleColumns}
-                    dataSource={roles}
-                    loading={rolesLoading}
-                    rowKey="id"
-                  />
+                  <Table columns={roleColumns} dataSource={roles} loading={rolesLoading} rowKey="id" />
                 </div>
               ),
             },
@@ -332,23 +407,18 @@ export default function RBACPage() {
               children: (
                 <div>
                   {canManageRoles && (
-                    <Button
-                      type="primary"
-                      icon={<PlusOutlined />}
-                      onClick={() => openPermModal()}
-                      className="mb-4"
-                    >
+                    <Button type="primary" icon={<PlusOutlined />} onClick={() => openPermModal()} className="mb-4">
                       Create Permission
                     </Button>
                   )}
-                  <Table
-                    columns={permColumns}
-                    dataSource={permissions}
-                    loading={permsLoading}
-                    rowKey="id"
-                  />
+                  <Table columns={permColumns} dataSource={permissions} loading={permsLoading} rowKey="id" />
                 </div>
               ),
+            },
+            {
+              key: 'page-access',
+              label: 'Page Access',
+              children: <PageAccessTab roles={roles} />,
             },
           ]}
         />
@@ -358,20 +428,12 @@ export default function RBACPage() {
       <Modal
         title={editingRole ? 'Edit Role' : 'Create Role'}
         open={roleModalOpen}
-        onCancel={() => {
-          setRoleModalOpen(false);
-          setEditingRole(null);
-          roleForm.resetFields();
-        }}
+        onCancel={() => { setRoleModalOpen(false); setEditingRole(null); roleForm.resetFields(); }}
         onOk={() => roleForm.submit()}
         confirmLoading={createRoleMutation.isPending || updateRoleMutation.isPending}
       >
         <Form form={roleForm} layout="vertical" onFinish={handleRoleSubmit}>
-          <Form.Item
-            name="name"
-            label="Name"
-            rules={[{ required: true, message: 'Required' }]}
-          >
+          <Form.Item name="name" label="Name" rules={[{ required: true, message: 'Required' }]}>
             <Input />
           </Form.Item>
           <Form.Item name="description" label="Description">
@@ -384,34 +446,18 @@ export default function RBACPage() {
       <Modal
         title={editingPerm ? 'Edit Permission' : 'Create Permission'}
         open={permModalOpen}
-        onCancel={() => {
-          setPermModalOpen(false);
-          setEditingPerm(null);
-          permForm.resetFields();
-        }}
+        onCancel={() => { setPermModalOpen(false); setEditingPerm(null); permForm.resetFields(); }}
         onOk={() => permForm.submit()}
         confirmLoading={createPermMutation.isPending || updatePermMutation.isPending}
       >
         <Form form={permForm} layout="vertical" onFinish={handlePermSubmit}>
-          <Form.Item
-            name="name"
-            label="Name"
-            rules={[{ required: true, message: 'Required' }]}
-          >
+          <Form.Item name="name" label="Name" rules={[{ required: true, message: 'Required' }]}>
             <Input />
           </Form.Item>
-          <Form.Item
-            name="resource"
-            label="Resource"
-            rules={[{ required: true, message: 'Required' }]}
-          >
+          <Form.Item name="resource" label="Resource" rules={[{ required: true, message: 'Required' }]}>
             <Input />
           </Form.Item>
-          <Form.Item
-            name="action"
-            label="Action"
-            rules={[{ required: true, message: 'Required' }]}
-          >
+          <Form.Item name="action" label="Action" rules={[{ required: true, message: 'Required' }]}>
             <Input />
           </Form.Item>
           <Form.Item name="description" label="Description">
@@ -422,24 +468,20 @@ export default function RBACPage() {
 
       {/* Assign Permissions Modal */}
       <Modal
-        title={`Assign Permissions - ${selectedRole?.name}`}
+        title={`Assign Permissions — ${selectedRole?.name}`}
         open={assignModalOpen}
         onCancel={() => setAssignModalOpen(false)}
-        onOk={handleAssignSubmit}
+        onOk={() => {
+          if (selectedRole) assignPermsMutation.mutate({ roleId: selectedRole.id, permissionIds: selectedPermIds });
+        }}
         width={800}
         confirmLoading={assignPermsMutation.isPending}
       >
         <Transfer
-          dataSource={permissions.map((p) => ({
-            key: p.id,
-            title: p.name,
-            description: `${p.resource}:${p.action}`,
-          }))}
+          dataSource={permissions.map((p) => ({ key: p.id, title: p.name, description: `${p.resource}:${p.action}` }))}
           titles={['Available', 'Assigned']}
           targetKeys={selectedPermIds}
-          onChange={(nextTargetKeys) => {
-            setSelectedPermIds(nextTargetKeys as string[]);
-          }}
+          onChange={(nextTargetKeys) => setSelectedPermIds(nextTargetKeys as string[])}
           render={(item) => item.title || ''}
           listStyle={{ width: 350, height: 400 }}
         />

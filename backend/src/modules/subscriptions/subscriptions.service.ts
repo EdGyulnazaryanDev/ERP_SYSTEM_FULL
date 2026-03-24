@@ -71,10 +71,8 @@ export class SubscriptionsService implements OnModuleInit {
   }
 
   async getCurrentSubscriptionForTenant(tenantId: string) {
-    const subscription = await this.getOrCreateCurrentSubscriptionForTenant(
-      tenantId,
-    );
-
+    const subscription = await this.getActiveSubscriptionRecord(tenantId);
+    if (!subscription) return null;
     return this.mapSubscription(subscription);
   }
 
@@ -368,12 +366,7 @@ export class SubscriptionsService implements OnModuleInit {
   }
 
   private async getOrCreateCurrentSubscriptionForTenant(tenantId: string) {
-    let subscription = await this.getActiveSubscriptionRecord(tenantId);
-
-    if (!subscription) {
-      await this.createDefaultSubscriptionForTenant(tenantId);
-      subscription = await this.getActiveSubscriptionRecord(tenantId);
-    }
+    const subscription = await this.getActiveSubscriptionRecord(tenantId);
 
     if (!subscription) {
       throw new NotFoundException(
@@ -481,6 +474,16 @@ export class SubscriptionsService implements OnModuleInit {
   async assertSuperAdmin(userId: string, tenantId: string): Promise<void> {
     const ok = await this.isSuperAdminUser(userId, tenantId);
     if (!ok) throw new ForbiddenException('Forbidden: super admin access required');
+  }
+
+  async assertAdminOrSuperAdmin(userId: string, tenantId: string, jwtRole?: string): Promise<void> {
+    // Fast-path: JWT role already indicates admin/superadmin
+    if (jwtRole) {
+      const n = jwtRole.trim().toLowerCase().replace(/[\s_-]+/g, '');
+      if (n === 'admin' || n === 'superadmin') return;
+    }
+    const ok = await this.isAdminOrSuperAdminUser(userId, tenantId);
+    if (!ok) throw new ForbiddenException('Forbidden: admin access required');
   }
 
   private mapPlan(plan: HydratedPlan) {
