@@ -134,6 +134,7 @@ export class AuthService {
       user.id,
       'user',
       [user.first_name, user.last_name].filter(Boolean).join(' ').trim() || user.email,
+      user.isSystemAdmin,
     );
 
     await this.updateRefreshToken('staff', user.id, tokens.refreshToken);
@@ -406,6 +407,7 @@ export class AuthService {
     principalId: string,
     role?: string,
     name?: string,
+    isSystemAdmin?: boolean,
   ) {
     const payload: JwtPayload = {
       sub: userId,
@@ -415,6 +417,7 @@ export class AuthService {
       principalId,
       role,
       name,
+      isSystemAdmin,
     };
 
     const accessSecret =

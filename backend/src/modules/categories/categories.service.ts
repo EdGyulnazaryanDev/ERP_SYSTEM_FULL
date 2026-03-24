@@ -9,12 +9,15 @@ import { Repository } from 'typeorm';
 import { CategoryEntity } from './entities/category.entity';
 import type { CreateCategoryDto } from './dto/create-category.dto';
 import type { UpdateCategoryDto } from './dto/update-category.dto';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
+import { PlanLimitKey } from '../subscriptions/subscription.constants';
 
 @Injectable()
 export class CategoriesService {
   constructor(
     @InjectRepository(CategoryEntity)
     private categoryRepo: Repository<CategoryEntity>,
+    private readonly subscriptionsService: SubscriptionsService,
   ) {}
 
   async findAll(tenantId: string): Promise<CategoryEntity[]> {
@@ -42,6 +45,9 @@ export class CategoriesService {
     data: CreateCategoryDto,
     tenantId: string,
   ): Promise<CategoryEntity> {
+    const currentCount = await this.categoryRepo.count({ where: { tenant_id: tenantId } });
+    await this.subscriptionsService.assertWithinLimit(tenantId, PlanLimitKey.CATEGORIES, currentCount);
+
     // Generate slug from name
     const slug = this.generateSlug(data.name, tenantId);
 

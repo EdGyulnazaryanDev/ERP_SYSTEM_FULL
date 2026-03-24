@@ -104,6 +104,13 @@ export function useAccessControl() {
     }
   };
 
+  const isLockedBySubscription = (pageKey: string): boolean => {
+    if (isPrivilegedUser) return false;
+    const page = pageCatalogMap.get(pageKey);
+    if (!page?.requiredFeature) return false;
+    return !enabledFeatures.includes(page.requiredFeature as any);
+  };
+
   return {
     user,
     pageAccess,
@@ -114,6 +121,7 @@ export function useAccessControl() {
     getPageAccess,
     canAccessPage,
     canPerform,
+    isLockedBySubscription,
     isLoading:
       isPageAccessLoading
       || isCatalogLoading

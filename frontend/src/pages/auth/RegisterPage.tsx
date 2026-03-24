@@ -16,6 +16,7 @@ interface JwtPayload {
   principalId: string;
   role?: string;
   name?: string;
+  isSystemAdmin?: boolean;
 }
 
 export default function RegisterPage() {
@@ -39,6 +40,7 @@ export default function RegisterPage() {
           role: decoded.role || 'admin',
           actorType: decoded.actorType,
           principalId: decoded.principalId,
+          isSystemAdmin: decoded.isSystemAdmin ?? false,
         };
         
         setAuth(user, response.data.accessToken);

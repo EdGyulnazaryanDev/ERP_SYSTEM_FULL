@@ -15,6 +15,7 @@ import { productsApi, type Product } from '@/api/products';
 import { categoriesApi } from '@/api/categories';
 import { ProductService } from '@/services/ProductService';
 import { useAccessControl } from '@/hooks/useAccessControl';
+import { usePlanLimits } from '@/hooks/usePlanLimits';
 
 // ── Stat Card ────────────────────────────────────────────────────────────────
 function StatCard({
@@ -63,6 +64,7 @@ function StatCard({
 export default function ProductsPage() {
   const queryClient = useQueryClient();
   const { canPerform } = useAccessControl();
+  const { get: getLimit } = usePlanLimits();
   const [form] = Form.useForm();
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -588,6 +590,7 @@ export default function ProductsPage() {
             icon={<ShoppingCartOutlined />}
             active={activeStatFilter === null && filters.is_active === undefined}
             onClick={() => { setActiveStatFilter(null); setFilters(f => ({ ...f, is_active: undefined, page: 1 })); }}
+            suffix={getLimit('products') !== null ? ` / ${getLimit('products')}` : undefined}
           />
         </Col>
         <Col xs={12} sm={8} md={4} lg={4}>

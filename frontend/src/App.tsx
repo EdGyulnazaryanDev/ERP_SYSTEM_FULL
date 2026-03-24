@@ -40,6 +40,9 @@ import BiReportingPage from '@/pages/bi/BiReportingPage';
 import ServicesPage from '@/pages/services/ServicesPage';
 import PageAccessGuard from '@/components/common/PageAccessGuard';
 import PortalHomePage from '@/pages/PortalHomePage';
+import SystemAdminRoute from '@/components/SystemAdminRoute';
+import SubscriptionPlansPage from '@/pages/admin/SubscriptionPlansPage';
+import SubscriptionPage from '@/pages/settings/SubscriptionPage';
 
 function guarded(pageKey: string, element: JSX.Element) {
   return <PageAccessGuard pageKey={pageKey}>{element}</PageAccessGuard>;
@@ -142,6 +145,14 @@ function App() {
 
         {/* Services */}
         <Route path="services" element={guarded('services', <ServicesPage />)} />
+
+        {/* Tenant subscription selection */}
+        <Route path="settings/subscription" element={<SubscriptionPage />} />
+
+        {/* System admin routes */}
+        <Route element={<SystemAdminRoute />}>
+          <Route path="admin/subscription-plans" element={<SubscriptionPlansPage />} />
+        </Route>
       </Route>
 
       <Route

@@ -12,12 +12,15 @@ import {
   UpdateProductDto,
   ProductFilters,
 } from './dtos/product.dto';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
+import { PlanLimitKey } from '../subscriptions/subscription.constants';
 
 @Injectable()
 export class ProductsService {
   constructor(
     @InjectRepository(ProductEntity)
     private productRepo: Repository<ProductEntity>,
+    private readonly subscriptionsService: SubscriptionsService,
   ) {}
 
   async findAll(
@@ -107,6 +110,9 @@ export class ProductsService {
   }
 
   async create(data: CreateProductDto, tenantId: string) {
+    const currentCount = await this.productRepo.count({ where: { tenant_id: tenantId } });
+    await this.subscriptionsService.assertWithinLimit(tenantId, PlanLimitKey.PRODUCTS, currentCount);
+
     // Check if SKU already exists
     const existing = await this.findBySku(data.sku, tenantId);
     if (existing) {

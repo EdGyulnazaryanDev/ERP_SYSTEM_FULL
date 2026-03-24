@@ -183,6 +183,22 @@
   min-height: 48px !important;
 }
 
+.statChipLabel {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(148, 163, 184, 0.9);
+  margin-bottom: 6px;
+}
+
+.statChipValue {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #f8fafc;
+  line-height: 1.2;
+  margin-bottom: 6px;
+}
+
 .sectionCard :global(.ant-table) {
   background: transparent !important;
   color: #e2e8f0 !important;

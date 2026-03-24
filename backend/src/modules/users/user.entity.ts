@@ -36,6 +36,9 @@ export class User {
   @Column({ default: true })
   is_active: boolean;
 
+  @Column({ name: 'is_system_admin', default: false })
+  isSystemAdmin: boolean;
+
   @Column({ name: 'refresh_token', nullable: true, type: 'text' })
   refreshToken: string | null;
 

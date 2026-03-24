@@ -28,6 +28,8 @@ import {
   CreditCardOutlined,
   BarChartOutlined,
   DownOutlined,
+  LockOutlined,
+  CrownOutlined,
 } from '@ant-design/icons';
 import { useAuthStore } from '@/store/authStore';
 import { useAccessControl } from '@/hooks/useAccessControl';
@@ -39,7 +41,7 @@ export default function MainLayout() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
-  const { canAccessPage, isLoading } = useAccessControl();
+  const { canAccessPage, isLockedBySubscription, isLoading } = useAccessControl();
   const screens = Grid.useBreakpoint();
   const isMobile = !screens.lg;
   const {
@@ -203,12 +205,12 @@ export default function MainLayout() {
       icon: <UserOutlined />,
       label: 'Suppliers',
     },
-    {
+    /*{
       key: '/modules',
       pageKey: 'modules',
       icon: <AppstoreOutlined />,
       label: 'Modules',
-    },
+    },*/
     {
       key: '/rbac',
       pageKey: 'rbac',
@@ -225,7 +227,30 @@ export default function MainLayout() {
 
   const visibleMenuItems = menuItems
     .filter((item) => (item.pageKey ? canAccessPage(item.pageKey) : true))
-    .map(({ pageKey, ...item }) => item);
+    .map(({ pageKey, ...item }) => {
+      if (pageKey && isLockedBySubscription(pageKey)) {
+        return {
+          ...item,
+          label: (
+            <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: 0.5 }}>
+              <span>{item.label}</span>
+              <LockOutlined style={{ fontSize: 11, color: '#faad14' }} />
+            </span>
+          ),
+          style: { opacity: 0.5 },
+        };
+      }
+      return item;
+    });
+
+  // Inject admin plan builder for system admins
+  if (user?.isSystemAdmin) {
+    visibleMenuItems.unshift({
+      key: '/admin/subscription-plans',
+      icon: <CrownOutlined />,
+      label: 'Plan Builder',
+    } as any);
+  }
 
   if (isLoading) {
     return (

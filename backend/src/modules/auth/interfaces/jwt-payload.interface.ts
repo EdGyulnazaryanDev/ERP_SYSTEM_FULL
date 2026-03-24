@@ -6,4 +6,5 @@ export interface JwtPayload {
   principalId: string;
   role?: string;
   name?: string;
+  isSystemAdmin?: boolean;
 }

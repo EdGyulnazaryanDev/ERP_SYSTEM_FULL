@@ -1,14 +1,13 @@
 import {
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
   OnModuleInit,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import { User } from '../users/user.entity';
-import { Role } from '../roles/role.entity';
-import { UserRole } from '../roles/user-role.entity';
 import {
   BillingCycle,
   DEFAULT_PLAN_DEFINITIONS,
@@ -18,6 +17,8 @@ import {
   SubscriptionStatus,
 } from './subscription.constants';
 import { SelectPlanDto } from './dto/select-plan.dto';
+import { CreatePlanDto } from './dto/create-plan.dto';
+import { UpdatePlanDto } from './dto/update-plan.dto';
 import { CompanySubscription } from './entities/company-subscription.entity';
 import { SubscriptionPlanFeature } from './entities/subscription-plan-feature.entity';
 import { SubscriptionPlanLimit } from './entities/subscription-plan-limit.entity';
@@ -45,10 +46,8 @@ export class SubscriptionsService implements OnModuleInit {
     private readonly subscriptionRepository: Repository<CompanySubscription>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
-    @InjectRepository(Role)
-    private readonly roleRepository: Repository<Role>,
-    @InjectRepository(UserRole)
-    private readonly userRoleRepository: Repository<UserRole>,
+    @InjectDataSource()
+    private readonly dataSource: DataSource,
   ) {}
 
   async onModuleInit() {
@@ -56,8 +55,6 @@ export class SubscriptionsService implements OnModuleInit {
   }
 
   async getAvailablePlans() {
-    await this.seedDefaultPlans();
-
     const plans = await this.planRepository.find({
       where: { isActive: true },
       relations: ['features', 'limits'],
@@ -76,8 +73,6 @@ export class SubscriptionsService implements OnModuleInit {
   }
 
   async selectPlan(tenantId: string, dto: SelectPlanDto) {
-    await this.seedDefaultPlans();
-
     const plan = await this.planRepository.findOne({
       where: { code: dto.planCode, isActive: true },
       relations: ['features', 'limits'],
@@ -124,55 +119,6 @@ export class SubscriptionsService implements OnModuleInit {
     }
 
     return this.mapSubscription(hydrated as ActiveSubscription);
-  }
-
-  async assertSuperAdmin(userId: string, tenantId: string) {
-    if (!(await this.isSuperAdminUser(userId, tenantId))) {
-      throw new ForbiddenException(
-        'Only super admin can change the subscription plan',
-      );
-    }
-  }
-
-  async isSuperAdminUser(userId: string, tenantId: string) {
-    const userRoles = await this.userRoleRepository.find({
-      where: { user_id: userId },
-    });
-
-    if (userRoles.length === 0) {
-      return false;
-    }
-
-    const roles = await this.roleRepository.find({
-      where: userRoles.map((userRole) => ({
-        id: userRole.role_id,
-        tenant_id: tenantId,
-      })),
-    });
-
-    return roles.some((role) => this.normalizeRoleName(role.name) === 'superadmin');
-  }
-
-  async isAdminOrSuperAdminUser(userId: string, tenantId: string) {
-    const userRoles = await this.userRoleRepository.find({
-      where: { user_id: userId },
-    });
-
-    if (userRoles.length === 0) {
-      return false;
-    }
-
-    const roles = await this.roleRepository.find({
-      where: userRoles.map((userRole) => ({
-        id: userRole.role_id,
-        tenant_id: tenantId,
-      })),
-    });
-
-    return roles.some((role) => {
-      const normalized = this.normalizeRoleName(role.name);
-      return normalized === 'admin' || normalized === 'superadmin';
-    });
   }
 
   async createDefaultSubscriptionForTenant(
@@ -273,6 +219,148 @@ export class SubscriptionsService implements OnModuleInit {
     await this.assertWithinLimit(tenantId, PlanLimitKey.USERS, activeUsers, 1);
   }
 
+  // ─── Admin plan CRUD ────────────────────────────────────────────────────────
+
+  async getAllPlansForAdmin() {
+    const plans = await this.planRepository.find({
+      relations: ['features', 'limits'],
+      order: { monthlyPrice: 'ASC' },
+    });
+    return plans.map((plan) => this.mapPlan(plan as HydratedPlan));
+  }
+
+  async createPlan(dto: CreatePlanDto) {
+    const plan = this.planRepository.create({
+      code: dto.name.toLowerCase().replace(/\s+/g, '-') + '-' + Date.now(),
+      name: dto.name,
+      description: dto.description ?? null,
+      monthlyPrice: dto.monthlyPrice.toFixed(2),
+      yearlyPrice: dto.yearlyPrice.toFixed(2),
+      isActive: dto.isActive,
+    });
+
+    const savedPlan = await this.planRepository.save(plan);
+
+    await this.featureRepository.save(
+      dto.features.map((feature) =>
+        this.featureRepository.create({ planId: savedPlan.id, key: feature }),
+      ),
+    );
+
+    await this.limitRepository.save(
+      dto.limits.map((limit) =>
+        this.limitRepository.create({
+          planId: savedPlan.id,
+          key: limit.key,
+          value: limit.value,
+        }),
+      ),
+    );
+
+    const hydrated = await this.planRepository.findOne({
+      where: { id: savedPlan.id },
+      relations: ['features', 'limits'],
+    });
+
+    return this.mapPlan(hydrated as HydratedPlan);
+  }
+
+  async updatePlan(id: string, dto: UpdatePlanDto) {
+    const plan = await this.planRepository.findOne({
+      where: { id },
+      relations: ['features', 'limits'],
+    });
+
+    if (!plan) {
+      throw new NotFoundException(`Plan ${id} not found`);
+    }
+
+    await this.dataSource.transaction(async (manager) => {
+      if (dto.name !== undefined) plan.name = dto.name;
+      if (dto.description !== undefined) plan.description = dto.description ?? null;
+      if (dto.monthlyPrice !== undefined) plan.monthlyPrice = dto.monthlyPrice.toFixed(2);
+      if (dto.yearlyPrice !== undefined) plan.yearlyPrice = dto.yearlyPrice.toFixed(2);
+      if (dto.isActive !== undefined) plan.isActive = dto.isActive;
+
+      await manager.save(SubscriptionPlan, plan);
+
+      if (dto.features !== undefined) {
+        await manager.delete(SubscriptionPlanFeature, { planId: id });
+        if (dto.features.length > 0) {
+          await manager.save(
+            SubscriptionPlanFeature,
+            dto.features.map((feature) =>
+              manager.create(SubscriptionPlanFeature, { planId: id, key: feature }),
+            ),
+          );
+        }
+      }
+
+      if (dto.limits !== undefined) {
+        await manager.delete(SubscriptionPlanLimit, { planId: id });
+        if (dto.limits.length > 0) {
+          await manager.save(
+            SubscriptionPlanLimit,
+            dto.limits.map((limit) =>
+              manager.create(SubscriptionPlanLimit, {
+                planId: id,
+                key: limit.key,
+                value: limit.value,
+              }),
+            ),
+          );
+        }
+      }
+    });
+
+    const hydrated = await this.planRepository.findOne({
+      where: { id },
+      relations: ['features', 'limits'],
+    });
+
+    return this.mapPlan(hydrated as HydratedPlan);
+  }
+
+  async deletePlan(id: string): Promise<void> {
+    const plan = await this.planRepository.findOne({ where: { id } });
+    if (!plan) {
+      throw new NotFoundException(`Plan ${id} not found`);
+    }
+
+    const activeSubscription = await this.subscriptionRepository.findOne({
+      where: {
+        planId: id,
+        status: In([
+          SubscriptionStatus.ACTIVE,
+          SubscriptionStatus.TRIAL,
+          SubscriptionStatus.PAST_DUE,
+        ]),
+      },
+    });
+
+    if (activeSubscription) {
+      throw new ConflictException('Cannot delete a plan with active subscribers');
+    }
+
+    await this.planRepository.remove(plan);
+  }
+
+  async setPlanStatus(id: string, isActive: boolean) {
+    const plan = await this.planRepository.findOne({
+      where: { id },
+      relations: ['features', 'limits'],
+    });
+
+    if (!plan) {
+      throw new NotFoundException(`Plan ${id} not found`);
+    }
+
+    plan.isActive = isActive;
+    await this.planRepository.save(plan);
+
+    return this.mapPlan(plan as HydratedPlan);
+  }
+
   private async getOrCreateCurrentSubscriptionForTenant(tenantId: string) {
     let subscription = await this.getActiveSubscriptionRecord(tenantId);
 
@@ -307,31 +395,22 @@ export class SubscriptionsService implements OnModuleInit {
 
   private async seedDefaultPlans() {
     for (const definition of DEFAULT_PLAN_DEFINITIONS) {
-      let plan = await this.planRepository.findOne({
-        where: { code: definition.code },
+      const exists = await this.planRepository.existsBy({
+        code: definition.code,
       });
 
-      if (!plan) {
-        plan = this.planRepository.create({
-          code: definition.code,
-          name: definition.name,
-          description: definition.description,
-          monthlyPrice: definition.monthlyPrice.toFixed(2),
-          yearlyPrice: definition.yearlyPrice.toFixed(2),
-          isActive: true,
-        });
-      } else {
-        plan.name = definition.name;
-        plan.description = definition.description;
-        plan.monthlyPrice = definition.monthlyPrice.toFixed(2);
-        plan.yearlyPrice = definition.yearlyPrice.toFixed(2);
-        plan.isActive = true;
-      }
+      if (exists) continue; // skip — never overwrite admin-managed plans
+
+      const plan = this.planRepository.create({
+        code: definition.code,
+        name: definition.name,
+        description: definition.description,
+        monthlyPrice: definition.monthlyPrice.toFixed(2),
+        yearlyPrice: definition.yearlyPrice.toFixed(2),
+        isActive: true,
+      });
 
       const savedPlan = await this.planRepository.save(plan);
-
-      await this.featureRepository.delete({ planId: savedPlan.id });
-      await this.limitRepository.delete({ planId: savedPlan.id });
 
       await this.featureRepository.save(
         definition.features.map((feature) =>
@@ -360,6 +439,7 @@ export class SubscriptionsService implements OnModuleInit {
       code: plan.code,
       name: plan.name,
       description: plan.description,
+      isActive: plan.isActive,
       pricing: {
         monthly: Number(plan.monthlyPrice),
         yearly: Number(plan.yearlyPrice),
@@ -388,9 +468,5 @@ export class SubscriptionsService implements OnModuleInit {
       plan: this.mapPlan(subscription.plan),
       metadata: subscription.metadata,
     };
-  }
-
-  private normalizeRoleName(name: string) {
-    return name.trim().toLowerCase().replace(/[\s_-]+/g, '');
   }
 }

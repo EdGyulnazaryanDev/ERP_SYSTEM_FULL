@@ -42,7 +42,12 @@ import {
 import {
   Area,
   AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -83,6 +88,15 @@ function formatPeriodLabel(p: string | Date) {
   return d.isValid() ? d.format('MMM D') : String(p);
 }
 
+function toTitle(value: string) {
+  return value.replaceAll('_', ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function percentage(part: number, total: number) {
+  if (!total) return 0;
+  return Math.round((part / total) * 100);
+}
+
 function OverviewTab() {
   const [period, setPeriod] = useState<'daily' | 'weekly' | 'monthly'>('daily');
 
@@ -96,6 +110,22 @@ function OverviewTab() {
     queryFn: () =>
       biReportingApi.getTrends('sales', period).then((r) => r.data),
   });
+  const templatesQuery = useQuery({
+    queryKey: ['bi-overview-templates'],
+    queryFn: () => biReportingApi.getTemplates().then((r) => r.data),
+  });
+  const reportsQuery = useQuery({
+    queryKey: ['bi-overview-reports'],
+    queryFn: () => biReportingApi.getSavedReports().then((r) => r.data),
+  });
+  const dashboardsQuery = useQuery({
+    queryKey: ['bi-overview-dashboards'],
+    queryFn: () => biReportingApi.getDashboards().then((r) => r.data),
+  });
+  const exportLogsQuery = useQuery({
+    queryKey: ['bi-overview-export-logs'],
+    queryFn: () => biReportingApi.getExportLogs().then((r) => r.data),
+  });
 
   const chartData = useMemo(() => {
     const rows = trendsQuery.data ?? [];
@@ -105,6 +135,29 @@ function OverviewTab() {
       label: formatPeriodLabel(row.period),
     }));
   }, [trendsQuery.data]);
+  const templates = templatesQuery.data ?? [];
+  const reports = reportsQuery.data ?? [];
+  const dashboards = dashboardsQuery.data ?? [];
+  const exports = exportLogsQuery.data ?? [];
+  const widgets = dashboards.flatMap((dashboard) => dashboard.widgets ?? []);
+  const successRate = percentage(
+    reports.filter((report) => report.status === 'completed').length,
+    reports.length,
+  );
+  const exportVolume = exports.reduce((sum, item) => sum + (item.record_count ?? 0), 0);
+  const reportStatusData = Object.entries(
+    reports.reduce<Record<string, number>>((acc, report) => {
+      acc[report.status] = (acc[report.status] || 0) + 1;
+      return acc;
+    }, {}),
+  ).map(([name, value]) => ({ name: toTitle(name), value }));
+  const categoryData = Object.entries(
+    templates.reduce<Record<string, number>>((acc, template) => {
+      acc[template.category] = (acc[template.category] || 0) + 1;
+      return acc;
+    }, {}),
+  ).map(([name, value]) => ({ name: toTitle(name), value }));
+  const pieColors = ['#38bdf8', '#818cf8', '#34d399', '#f59e0b', '#fb7185'];
 
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
@@ -171,6 +224,36 @@ function OverviewTab() {
           </Card>
         </Col>
       </Row>
+      <Row gutter={[16, 16]}>
+        <Col xs={24} md={12} xl={6}>
+          <Card className={styles.sectionCard} bordered={false}>
+            <div className={styles.statChipLabel}>Template library</div>
+            <div className={styles.statChipValue}>{templates.length}</div>
+            <div className={styles.secondaryText}>Reusable reports across finance, sales, ops, and custom flows</div>
+          </Card>
+        </Col>
+        <Col xs={24} md={12} xl={6}>
+          <Card className={styles.sectionCard} bordered={false}>
+            <div className={styles.statChipLabel}>Report success rate</div>
+            <div className={styles.statChipValue}>{successRate}%</div>
+            <div className={styles.secondaryText}>{reports.length} report jobs observed</div>
+          </Card>
+        </Col>
+        <Col xs={24} md={12} xl={6}>
+          <Card className={styles.sectionCard} bordered={false}>
+            <div className={styles.statChipLabel}>Dashboard footprint</div>
+            <div className={styles.statChipValue}>{dashboards.length}</div>
+            <div className={styles.secondaryText}>{widgets.length} widgets active across tenant dashboards</div>
+          </Card>
+        </Col>
+        <Col xs={24} md={12} xl={6}>
+          <Card className={styles.sectionCard} bordered={false}>
+            <div className={styles.statChipLabel}>Exported records</div>
+            <div className={styles.statChipValue}>{exportVolume}</div>
+            <div className={styles.secondaryText}>{exports.length} export jobs retained in telemetry</div>
+          </Card>
+        </Col>
+      </Row>
 
       <Card
         className={styles.chartCard}
@@ -228,6 +311,55 @@ function OverviewTab() {
           </ResponsiveContainer>
         )}
       </Card>
+      <Row gutter={[16, 16]}>
+        <Col xs={24} xl={12}>
+          <Card className={styles.chartCard} bordered={false} title="Report pipeline">
+            {reportStatusData.length === 0 ? (
+              <Empty description="No report activity yet" />
+            ) : (
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={reportStatusData}>
+                  <CartesianGrid stroke="rgba(148,163,184,0.15)" strokeDasharray="3 3" />
+                  <XAxis dataKey="name" tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                  <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                  <Tooltip
+                    contentStyle={{
+                      background: '#1e293b',
+                      border: '1px solid rgba(148,163,184,0.2)',
+                      borderRadius: 8,
+                    }}
+                  />
+                  <Bar dataKey="value" fill="#818cf8" radius={[8, 8, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </Card>
+        </Col>
+        <Col xs={24} xl={12}>
+          <Card className={styles.chartCard} bordered={false} title="Template mix">
+            {categoryData.length === 0 ? (
+              <Empty description="No templates available" />
+            ) : (
+              <ResponsiveContainer width="100%" height={280}>
+                <PieChart>
+                  <Pie data={categoryData} dataKey="value" nameKey="name" innerRadius={68} outerRadius={96}>
+                    {categoryData.map((entry, index) => (
+                      <Cell key={entry.name} fill={pieColors[index % pieColors.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{
+                      background: '#1e293b',
+                      border: '1px solid rgba(148,163,184,0.2)',
+                      borderRadius: 8,
+                    }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+          </Card>
+        </Col>
+      </Row>
     </Space>
   );
 }
@@ -301,6 +433,13 @@ function ReportsTab() {
     label: t.name,
     formats: t.supported_formats ?? [],
   }));
+  const reports = reportsQuery.data ?? [];
+  const templates = templatesQuery.data ?? [];
+  const completedReports = reports.filter((report) => report.status === 'completed').length;
+  const failedReports = reports.filter((report) => report.status === 'failed').length;
+  const queuedReports = reports.filter(
+    (report) => report.status === 'pending' || report.status === 'processing',
+  ).length;
 
   const openCreateTemplate = () => {
     templateForm.resetFields();
@@ -355,6 +494,29 @@ function ReportsTab() {
 
   return (
     <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+      <Row gutter={[16, 16]}>
+        <Col xs={24} md={8}>
+          <Card className={styles.sectionCard} bordered={false}>
+            <div className={styles.statChipLabel}>Template library</div>
+            <div className={styles.statChipValue}>{templates.length}</div>
+            <div className={styles.secondaryText}>Reusable definitions for repeatable reporting cycles</div>
+          </Card>
+        </Col>
+        <Col xs={24} md={8}>
+          <Card className={styles.sectionCard} bordered={false}>
+            <div className={styles.statChipLabel}>Completed runs</div>
+            <div className={styles.statChipValue}>{completedReports}</div>
+            <div className={styles.secondaryText}>{queuedReports} queued or processing right now</div>
+          </Card>
+        </Col>
+        <Col xs={24} md={8}>
+          <Card className={styles.sectionCard} bordered={false}>
+            <div className={styles.statChipLabel}>Failures</div>
+            <div className={styles.statChipValue}>{failedReports}</div>
+            <div className={styles.secondaryText}>Investigate broken SQL or missing source tables</div>
+          </Card>
+        </Col>
+      </Row>
       <div className={styles.toolbar}>
         <Button type="primary" icon={<ThunderboltOutlined />} onClick={() => setGenerateOpen(true)}>
           Generate report
@@ -387,7 +549,12 @@ function ReportsTab() {
           pagination={false}
           columns={[
             { title: 'Name', dataIndex: 'name', key: 'name' },
-            { title: 'Category', dataIndex: 'category', key: 'category' },
+            {
+              title: 'Category',
+              dataIndex: 'category',
+              key: 'category',
+              render: (value: string) => <Tag color="processing">{toTitle(value)}</Tag>,
+            },
             {
               title: 'Formats',
               dataIndex: 'supported_formats',
@@ -442,6 +609,11 @@ function ReportsTab() {
           dataSource={reportsQuery.data ?? []}
           columns={[
             { title: 'Name', dataIndex: 'name', key: 'name' },
+            {
+              title: 'Template',
+              key: 'template',
+              render: (_value: unknown, row) => row.template?.name ?? '—',
+            },
             { title: 'Format', dataIndex: 'format', key: 'format' },
             {
               title: 'Status',
@@ -454,6 +626,12 @@ function ReportsTab() {
               },
             },
             { title: 'Rows', dataIndex: 'row_count', key: 'row_count' },
+            {
+              title: 'Size',
+              dataIndex: 'file_size',
+              key: 'file_size',
+              render: (value?: number) => (value ? `${Math.round(value / 1024)} KB` : '—'),
+            },
             {
               title: 'Generated',
               dataIndex: 'generated_at',
@@ -617,9 +795,35 @@ function DashboardsTab() {
     queryFn: () => biReportingApi.getWidgetData(preview!.id).then((r) => r.data),
     enabled: !!preview?.id,
   });
+  const dashboards = dashboardsQuery.data ?? [];
+  const totalWidgets = dashboards.flatMap((dashboard) => dashboard.widgets ?? []).length;
+  const defaultDashboards = dashboards.filter((dashboard) => dashboard.is_default).length;
 
   return (
     <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+      <Row gutter={[16, 16]}>
+        <Col xs={24} md={8}>
+          <Card className={styles.sectionCard} bordered={false}>
+            <div className={styles.statChipLabel}>Dashboards</div>
+            <div className={styles.statChipValue}>{dashboards.length}</div>
+            <div className={styles.secondaryText}>{defaultDashboards} defaults used as landing workspaces</div>
+          </Card>
+        </Col>
+        <Col xs={24} md={8}>
+          <Card className={styles.sectionCard} bordered={false}>
+            <div className={styles.statChipLabel}>Widgets</div>
+            <div className={styles.statChipValue}>{totalWidgets}</div>
+            <div className={styles.secondaryText}>SQL-powered metrics, charts, and lists</div>
+          </Card>
+        </Col>
+        <Col xs={24} md={8}>
+          <Card className={styles.sectionCard} bordered={false}>
+            <div className={styles.statChipLabel}>Preview state</div>
+            <div className={styles.statChipValue}>{preview ? 'Live' : 'Idle'}</div>
+            <div className={styles.secondaryText}>Inspect widget payloads before promoting them</div>
+          </Card>
+        </Col>
+      </Row>
       <Paragraph className={styles.secondaryText}>
         Dashboards and widgets are stored per tenant. Widgets use SQL with <code>$1</code> = tenant;
         preview shows raw JSON results.
@@ -711,33 +915,67 @@ function ExportsTab() {
     queryKey: ['bi-export-logs'],
     queryFn: () => biReportingApi.getExportLogs().then((r) => r.data),
   });
+  const rows = query.data ?? [];
+  const completed = rows.filter((row) => row.status === 'completed').length;
+  const totalRecords = rows.reduce((sum, row) => sum + (row.record_count ?? 0), 0);
+  const topFormat = Object.entries(
+    rows.reduce<Record<string, number>>((acc, row) => {
+      acc[row.format] = (acc[row.format] || 0) + 1;
+      return acc;
+    }, {}),
+  ).sort((a, b) => b[1] - a[1])[0];
 
   return (
-    <Card className={styles.sectionCard} bordered={false}>
-      <Table
-        loading={query.isLoading}
-        rowKey="id"
-        dataSource={query.data ?? []}
-        columns={[
-          { title: 'Type', dataIndex: 'export_type', key: 'export_type' },
-          { title: 'Entity', dataIndex: 'entity_name', key: 'entity_name' },
-          { title: 'Format', dataIndex: 'format', key: 'format' },
-          { title: 'Records', dataIndex: 'record_count', key: 'record_count' },
-          {
-            title: 'Status',
-            dataIndex: 'status',
-            key: 'status',
-            render: (s: string) => <Tag color="processing">{s}</Tag>,
-          },
-          {
-            title: 'When',
-            dataIndex: 'created_at',
-            key: 'created_at',
-            render: (d: string) => dayjs(d).format('YYYY-MM-DD HH:mm:ss'),
-          },
-        ]}
-      />
-    </Card>
+    <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+      <Row gutter={[16, 16]}>
+        <Col xs={24} md={8}>
+          <Card className={styles.sectionCard} bordered={false}>
+            <div className={styles.statChipLabel}>Completed exports</div>
+            <div className={styles.statChipValue}>{completed}</div>
+            <div className={styles.secondaryText}>{rows.length} jobs captured in audit history</div>
+          </Card>
+        </Col>
+        <Col xs={24} md={8}>
+          <Card className={styles.sectionCard} bordered={false}>
+            <div className={styles.statChipLabel}>Moved rows</div>
+            <div className={styles.statChipValue}>{totalRecords}</div>
+            <div className={styles.secondaryText}>Total exported records across completed and pending jobs</div>
+          </Card>
+        </Col>
+        <Col xs={24} md={8}>
+          <Card className={styles.sectionCard} bordered={false}>
+            <div className={styles.statChipLabel}>Preferred format</div>
+            <div className={styles.statChipValue}>{topFormat?.[0]?.toUpperCase() ?? '—'}</div>
+            <div className={styles.secondaryText}>{topFormat ? `${topFormat[1]} export jobs` : 'No format trend yet'}</div>
+          </Card>
+        </Col>
+      </Row>
+      <Card className={styles.sectionCard} bordered={false}>
+        <Table
+          loading={query.isLoading}
+          rowKey="id"
+          dataSource={rows}
+          columns={[
+            { title: 'Type', dataIndex: 'export_type', key: 'export_type' },
+            { title: 'Entity', dataIndex: 'entity_name', key: 'entity_name' },
+            { title: 'Format', dataIndex: 'format', key: 'format' },
+            { title: 'Records', dataIndex: 'record_count', key: 'record_count' },
+            {
+              title: 'Status',
+              dataIndex: 'status',
+              key: 'status',
+              render: (s: string) => <Tag color={s === 'completed' ? 'success' : 'processing'}>{s}</Tag>,
+            },
+            {
+              title: 'When',
+              dataIndex: 'created_at',
+              key: 'created_at',
+              render: (d: string) => dayjs(d).format('YYYY-MM-DD HH:mm:ss'),
+            },
+          ]}
+        />
+      </Card>
+    </Space>
   );
 }
 

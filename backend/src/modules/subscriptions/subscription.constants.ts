@@ -1,4 +1,5 @@
 export enum PlanCode {
+  STARTER = 'starter',
   BASIC = 'basic',
   PRO = 'pro',
   ENTERPRISE = 'enterprise',
@@ -18,15 +19,39 @@ export enum SubscriptionStatus {
 }
 
 export enum PlanFeature {
-  WAREHOUSE = 'warehouse',
-  REPORTS = 'reports',
+  // Core (always available — not gated)
+  DASHBOARD = 'dashboard',
+  PRODUCTS = 'products',
+  CATEGORIES = 'categories',
+  INVENTORY = 'inventory',
+  TRANSACTIONS = 'transactions',
+  USERS = 'users',
+  SETTINGS = 'settings',
+  RBAC = 'rbac',
+  // Gated modules
   ACCOUNTING = 'accounting',
+  PAYMENTS = 'payments',
+  CRM = 'crm',
+  HR = 'hr',
+  PROCUREMENT = 'procurement',
+  WAREHOUSE = 'warehouse',
+  TRANSPORTATION = 'transportation',
+  PROJECTS = 'projects',
+  MANUFACTURING = 'manufacturing',
+  EQUIPMENT = 'equipment',
+  SERVICES = 'services',
+  COMMUNICATION = 'communication',
+  COMPLIANCE = 'compliance',
+  REPORTS = 'reports',
+  SUPPLIERS = 'suppliers',
 }
 
 export enum PlanLimitKey {
   USERS = 'users',
   STORAGE_GB = 'storage_gb',
   TRANSACTIONS_PER_MONTH = 'transactions_per_month',
+  PRODUCTS = 'products',
+  CATEGORIES = 'categories',
 }
 
 export interface DefaultPlanDefinition {
@@ -44,50 +69,63 @@ export interface DefaultPlanDefinition {
 
 export const DEFAULT_PLAN_DEFINITIONS: DefaultPlanDefinition[] = [
   {
+    code: PlanCode.STARTER,
+    name: 'Starter',
+    description: 'Essential ERP access for small teams.',
+    monthlyPrice: 19,
+    yearlyPrice: 190,
+    features: [],
+    limits: [
+      { key: PlanLimitKey.USERS, value: 3 },
+      { key: PlanLimitKey.PRODUCTS, value: 20 },
+      { key: PlanLimitKey.CATEGORIES, value: 2 },
+      { key: PlanLimitKey.TRANSACTIONS_PER_MONTH, value: 500 },
+      { key: PlanLimitKey.STORAGE_GB, value: 5 },
+    ],
+  },
+  {
     code: PlanCode.BASIC,
     name: 'Basic',
-    description: 'Essential ERP access for smaller companies.',
-    monthlyPrice: 29,
-    yearlyPrice: 290,
-    features: [PlanFeature.WAREHOUSE],
+    description: 'Adds inventory, suppliers, payments, and transactions.',
+    monthlyPrice: 49,
+    yearlyPrice: 490,
+    features: [],
     limits: [
-      { key: PlanLimitKey.USERS, value: 5 },
+      { key: PlanLimitKey.USERS, value: 10 },
+      { key: PlanLimitKey.PRODUCTS, value: 200 },
+      { key: PlanLimitKey.CATEGORIES, value: 10 },
+      { key: PlanLimitKey.TRANSACTIONS_PER_MONTH, value: 5000 },
       { key: PlanLimitKey.STORAGE_GB, value: 25 },
-      { key: PlanLimitKey.TRANSACTIONS_PER_MONTH, value: 1000 },
     ],
   },
   {
     code: PlanCode.PRO,
     name: 'Pro',
-    description: 'Adds accounting and reporting for growing teams.',
-    monthlyPrice: 79,
-    yearlyPrice: 790,
-    features: [
-      PlanFeature.WAREHOUSE,
-      PlanFeature.ACCOUNTING,
-      PlanFeature.REPORTS,
-    ],
+    description: 'Full warehouse, accounting, BI, CRM, HR, and more.',
+    monthlyPrice: 99,
+    yearlyPrice: 990,
+    features: [PlanFeature.WAREHOUSE, PlanFeature.ACCOUNTING, PlanFeature.REPORTS],
     limits: [
-      { key: PlanLimitKey.USERS, value: 25 },
+      { key: PlanLimitKey.USERS, value: 50 },
+      { key: PlanLimitKey.PRODUCTS, value: 2000 },
+      { key: PlanLimitKey.CATEGORIES, value: null },
+      { key: PlanLimitKey.TRANSACTIONS_PER_MONTH, value: 50000 },
       { key: PlanLimitKey.STORAGE_GB, value: 250 },
-      { key: PlanLimitKey.TRANSACTIONS_PER_MONTH, value: 10000 },
     ],
   },
   {
     code: PlanCode.ENTERPRISE,
     name: 'Enterprise',
-    description: 'Full platform access with effectively unlimited scale.',
-    monthlyPrice: 199,
-    yearlyPrice: 1990,
-    features: [
-      PlanFeature.WAREHOUSE,
-      PlanFeature.ACCOUNTING,
-      PlanFeature.REPORTS,
-    ],
+    description: 'Unlimited access across all modules.',
+    monthlyPrice: 249,
+    yearlyPrice: 2490,
+    features: [PlanFeature.WAREHOUSE, PlanFeature.ACCOUNTING, PlanFeature.REPORTS],
     limits: [
       { key: PlanLimitKey.USERS, value: null },
-      { key: PlanLimitKey.STORAGE_GB, value: null },
+      { key: PlanLimitKey.PRODUCTS, value: null },
+      { key: PlanLimitKey.CATEGORIES, value: null },
       { key: PlanLimitKey.TRANSACTIONS_PER_MONTH, value: null },
+      { key: PlanLimitKey.STORAGE_GB, value: null },
     ],
   },
 ];
