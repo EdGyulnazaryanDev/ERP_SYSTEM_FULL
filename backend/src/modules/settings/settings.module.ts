@@ -6,6 +6,7 @@ import { PageAccessEntity } from './entities/page-access.entity';
 import { UserRole } from '../roles/user-role.entity';
 import { Role } from '../roles/role.entity';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
+import { PageAccessGuard } from '../../common/guards/page-access.guard';
 
 @Module({
   imports: [
@@ -13,7 +14,7 @@ import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
     SubscriptionsModule,
   ],
   controllers: [SettingsController],
-  providers: [SettingsService],
-  exports: [SettingsService],
+  providers: [SettingsService, PageAccessGuard],
+  exports: [SettingsService, PageAccessGuard],
 })
 export class SettingsModule {}

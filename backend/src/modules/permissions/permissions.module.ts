@@ -7,11 +7,15 @@ import { RolePermissionsController } from './role-permissions.controller';
 import { Permission } from './permission.entity';
 import { RolePermission } from './role-permission.entity';
 import { Role } from '../roles/role.entity';
+import { PageAccessEntity } from '../settings/entities/page-access.entity';
+import { UserRole } from '../roles/user-role.entity';
+import { PageAccessGuard } from '../../common/guards/page-access.guard';
+import { TenantSuperAdminGuard } from '../../common/guards/tenant-superadmin.guard';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Permission, RolePermission, Role])],
+  imports: [TypeOrmModule.forFeature([Permission, RolePermission, Role, PageAccessEntity, UserRole])],
   controllers: [PermissionsController, RolePermissionsController],
-  providers: [PermissionsService, RolePermissionsService],
+  providers: [PermissionsService, RolePermissionsService, PageAccessGuard, TenantSuperAdminGuard],
   exports: [PermissionsService, RolePermissionsService],
 })
 export class PermissionsModule {}

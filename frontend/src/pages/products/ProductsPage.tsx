@@ -102,9 +102,15 @@ export default function ProductsPage() {
   });
 
   const { data: categories } = useQuery({
-    queryKey: ['system-categories'],
-    queryFn: () => categoriesApi.getAll(),
-    select: (r) => Array.isArray(r?.data) ? r.data.map((c: any) => c.name) : [],
+    queryKey: ['categories'],
+    queryFn: async () => {
+      const r = await categoriesApi.getAll();
+      return r.data;
+    },
+    select: (data) => {
+      const list = Array.isArray(data) ? data : [];
+      return list.filter((c: any) => c?.is_active !== false).map((c: any) => c.name as string);
+    },
   });
 
   const { data: suppliers } = useQuery({

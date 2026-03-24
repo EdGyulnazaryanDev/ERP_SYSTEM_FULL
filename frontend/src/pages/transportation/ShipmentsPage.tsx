@@ -496,11 +496,7 @@ export default function ShipmentsPage() {
             showTotal: (t, r) => `${r[0]}–${r[1]} of ${t} shipments`,
             style: { padding: '12px 20px' },
           }}
-          rowClassName={(record: Shipment) => {
-            if (record.status === ShipmentStatus.DELIVERED) return 'row-delivered';
-            if (record.status === ShipmentStatus.FAILED || record.status === ShipmentStatus.CANCELLED) return 'row-failed';
-            return '';
-          }}
+          rowClassName={() => ''}
           expandable={{
             expandedRowRender: (record: Shipment) => {
               const items = record.items ?? [];
@@ -616,13 +612,6 @@ export default function ShipmentsPage() {
         </Form>
       </Modal>
 
-      {/* Row highlight styles */}
-      <style>{`
-        .row-delivered td { background: #f6ffed !important; }
-        .row-failed td { background: #fff2f0 !important; opacity: 0.75; }
-        .ant-table-row:hover .row-delivered td,
-        .ant-table-row:hover .row-failed td { filter: brightness(0.97); }
-      `}</style>
     </div>
   );
 }

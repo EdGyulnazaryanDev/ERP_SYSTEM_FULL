@@ -11,54 +11,46 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PageAccessGuard } from '../../common/guards/page-access.guard';
+import { CheckPageAccess } from '../../common/decorators/check-page-access.decorator';
 import { UsersService } from './users.service';
 import { CurrentTenant } from '../../common/decorators/current-tenant.decorator';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PageAccessGuard)
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
-  // Create user
   @Post()
+  @CheckPageAccess('users', 'create')
   create(@Body() createDto: any, @CurrentTenant() tenantId: string) {
-    if (!createDto.email) {
-      throw new BadRequestException('Email is required');
-    }
-    // Strip role_id if present - role assignment happens separately
+    if (!createDto.email) throw new BadRequestException('Email is required');
     const { role_id, ...userDto } = createDto;
     return this.usersService.create(userDto, tenantId);
   }
 
-  // Get all users with pagination and search
   @Get()
+  @CheckPageAccess('users', 'view')
   findAll(
     @Query('page') page: string = '1',
     @Query('pageSize') pageSize: string = '10',
     @Query('search') search?: string,
     @CurrentTenant() tenantId?: string,
   ) {
-    if (!tenantId) {
-      throw new BadRequestException('Tenant ID is required');
-    }
-    return this.usersService.findAllPaginated(
-      tenantId,
-      parseInt(page, 10),
-      parseInt(pageSize, 10),
-      search,
-    );
+    if (!tenantId) throw new BadRequestException('Tenant ID is required');
+    return this.usersService.findAllPaginated(tenantId, parseInt(page, 10), parseInt(pageSize, 10), search);
   }
 
-  // Get single user
   @Get(':id')
+  @CheckPageAccess('users', 'view')
   findOne(@Param('id') id: string, @CurrentTenant() tenantId: string) {
     return this.usersService.findOne(id, tenantId);
   }
 
-  // Update user
   @Patch(':id')
+  @CheckPageAccess('users', 'edit')
   update(
     @Param('id') id: string,
     @Body() updateDto: UpdateUserDto,
@@ -67,19 +59,19 @@ export class UsersController {
     return this.usersService.update(id, updateDto, tenantId);
   }
 
-  // Delete user
   @Delete(':id')
+  @CheckPageAccess('users', 'delete')
   remove(@Param('id') id: string, @CurrentTenant() tenantId: string) {
     return this.usersService.remove(id, tenantId);
   }
 
-  // Bulk delete users
   @Post('bulk-delete')
+  @CheckPageAccess('users', 'delete')
   bulkDelete(@Body('ids') ids: string[], @CurrentTenant() tenantId: string) {
     return this.usersService.bulkDelete(ids, tenantId);
   }
 
-  // Update user profile
+  // Profile and password — users can always manage their own account
   @Patch('profile/update')
   updateProfile(
     @Body() updateDto: UpdateUserDto,
@@ -88,7 +80,6 @@ export class UsersController {
     return this.usersService.updateProfile(updateDto, tenantId);
   }
 
-  // Change password
   @Post('change-password')
   changePassword(
     @Body('oldPassword') oldPassword: string,

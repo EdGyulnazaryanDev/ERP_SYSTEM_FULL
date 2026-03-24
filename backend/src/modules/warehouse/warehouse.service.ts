@@ -13,12 +13,16 @@ import { BinEntity } from './entities/bin.entity';
 import {
   StockMovementEntity,
   MovementType,
+  MovementStatus,
 } from './entities/stock-movement.entity';
 import { InventoryEntity } from '../inventory/entities/inventory.entity';
 import { TransactionEntity, TransactionType, TransactionStatus } from '../transactions/entities/transaction.entity';
 import { TransactionItemEntity } from '../transactions/entities/transaction-item.entity';
 import { ShipmentEntity, ShipmentStatus, ShipmentPriority } from '../transportation/entities/shipment.entity';
 import { ShipmentItemEntity } from '../transportation/entities/shipment-item.entity';
+import { AccountPayableEntity, APStatus } from '../accounting/entities/account-payable.entity';
+import { AccountReceivableEntity, ARStatus, ARApprovalStatus, ARPostingStatus, ARAcknowledgementStatus } from '../accounting/entities/account-receivable.entity';
+import { AuditLogEntity, AuditSeverity } from '../compliance-audit/entities/audit-log.entity';
 import { FinancialEventType, StockMovedEvent } from '../accounting/events/financial.events';
 import { InventoryService } from '../inventory/inventory.service';
 
@@ -43,9 +47,17 @@ export class WarehouseService {
     private shipmentRepo: Repository<ShipmentEntity>,
     @InjectRepository(ShipmentItemEntity)
     private shipmentItemRepo: Repository<ShipmentItemEntity>,
+    @InjectRepository(AccountPayableEntity)
+    private apRepo: Repository<AccountPayableEntity>,
+    @InjectRepository(AccountReceivableEntity)
+    private arRepo: Repository<AccountReceivableEntity>,
+    @InjectRepository(AuditLogEntity)
+    private auditLogRepo: Repository<AuditLogEntity>,
     private eventEmitter: EventEmitter2,
     private inventoryService: InventoryService,
-  ) {}
+  ) { }
+
+  // ==================== WAREHOUSE CRUD ====================
 
   async findAllWarehouses(tenantId: string) {
     const data = await this.warehouseRepo.find({
@@ -55,13 +67,8 @@ export class WarehouseService {
     return { data };
   }
 
-  async findOneWarehouse(
-    id: string,
-    tenantId: string,
-  ): Promise<WarehouseEntity> {
-    const warehouse = await this.warehouseRepo.findOne({
-      where: { id, tenant_id: tenantId },
-    });
+  async findOneWarehouse(id: string, tenantId: string): Promise<WarehouseEntity> {
+    const warehouse = await this.warehouseRepo.findOne({ where: { id, tenant_id: tenantId } });
     if (!warehouse) throw new NotFoundException('Warehouse not found');
     return warehouse;
   }
@@ -90,16 +97,9 @@ export class WarehouseService {
     return this.warehouseRepo.save(warehouse);
   }
 
-  async updateWarehouse(
-    id: string,
-    payload: Partial<WarehouseEntity>,
-    tenantId: string,
-  ) {
+  async updateWarehouse(id: string, payload: Partial<WarehouseEntity>, tenantId: string) {
     const warehouse = await this.findOneWarehouse(id, tenantId);
-    if (
-      payload.warehouse_code &&
-      payload.warehouse_code !== warehouse.warehouse_code
-    ) {
+    if (payload.warehouse_code && payload.warehouse_code !== warehouse.warehouse_code) {
       const code = payload.warehouse_code.trim().toUpperCase();
       const conflict = await this.warehouseRepo.findOne({
         where: { warehouse_code: code, tenant_id: tenantId },
@@ -114,9 +114,7 @@ export class WarehouseService {
 
   async deleteWarehouse(id: string, tenantId: string) {
     const warehouse = await this.findOneWarehouse(id, tenantId);
-    const binCount = await this.binRepo.count({
-      where: { warehouse_id: id, tenant_id: tenantId },
-    });
+    const binCount = await this.binRepo.count({ where: { warehouse_id: id, tenant_id: tenantId } });
     if (binCount > 0)
       throw new BadRequestException(
         `Cannot delete warehouse with ${binCount} bin(s). Remove bins first.`,
@@ -124,6 +122,8 @@ export class WarehouseService {
     await this.warehouseRepo.remove(warehouse);
     return { message: 'Warehouse deleted successfully' };
   }
+
+  // ==================== BIN CRUD ====================
 
   async findAllBins(tenantId: string, warehouseId?: string) {
     const where: Record<string, string> = { tenant_id: tenantId };
@@ -153,9 +153,7 @@ export class WarehouseService {
   }
 
   async findOneBin(id: string, tenantId: string): Promise<BinEntity> {
-    const bin = await this.binRepo.findOne({
-      where: { id, tenant_id: tenantId },
-    });
+    const bin = await this.binRepo.findOne({ where: { id, tenant_id: tenantId } });
     if (!bin) throw new NotFoundException('Bin not found');
     return bin;
   }
@@ -169,16 +167,10 @@ export class WarehouseService {
     await this.findOneWarehouse(warehouseId, tenantId);
 
     const existing = await this.binRepo.findOne({
-      where: {
-        warehouse_id: warehouseId,
-        bin_code: binCode,
-        tenant_id: tenantId,
-      },
+      where: { warehouse_id: warehouseId, bin_code: binCode, tenant_id: tenantId },
     });
     if (existing)
-      throw new ConflictException(
-        `Bin code "${binCode}" already exists in this warehouse`,
-      );
+      throw new ConflictException(`Bin code "${binCode}" already exists in this warehouse`);
 
     const bin = this.binRepo.create({
       ...payload,
@@ -200,6 +192,8 @@ export class WarehouseService {
     return { message: 'Bin deleted successfully' };
   }
 
+  // ==================== STOCK MOVEMENT QUERIES ====================
+
   async findAllMovements(tenantId: string, movementType?: MovementType) {
     const where: Record<string, string> = { tenant_id: tenantId };
     if (movementType) where.movement_type = movementType;
@@ -220,21 +214,23 @@ export class WarehouseService {
     return { data };
   }
 
-  async findOneMovement(
-    id: string,
-    tenantId: string,
-  ): Promise<StockMovementEntity> {
-    const movement = await this.movementRepo.findOne({
-      where: { id, tenant_id: tenantId },
-    });
+  async findOneMovement(id: string, tenantId: string): Promise<StockMovementEntity> {
+    const movement = await this.movementRepo.findOne({ where: { id, tenant_id: tenantId } });
     if (!movement) throw new NotFoundException('Stock movement not found');
     return movement;
   }
 
-  async createMovement(
-    payload: Partial<StockMovementEntity>,
-    tenantId: string,
-  ) {
+  // ==================== STEP 1: REQUEST A MOVEMENT ====================
+  /**
+   * Creates a stock movement in PENDING_APPROVAL status.
+   * No inventory change happens here.
+   *
+   * For ISSUE: reduces available_quantity (reservation) so the stock
+   * cannot be double-allocated, but physical quantity stays the same.
+   *
+   * Writes a compliance audit log entry for traceability.
+   */
+  async createMovement(payload: Partial<StockMovementEntity>, tenantId: string) {
     if (!payload.movement_type)
       throw new BadRequestException('movement_type is required');
     const qty = Number(payload.quantity);
@@ -243,7 +239,7 @@ export class WarehouseService {
     if (!payload.movement_date)
       throw new BadRequestException('movement_date is required');
 
-    // Look up inventory item — try by inventory row id first, then by product_id
+    // Resolve inventory item
     let inventoryItem: InventoryEntity | null = null;
     if (payload.product_id) {
       inventoryItem = await this.inventoryRepo.findOne({
@@ -256,9 +252,7 @@ export class WarehouseService {
       }
     }
 
-    // Capture old qty before any changes (needed for ADJUSTMENT delta)
-    const oldQty = inventoryItem ? inventoryItem.quantity : 0;
-
+    // VALIDATION: For ISSUE, we must reserve stock immediately
     if (payload.movement_type === MovementType.ISSUE || payload.movement_type === MovementType.TRANSFER) {
       if (!inventoryItem) {
         throw new BadRequestException(
@@ -271,111 +265,437 @@ export class WarehouseService {
         );
       }
 
-      // TRANSFER: validate destination warehouse capacity
-      if (payload.movement_type === MovementType.TRANSFER && payload.to_location) {
-        const destWarehouse = await this.warehouseRepo.findOne({
-          where: [
-            { warehouse_name: payload.to_location, tenant_id: tenantId },
-            { warehouse_code: payload.to_location, tenant_id: tenantId },
-          ],
-        });
-        if (destWarehouse && destWarehouse.capacity != null) {
-          // Count current stock already at destination
-          const destInventory = await this.inventoryRepo.find({
-            where: { location: payload.to_location, tenant_id: tenantId },
-          });
-          const currentDestQty = destInventory.reduce((sum, i) => sum + Number(i.quantity), 0);
-          if (currentDestQty + qty > destWarehouse.capacity) {
-            throw new BadRequestException(
-              `Destination warehouse "${destWarehouse.warehouse_name}" capacity exceeded: ` +
-              `capacity ${destWarehouse.capacity}, current stock ${currentDestQty}, ` +
-              `transfer qty ${qty} (would reach ${currentDestQty + qty})`,
-            );
-          }
-        }
-      }
-      inventoryItem.quantity -= qty;
+      // RESERVATION: Lock the stock so it cannot be double-allocated
+      inventoryItem.reserved_quantity = Number(inventoryItem.reserved_quantity) + qty;
       inventoryItem.available_quantity = inventoryItem.quantity - inventoryItem.reserved_quantity;
       await this.inventoryRepo.save(inventoryItem);
-
-      // Trigger reorder check after ISSUE (outgoing stock)
-      if (payload.movement_type === MovementType.ISSUE &&
-          inventoryItem.available_quantity <= inventoryItem.reorder_level) {
-        this.inventoryService.triggerAutoReorder(inventoryItem, tenantId).catch((e) =>
-          this.logger.error(`[WAREHOUSE] Reorder trigger failed: ${e.message}`),
-        );
-      }
-    } else if (payload.movement_type === MovementType.RECEIPT && inventoryItem) {
-      inventoryItem.quantity += qty;
-      inventoryItem.available_quantity = inventoryItem.quantity - inventoryItem.reserved_quantity;
-      await this.inventoryRepo.save(inventoryItem);
-    } else if (payload.movement_type === MovementType.ADJUSTMENT && inventoryItem) {
-      // ADJUSTMENT: qty = new physical count. Sets inventory to that exact value.
-      inventoryItem.quantity = qty;
-      inventoryItem.available_quantity = qty - inventoryItem.reserved_quantity;
-      await this.inventoryRepo.save(inventoryItem);
+      this.logger.log(`[WAREHOUSE] Reserved ${qty} units for ${payload.movement_type} — available now: ${inventoryItem.available_quantity}`);
     }
 
     const unitCost = inventoryItem ? Number(inventoryItem.unit_cost) : Number(payload.unit_cost || 0);
-    // For ADJUSTMENT: JE amount = |delta| × unit_cost (only the change matters)
-    // For RECEIPT/ISSUE: JE amount = qty × unit_cost
-    const jeQty = payload.movement_type === MovementType.ADJUSTMENT
-      ? Math.abs(qty - oldQty)
-      : qty;
-    const totalCost = unitCost * jeQty;
-
+    const totalCost = unitCost * qty;
     const movement_number = await this.generateMovementNumber(tenantId);
+    const requisition_number = `REQ-${movement_number}`;
+
     const movement = this.movementRepo.create({
       ...payload,
       tenant_id: tenantId,
       movement_number,
+      requisition_number,
       quantity: qty,
       unit_cost: unitCost,
       total_cost: totalCost,
+      status: MovementStatus.PENDING_APPROVAL,
       journal_entry_created: false,
       product_name: payload.product_name || inventoryItem?.product_name,
     });
     const saved = await this.movementRepo.save(movement);
 
-    // Create transaction + JE only for financially significant movements
-    // TRANSFER is internal — no transaction, no JE
-    if (saved.movement_type !== MovementType.TRANSFER) {
+    // Write compliance audit log
+    await this.writeAuditLog(
+      'STOCK_MOVEMENT_REQUESTED',
+      'stock_movement',
+      saved.id,
+      `Movement ${movement_number} (${payload.movement_type}, qty ${qty}) requested — awaiting approval.`,
+      payload.requested_by,
+      tenantId,
+      AuditSeverity.LOW,
+    );
+
+    this.logger.log(`[WAREHOUSE] Movement ${movement_number} created — status: PENDING_APPROVAL`);
+    return saved;
+  }
+
+  // ==================== STEP 2: APPROVE A MOVEMENT ====================
+  /**
+   * Executes the movement after manager approval:
+   * 1. Changes physical inventory qty
+   * 2. Creates Transaction record
+   * 3. Emits STOCK_MOVED → Journal Entry (via FinancialBrainService)
+   * 4. RECEIPT → creates AP bill
+   * 5. ISSUE → creates AR invoice
+   * 6. TRANSFER → creates Shipment (two-leg transit model)
+   * 7. Compliance audit log
+   */
+  async approveMovement(id: string, approvedBy: string, tenantId: string) {
+    const movement = await this.findOneMovement(id, tenantId);
+
+    if (movement.status !== MovementStatus.PENDING_APPROVAL) {
+      throw new BadRequestException(
+        `Movement is not pending approval (current status: ${movement.status})`,
+      );
+    }
+
+    // Resolve inventory item
+    let inventoryItem: InventoryEntity | null = null;
+    if (movement.product_id) {
+      inventoryItem = await this.inventoryRepo.findOne({
+        where: [
+          { id: movement.product_id, tenant_id: tenantId },
+          { product_id: movement.product_id, tenant_id: tenantId },
+        ],
+      });
+    }
+
+    const qty = movement.quantity;
+    const oldQty = inventoryItem?.quantity ?? 0;
+
+    // ── APPLY PHYSICAL INVENTORY CHANGE ─────────────────────────────────────
+    if (inventoryItem) {
+      switch (movement.movement_type) {
+        case MovementType.RECEIPT:
+          inventoryItem.quantity += qty;
+          inventoryItem.available_quantity = inventoryItem.quantity - inventoryItem.reserved_quantity;
+          break;
+
+        case MovementType.ISSUE:
+          // Reserved qty was already locked at request time — now consume it
+          inventoryItem.quantity -= qty;
+          inventoryItem.reserved_quantity = Math.max(0, Number(inventoryItem.reserved_quantity) - qty);
+          inventoryItem.available_quantity = inventoryItem.quantity - inventoryItem.reserved_quantity;
+          break;
+
+        case MovementType.TRANSFER:
+          // Source location: deduct physical qty (reservation already placed)
+          inventoryItem.quantity -= qty;
+          inventoryItem.reserved_quantity = Math.max(0, Number(inventoryItem.reserved_quantity) - qty);
+          inventoryItem.available_quantity = inventoryItem.quantity - inventoryItem.reserved_quantity;
+          break;
+
+        case MovementType.ADJUSTMENT:
+          // qty = new physical count
+          inventoryItem.quantity = qty;
+          inventoryItem.available_quantity = qty - inventoryItem.reserved_quantity;
+          break;
+      }
+
+      await this.inventoryRepo.save(inventoryItem);
+
+      // Auto-reorder check after ISSUE
+      if (movement.movement_type === MovementType.ISSUE &&
+        inventoryItem.available_quantity <= inventoryItem.reorder_level) {
+        this.inventoryService.triggerAutoReorder(inventoryItem, tenantId).catch((e) =>
+          this.logger.error(`[WAREHOUSE] Reorder trigger failed: ${e.message}`),
+        );
+      }
+    }
+
+    // ── COMPUTE COSTS ────────────────────────────────────────────────────────
+    const unitCost = inventoryItem ? Number(inventoryItem.unit_cost) : Number(movement.unit_cost || 0);
+    const jeQty = movement.movement_type === MovementType.ADJUSTMENT
+      ? Math.abs(qty - oldQty)
+      : qty;
+    const totalCost = unitCost * jeQty;
+
+    // ── UPDATE MOVEMENT STATUS ───────────────────────────────────────────────
+    movement.status = MovementStatus.APPROVED;
+    movement.approved_by = approvedBy;
+    movement.approved_at = new Date();
+    movement.unit_cost = unitCost;
+    movement.total_cost = totalCost;
+
+    // ── CREATE TRANSACTION RECORD (not for TRANSFER — internal move) ─────────
+    if (movement.movement_type !== MovementType.TRANSFER) {
       const unitPrice = inventoryItem ? Number(inventoryItem.unit_price) : undefined;
-      await this.createMovementTransaction(saved, tenantId, unitCost, totalCost, unitPrice);
+      await this.createMovementTransaction(movement, tenantId, unitCost, totalCost, unitPrice);
     }
 
-    // TRANSFER → auto-create a shipment so logistics can track it
-    if (saved.movement_type === MovementType.TRANSFER) {
-      await this.createTransferShipment(saved, tenantId);
-    }
-
-    // Emit STOCK_MOVED — FinancialBrainService will create JE
-    const financialMovementType = this.toFinancialMovementType(saved.movement_type);
+    // ── EMIT JE EVENT (STOCK_MOVED → FinancialBrainService creates JE) ───────
+    const financialMovementType = this.toFinancialMovementType(movement.movement_type);
     if (financialMovementType && totalCost > 0) {
       const event = new StockMovedEvent();
       event.tenantId = tenantId;
-      event.productId = inventoryItem?.id || saved.product_id || '';
-      event.productName = saved.product_name || 'Unknown product';
+      event.productId = inventoryItem?.id || movement.product_id || '';
+      event.productName = movement.product_name || 'Unknown product';
       event.quantity = qty;
       event.movementType = financialMovementType;
       event.unitCost = unitCost;
       event.totalCost = totalCost;
-      event.reference = saved.movement_number;
+      event.reference = movement.movement_number;
       this.eventEmitter.emit(FinancialEventType.STOCK_MOVED, event);
-
-      saved.journal_entry_created = true;
-      await this.movementRepo.save(saved);
+      movement.journal_entry_created = true;
     }
 
+    // ── RECEIPT → Create AP Bill (you owe the supplier) ─────────────────────
+    if (movement.movement_type === MovementType.RECEIPT) {
+      const apId = await this.createApBill(movement, tenantId, totalCost);
+      if (apId) movement.payable_id = apId;
+    }
+
+    // ── ISSUE → Create AR Invoice (customer owes you) ────────────────────────
+    if (movement.movement_type === MovementType.ISSUE) {
+      const arId = await this.createArInvoice(movement, tenantId, totalCost, inventoryItem);
+      if (arId) movement.receivable_id = arId;
+    }
+
+    // ── TRANSFER → Create Shipment (two-leg: source → Transit → destination) ─
+    if (movement.movement_type === MovementType.TRANSFER) {
+      await this.createTransferShipment(movement, tenantId);
+    }
+
+    // Mark as fully executed
+    movement.status = MovementStatus.EXECUTED;
+    const saved = await this.movementRepo.save(movement);
+
+    // ── COMPLIANCE AUDIT LOG ─────────────────────────────────────────────────
+    await this.writeAuditLog(
+      'STOCK_MOVEMENT_APPROVED',
+      'stock_movement',
+      saved.id,
+      `Movement ${movement.movement_number} (${movement.movement_type}, qty ${qty}) approved and executed by ${approvedBy}. ` +
+      `JE created: ${movement.journal_entry_created}. ` +
+      `AP: ${movement.payable_id || 'none'}. AR: ${movement.receivable_id || 'none'}.`,
+      approvedBy,
+      tenantId,
+      AuditSeverity.MEDIUM,
+    );
+
+    this.logger.log(`[WAREHOUSE] Movement ${movement.movement_number} EXECUTED successfully`);
     return saved;
   }
 
-  private toFinancialMovementType(type: MovementType): 'IN' | 'OUT' | 'ADJUSTMENT' | null {
-    switch (type) {
-      case MovementType.RECEIPT: return 'IN';
-      case MovementType.ISSUE: return 'OUT';
-      case MovementType.ADJUSTMENT: return 'ADJUSTMENT';
-      default: return null; // TRANSFER doesn't generate a financial event
+  // ==================== STEP 2b: REJECT A MOVEMENT ====================
+  /**
+   * Rejects a pending movement.
+   * Releases the stock reservation (if any was placed).
+   */
+  async rejectMovement(
+    id: string,
+    rejectedBy: string,
+    reason: string,
+    tenantId: string,
+  ) {
+    const movement = await this.findOneMovement(id, tenantId);
+
+    if (movement.status !== MovementStatus.PENDING_APPROVAL) {
+      throw new BadRequestException(
+        `Movement is not pending approval (current status: ${movement.status})`,
+      );
+    }
+
+    // Release reserved stock (was locked at createMovement time)
+    if (
+      (movement.movement_type === MovementType.ISSUE ||
+        movement.movement_type === MovementType.TRANSFER) &&
+      movement.product_id
+    ) {
+      const inv = await this.inventoryRepo.findOne({
+        where: [
+          { id: movement.product_id, tenant_id: tenantId },
+          { product_id: movement.product_id, tenant_id: tenantId },
+        ],
+      });
+      if (inv) {
+        inv.reserved_quantity = Math.max(0, Number(inv.reserved_quantity) - movement.quantity);
+        inv.available_quantity = inv.quantity - inv.reserved_quantity;
+        await this.inventoryRepo.save(inv);
+        this.logger.log(`[WAREHOUSE] Released reservation of ${movement.quantity} units for rejected movement`);
+      }
+    }
+
+    movement.status = MovementStatus.REJECTED;
+    movement.approved_by = rejectedBy;
+    movement.approved_at = new Date();
+    movement.rejection_reason = reason || 'No reason provided';
+    const saved = await this.movementRepo.save(movement);
+
+    await this.writeAuditLog(
+      'STOCK_MOVEMENT_REJECTED',
+      'stock_movement',
+      saved.id,
+      `Movement ${movement.movement_number} rejected by ${rejectedBy}. Reason: ${movement.rejection_reason}`,
+      rejectedBy,
+      tenantId,
+      AuditSeverity.MEDIUM,
+    );
+
+    this.logger.log(`[WAREHOUSE] Movement ${movement.movement_number} REJECTED`);
+    return saved;
+  }
+
+  // ==================== UPDATE / DELETE (pre-execution only) ====================
+
+  async updateMovement(id: string, payload: Partial<StockMovementEntity>, tenantId: string) {
+    const movement = await this.findOneMovement(id, tenantId);
+
+    if (movement.status === MovementStatus.EXECUTED) {
+      throw new BadRequestException('Executed movements cannot be edited.');
+    }
+
+    const newQty = payload.quantity !== undefined ? Number(payload.quantity) : movement.quantity;
+    if (newQty <= 0) throw new BadRequestException('quantity must be a positive number');
+
+    // If ISSUE/TRANSFER and qty is changing, re-validate reservation
+    if (
+      (movement.movement_type === MovementType.ISSUE ||
+        movement.movement_type === MovementType.TRANSFER) &&
+      movement.product_id &&
+      payload.quantity !== undefined &&
+      payload.quantity !== movement.quantity
+    ) {
+      const inv = await this.inventoryRepo.findOne({
+        where: [
+          { id: movement.product_id, tenant_id: tenantId },
+          { product_id: movement.product_id, tenant_id: tenantId },
+        ],
+      });
+      if (inv) {
+        // Release old reservation, apply new
+        const delta = newQty - movement.quantity;
+        const newReserved = Number(inv.reserved_quantity) + delta;
+        const newAvailable = inv.quantity - newReserved;
+        if (newAvailable < 0) {
+          throw new BadRequestException(
+            `Insufficient stock after reservation update: available ${inv.available_quantity + movement.quantity}, requested ${newQty}`,
+          );
+        }
+        inv.reserved_quantity = newReserved;
+        inv.available_quantity = newAvailable;
+        await this.inventoryRepo.save(inv);
+      }
+    }
+
+    payload.quantity = newQty;
+    Object.assign(movement, payload);
+    return this.movementRepo.save(movement);
+  }
+
+  async deleteMovement(id: string, tenantId: string) {
+    const movement = await this.findOneMovement(id, tenantId);
+
+    if (movement.status === MovementStatus.EXECUTED) {
+      throw new BadRequestException('Executed movements cannot be deleted. Create a reversal adjustment instead.');
+    }
+
+    // Release reservation if pending
+    if (
+      movement.status === MovementStatus.PENDING_APPROVAL &&
+      (movement.movement_type === MovementType.ISSUE ||
+        movement.movement_type === MovementType.TRANSFER) &&
+      movement.product_id
+    ) {
+      const inv = await this.inventoryRepo.findOne({
+        where: [
+          { id: movement.product_id, tenant_id: tenantId },
+          { product_id: movement.product_id, tenant_id: tenantId },
+        ],
+      });
+      if (inv) {
+        inv.reserved_quantity = Math.max(0, Number(inv.reserved_quantity) - movement.quantity);
+        inv.available_quantity = inv.quantity - inv.reserved_quantity;
+        await this.inventoryRepo.save(inv);
+      }
+    }
+
+    await this.movementRepo.remove(movement);
+    return { message: 'Stock movement deleted successfully' };
+  }
+
+  // ==================== PRIVATE HELPERS ====================
+
+  /**
+   * Create an Accounts Payable (AP) bill for a RECEIPT movement.
+   * Called after approval.
+   */
+  private async createApBill(
+    movement: StockMovementEntity,
+    tenantId: string,
+    totalCost: number,
+  ): Promise<string | null> {
+    try {
+      if (totalCost <= 0) return null;
+
+      // Resolve vendor: try inventory supplier_id, fallback to a system vendor placeholder
+      const inv = movement.product_id
+        ? await this.inventoryRepo.findOne({
+          where: [
+            { id: movement.product_id, tenant_id: tenantId },
+            { product_id: movement.product_id, tenant_id: tenantId },
+          ],
+        })
+        : null;
+      const vendorId = (inv as any)?.supplier_id || '00000000-0000-0000-0000-000000000000';
+
+      const billDate = new Date();
+      const dueDate = new Date(billDate);
+      dueDate.setDate(dueDate.getDate() + 30); // Net-30
+
+      const billNumber = `AP-${movement.movement_number}`;
+      const ap = this.apRepo.create({
+        tenant_id: tenantId,
+        bill_number: billNumber,
+        vendor_id: vendorId,
+        bill_date: billDate,
+        due_date: dueDate,
+        total_amount: totalCost,
+        paid_amount: 0,
+        balance_amount: totalCost,
+        status: APStatus.OPEN,
+        reference: movement.movement_number,
+        notes: `Auto-created from stock RECEIPT movement ${movement.movement_number}. Product: ${movement.product_name || '—'}, Qty: ${movement.quantity}`,
+      });
+
+      const saved = await this.apRepo.save(ap);
+      this.logger.log(`[WAREHOUSE] AP bill ${billNumber} (${totalCost}) created for RECEIPT movement ${movement.movement_number}`);
+      return saved.id;
+    } catch (e: any) {
+      this.logger.error(`[WAREHOUSE] Failed to create AP bill: ${e.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Create an Accounts Receivable (AR) invoice for an ISSUE movement.
+   * Called after approval.
+   */
+  private async createArInvoice(
+    movement: StockMovementEntity,
+    tenantId: string,
+    totalCost: number,
+    inventoryItem: InventoryEntity | null,
+  ): Promise<string | null> {
+    try {
+      if (totalCost <= 0) return null;
+
+      // Use selling price if available, fall back to cost
+      const sellingPrice = inventoryItem
+        ? Number(inventoryItem.unit_price) * movement.quantity
+        : totalCost;
+      const amount = sellingPrice > 0 ? sellingPrice : totalCost;
+
+      const invoiceDate = new Date();
+      const dueDate = new Date(invoiceDate);
+      dueDate.setDate(dueDate.getDate() + 30); // Net-30
+
+      const invoiceNumber = `AR-${movement.movement_number}`;
+
+      const existing = await this.arRepo.findOne({ where: { invoice_number: invoiceNumber, tenant_id: tenantId } });
+      if (existing) return existing.id;
+
+      const ar = this.arRepo.create({
+        tenant_id: tenantId,
+        invoice_number: invoiceNumber,
+        customer_id: '00000000-0000-0000-0000-000000000000', // placeholder — update via AR module
+        invoice_date: invoiceDate,
+        due_date: dueDate,
+        total_amount: amount,
+        paid_amount: 0,
+        balance_amount: amount,
+        status: ARStatus.OPEN,
+        approval_status: ARApprovalStatus.APPROVED,
+        posting_status: ARPostingStatus.UNPOSTED,
+        acknowledgement_status: ARAcknowledgementStatus.PENDING,
+        reference: movement.movement_number,
+        description: `Auto-created from stock ISSUE movement ${movement.movement_number}. Product: ${movement.product_name || '—'}, Qty: ${movement.quantity}`,
+        notes: `Link to customer in AR module. Ref: ${movement.reference_document || movement.movement_number}`,
+      });
+
+      const saved = await this.arRepo.save(ar);
+      this.logger.log(`[WAREHOUSE] AR invoice ${invoiceNumber} (${amount}) created for ISSUE movement ${movement.movement_number}`);
+      return saved.id;
+    } catch (e: any) {
+      this.logger.error(`[WAREHOUSE] Failed to create AR invoice: ${e.message}`);
+      return null;
     }
   }
 
@@ -396,7 +716,6 @@ export class WarehouseService {
       const txType = typeMap[movement.movement_type];
       if (!txType) return;
 
-      // For ISSUE (sale), use the selling unit_price; for others use unit_cost
       const lineUnitPrice = movement.movement_type === MovementType.ISSUE && unitPrice
         ? unitPrice
         : unitCost;
@@ -431,7 +750,7 @@ export class WarehouseService {
         total_amount: lineTotal,
         paid_amount: lineTotal,
         balance_amount: 0,
-        notes: `Auto-generated from stock movement ${movement.movement_number}`,
+        notes: `Auto-generated from approved stock movement ${movement.movement_number}`,
         items: [item],
       });
 
@@ -442,88 +761,20 @@ export class WarehouseService {
     }
   }
 
-  private async generateTransactionNumber(tenantId: string, type: TransactionType): Promise<string> {
-    const prefix = type.substring(0, 3).toUpperCase();
-    const date = new Date();
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const count = await this.transactionRepo.count({ where: { tenant_id: tenantId, type } });
-    return `${prefix}-${year}${month}-${String(count + 1).padStart(5, '0')}`;
-  }
-
-  async updateMovement(
-    id: string,
-    payload: Partial<StockMovementEntity>,
-    tenantId: string,
-  ) {
-    const movement = await this.findOneMovement(id, tenantId);
-
-    const newQty = payload.quantity !== undefined ? Number(payload.quantity) : movement.quantity;
-    if (newQty <= 0) throw new BadRequestException('quantity must be a positive number');
-
-    // Reverse the old inventory impact before applying new values
-    if (movement.product_id) {
-      const inv = await this.inventoryRepo.findOne({
-        where: [
-          { id: movement.product_id, tenant_id: tenantId },
-          { product_id: movement.product_id, tenant_id: tenantId },
-        ],
-      });
-
-      if (inv) {
-        // Undo old movement
-        if (movement.movement_type === MovementType.RECEIPT) {
-          inv.quantity -= movement.quantity;
-        } else if (movement.movement_type === MovementType.ISSUE || movement.movement_type === MovementType.TRANSFER) {
-          inv.quantity += movement.quantity;
-        }
-
-        // Apply new movement type/qty
-        const newType = (payload.movement_type || movement.movement_type) as MovementType;
-        if (newType === MovementType.RECEIPT) {
-          inv.quantity += newQty;
-        } else if (newType === MovementType.ISSUE || newType === MovementType.TRANSFER) {
-          if (inv.available_quantity + movement.quantity < newQty) {
-            throw new BadRequestException(
-              `Insufficient stock after reversal: available ${inv.available_quantity + movement.quantity}, requested ${newQty}`,
-            );
-          }
-          inv.quantity -= newQty;
-        }
-
-        inv.available_quantity = inv.quantity - inv.reserved_quantity;
-        await this.inventoryRepo.save(inv);
-
-        // Recalculate costs
-        const unitCost = Number(inv.unit_cost);
-        payload.unit_cost = unitCost;
-        payload.total_cost = unitCost * newQty;
-      }
-    }
-
-    payload.quantity = newQty;
-    payload.journal_entry_created = false; // reset — JE was already posted, new one won't fire for edits
-    Object.assign(movement, payload);
-    return this.movementRepo.save(movement);
-  }
-
-  async deleteMovement(id: string, tenantId: string) {
-    const movement = await this.findOneMovement(id, tenantId);
-    await this.movementRepo.remove(movement);
-    return { message: 'Stock movement deleted successfully' };
-  }
-
-  private async createTransferShipment(
-    movement: StockMovementEntity,
-    tenantId: string,
-  ): Promise<void> {
+  /**
+   * Creates a two-leg shipment for TRANSFER:
+   *   Source → Transit Location → Destination
+   */
+  private async createTransferShipment(movement: StockMovementEntity, tenantId: string): Promise<void> {
     try {
       const trackingNumber = await this.generateShipmentTrackingNumber(tenantId);
+      const transitLocation = `TRANSIT-${movement.movement_number}`;
+
       const item = this.shipmentItemRepo.create({
         product_id: movement.product_id,
         product_name: movement.product_name || 'Transfer item',
         quantity: movement.quantity,
-        description: `Stock transfer — movement ${movement.movement_number}`,
+        description: `Stock transfer — movement ${movement.movement_number}. Leg 1: ${movement.from_location || 'Source'} → Transit. Leg 2: Transit → ${movement.to_location || 'Destination'}`,
       });
 
       const shipment = this.shipmentRepo.create({
@@ -536,7 +787,7 @@ export class WarehouseService {
         destination_name: movement.to_location || 'Destination',
         destination_address: movement.to_location || 'Internal',
         courier_id: movement.courier_id || undefined,
-        notes: `Auto-created from stock transfer ${movement.movement_number}. Ref: ${movement.reference_document || '—'}`,
+        notes: `Two-leg transfer: ${movement.from_location || 'Source'} → [${transitLocation}] → ${movement.to_location || 'Destination'}. Ref: ${movement.reference_document || movement.movement_number}`,
         shipping_cost: 0,
         insurance_cost: 0,
         total_cost: 0,
@@ -544,8 +795,8 @@ export class WarehouseService {
           {
             status: ShipmentStatus.PENDING,
             timestamp: new Date(),
-            location: movement.from_location || 'Warehouse',
-            notes: `Transfer initiated from movement ${movement.movement_number}`,
+            location: movement.from_location || 'Source Warehouse',
+            notes: `Transfer initiated: ${movement.movement_number}. In transit via ${transitLocation}.`,
           },
         ],
         items: [item],
@@ -553,7 +804,6 @@ export class WarehouseService {
 
       const saved = await this.shipmentRepo.save(shipment) as unknown as { id: string };
 
-      // Link movement to shipment
       movement.shipment_id = saved.id;
       await this.movementRepo.save(movement);
 
@@ -561,6 +811,50 @@ export class WarehouseService {
     } catch (e: any) {
       this.logger.error(`[TRANSFER] Failed to create shipment: ${e.message}`);
     }
+  }
+
+  private async writeAuditLog(
+    action: string,
+    entityType: string,
+    entityId: string,
+    description: string,
+    userId: string | undefined,
+    tenantId: string,
+    severity: AuditSeverity = AuditSeverity.LOW,
+  ): Promise<void> {
+    try {
+      const log = this.auditLogRepo.create({
+        tenant_id: tenantId,
+        action,
+        entity_type: entityType,
+        entity_id: entityId,
+        description,
+        user_id: userId || undefined,
+        severity,
+        new_values: { entity_type: entityType, entity_id: entityId },
+      } as any);
+      await this.auditLogRepo.save(log);
+    } catch (e: any) {
+      this.logger.error(`[WAREHOUSE] Failed to write audit log: ${e.message}`);
+    }
+  }
+
+  private toFinancialMovementType(type: MovementType): 'IN' | 'OUT' | 'ADJUSTMENT' | null {
+    switch (type) {
+      case MovementType.RECEIPT: return 'IN';
+      case MovementType.ISSUE: return 'OUT';
+      case MovementType.ADJUSTMENT: return 'ADJUSTMENT';
+      default: return null;
+    }
+  }
+
+  private async generateTransactionNumber(tenantId: string, type: TransactionType): Promise<string> {
+    const prefix = type.substring(0, 3).toUpperCase();
+    const date = new Date();
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const count = await this.transactionRepo.count({ where: { tenant_id: tenantId, type } });
+    return `${prefix}-${year}${month}-${String(count + 1).padStart(5, '0')}`;
   }
 
   private async generateShipmentTrackingNumber(tenantId: string): Promise<string> {
@@ -574,7 +868,6 @@ export class WarehouseService {
   private async generateMovementNumber(tenantId: string): Promise<string> {
     const date = new Date();
     const prefix = `MOV-${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}`;
-
     const result = await this.movementRepo
       .createQueryBuilder('m')
       .select('MAX(m.movement_number)', 'max')

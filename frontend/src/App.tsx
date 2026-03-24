@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import MainLayout from '@/layouts/MainLayout';
+import AdminLayout from '@/layouts/AdminLayout';
 import AuthLayout from '@/layouts/AuthLayout';
 import LoginPage from '@/pages/auth/LoginPage';
 import RegisterPage from '@/pages/auth/RegisterPage';
@@ -40,8 +41,10 @@ import BiReportingPage from '@/pages/bi/BiReportingPage';
 import ServicesPage from '@/pages/services/ServicesPage';
 import PageAccessGuard from '@/components/common/PageAccessGuard';
 import PortalHomePage from '@/pages/PortalHomePage';
-import SystemAdminRoute from '@/components/SystemAdminRoute';
 import SubscriptionPlansPage from '@/pages/admin/SubscriptionPlansPage';
+import TenantsPage from '@/pages/admin/TenantsPage';
+import PlanAssignmentPage from '@/pages/admin/PlanAssignmentPage';
+import GlobalSettingsPage from '@/pages/admin/GlobalSettingsPage';
 import SubscriptionPage from '@/pages/settings/SubscriptionPage';
 
 function guarded(pageKey: string, element: JSX.Element) {
@@ -49,11 +52,13 @@ function guarded(pageKey: string, element: JSX.Element) {
 }
 
 function App() {
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user, isSystemAdmin } = useAuthStore();
   const isStaffUser = user?.actorType !== 'customer' && user?.actorType !== 'supplier';
-  const defaultAuthenticatedPath = isStaffUser ? '/' : '/portal';
   const location = useLocation();
   const isPortalActivationPath = location.pathname === '/auth/activate';
+
+  // System admin default landing
+  const defaultAuthenticatedPath = isSystemAdmin ? '/admin/tenants' : (isStaffUser ? '/' : '/portal');
 
   return (
     <Routes>
@@ -70,11 +75,32 @@ function App() {
         <Route path="activate" element={<ActivatePortalPage />} />
       </Route>
 
+      {/* Platform Admin routes — only accessible to system admin */}
+      <Route
+        path="/admin/*"
+        element={
+          !isAuthenticated
+            ? <Navigate to="/auth/login" replace />
+            : isSystemAdmin
+              ? <AdminLayout />
+              : <Navigate to="/" replace />
+        }
+      >
+        <Route path="tenants" element={<TenantsPage />} />
+        <Route path="plans" element={<SubscriptionPlansPage />} />
+        <Route path="plan-assignment" element={<PlanAssignmentPage />} />
+        <Route path="settings" element={<GlobalSettingsPage />} />
+        <Route index element={<Navigate to="tenants" replace />} />
+      </Route>
+
+      {/* ERP routes — tenant users only */}
       <Route
         path="/*"
         element={
           isAuthenticated
-            ? (isStaffUser ? <MainLayout /> : <Navigate to="/portal" replace />)
+            ? isSystemAdmin
+              ? <Navigate to="/admin/tenants" replace />
+              : (isStaffUser ? <MainLayout /> : <Navigate to="/portal" replace />)
             : <Navigate to="/auth/login" replace />
         }
       >
@@ -148,11 +174,6 @@ function App() {
 
         {/* Tenant subscription selection */}
         <Route path="settings/subscription" element={<SubscriptionPage />} />
-
-        {/* System admin routes */}
-        <Route element={<SystemAdminRoute />}>
-          <Route path="admin/subscription-plans" element={<SubscriptionPlansPage />} />
-        </Route>
       </Route>
 
       <Route

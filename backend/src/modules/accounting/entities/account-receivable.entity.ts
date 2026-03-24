@@ -4,6 +4,7 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  Index,
 } from 'typeorm';
 
 export enum ARStatus {
@@ -34,6 +35,7 @@ export enum ARAcknowledgementStatus {
 }
 
 @Entity('accounts_receivable')
+@Index(['tenant_id', 'invoice_number'], { unique: true })
 export class AccountReceivableEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -41,7 +43,7 @@ export class AccountReceivableEntity {
   @Column({ type: 'uuid' })
   tenant_id: string;
 
-  @Column({ type: 'varchar', length: 50, unique: true })
+  @Column({ type: 'varchar', length: 50 })
   invoice_number: string;
 
   @Column({ type: 'uuid' })

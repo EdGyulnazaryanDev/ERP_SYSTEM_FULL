@@ -3,7 +3,6 @@ import { Outlet, useNavigate } from 'react-router-dom';
 import { Layout, Menu, Avatar, Dropdown, Spin, Drawer, Grid, theme } from 'antd';
 import {
   DashboardOutlined,
-  AppstoreOutlined,
   UserOutlined,
   LogoutOutlined,
   MenuFoldOutlined,
@@ -28,8 +27,6 @@ import {
   CreditCardOutlined,
   BarChartOutlined,
   DownOutlined,
-  LockOutlined,
-  CrownOutlined,
 } from '@ant-design/icons';
 import { useAuthStore } from '@/store/authStore';
 import { useAccessControl } from '@/hooks/useAccessControl';
@@ -41,7 +38,7 @@ export default function MainLayout() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
-  const { canAccessPage, isLockedBySubscription, isLoading } = useAccessControl();
+  const { canAccessPage, isLockedBySubscription, isPrivilegedUser, isLoading, userRoles } = useAccessControl();
   const screens = Grid.useBreakpoint();
   const isMobile = !screens.lg;
   const {
@@ -226,31 +223,17 @@ export default function MainLayout() {
   ];
 
   const visibleMenuItems = menuItems
-    .filter((item) => (item.pageKey ? canAccessPage(item.pageKey) : true))
-    .map(({ pageKey, ...item }) => {
-      if (pageKey && isLockedBySubscription(pageKey)) {
-        return {
-          ...item,
-          label: (
-            <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: 0.5 }}>
-              <span>{item.label}</span>
-              <LockOutlined style={{ fontSize: 11, color: '#faad14' }} />
-            </span>
-          ),
-          style: { opacity: 0.5 },
-        };
-      }
-      return item;
-    });
+    .filter((item) => {
+      if (!item.pageKey) return true;
+      // superadmin sees everything
+      if (isPrivilegedUser) return true;
+      // others: only show pages allowed by RBAC AND included in subscription plan
+      return canAccessPage(item.pageKey) && !isLockedBySubscription(item.pageKey);
+    })
+    .map(({ pageKey: _pageKey, ...item }) => item);
 
-  // Inject admin plan builder for system admins
-  if (user?.isSystemAdmin) {
-    visibleMenuItems.unshift({
-      key: '/admin/subscription-plans',
-      icon: <CrownOutlined />,
-      label: 'Plan Builder',
-    } as any);
-  }
+  // Inject admin plan builder for system admins — now handled by AdminLayout
+  // (system admins are redirected to /admin before reaching MainLayout)
 
   if (isLoading) {
     return (
@@ -534,20 +517,38 @@ export default function MainLayout() {
                 {!isMobile && (
                   <div style={{ textAlign: 'right', lineHeight: 1.3 }}>
                     <div style={{ color: '#f8fbff', fontWeight: 600, fontSize: 13 }}>{userName}</div>
-                    <div style={{
-                      display: 'inline-block',
-                      marginTop: 3,
-                      padding: '2px 16px',
-                      borderRadius: 20,
-                      fontSize: 10,
-                      fontWeight: 700,
-                      letterSpacing: '0.06em',
-                      textTransform: 'uppercase',
-                      background: 'linear-gradient(135deg, rgba(243, 250, 249, 0.41), rgba(254, 255, 255, 0.42))',
-                      border: '1px solid rgba(56, 189, 248, 0.3)',
-                      color: '#31d3dfff',
-                    }}>
-                      {user?.role ?? 'user'}
+                    <div style={{ marginTop: 3, display: 'flex', gap: 4, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                      {userRoles.length > 0 ? userRoles.map((r) => (
+                        <span key={r.id} style={{
+                          display: 'inline-block',
+                          padding: '2px 10px',
+                          borderRadius: 20,
+                          fontSize: 10,
+                          fontWeight: 700,
+                          letterSpacing: '0.06em',
+                          textTransform: 'uppercase',
+                          background: 'linear-gradient(135deg, rgba(243, 250, 249, 0.41), rgba(254, 255, 255, 0.42))',
+                          border: '1px solid rgba(56, 189, 248, 0.3)',
+                          color: '#31d3dfff',
+                        }}>
+                          {r.name}
+                        </span>
+                      )) : (
+                        <span style={{
+                          display: 'inline-block',
+                          padding: '2px 10px',
+                          borderRadius: 20,
+                          fontSize: 10,
+                          fontWeight: 700,
+                          letterSpacing: '0.06em',
+                          textTransform: 'uppercase',
+                          background: 'linear-gradient(135deg, rgba(243, 250, 249, 0.41), rgba(254, 255, 255, 0.42))',
+                          border: '1px solid rgba(56, 189, 248, 0.3)',
+                          color: '#31d3dfff',
+                        }}>
+                          {user?.role ?? 'user'}
+                        </span>
+                      )}
                     </div>
                   </div>
                 )}

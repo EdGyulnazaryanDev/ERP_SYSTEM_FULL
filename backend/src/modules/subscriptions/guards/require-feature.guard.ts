@@ -51,7 +51,7 @@ export class RequireFeatureGuard implements CanActivate {
       throw new ForbiddenException('Tenant context is missing');
     }
 
-    if (await this.hasPrivilegedRole(request.user.sub, tenantId)) {
+    if (request.user.isSystemAdmin || await this.hasPrivilegedRole(request.user.sub, tenantId)) {
       return true;
     }
 

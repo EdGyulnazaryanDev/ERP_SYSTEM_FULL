@@ -20,9 +20,13 @@ import {
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { rbacApi, type Role, type Permission } from '@/api/rbac';
+import { useAccessControl } from '@/hooks/useAccessControl';
 
 export default function RBACPage() {
   const queryClient = useQueryClient();
+  const { canPerform, isPrivilegedUser } = useAccessControl();
+  // Role/permission structural changes are superadmin-only (isPrivilegedUser = superadmin or system admin)
+  const canManageRoles = isPrivilegedUser;
   const [roleForm] = Form.useForm();
   const [permForm] = Form.useForm();
 
@@ -211,7 +215,7 @@ export default function RBACPage() {
           >
             Permissions
           </Button>
-          {!record.is_system && (
+          {canManageRoles && !record.is_system && (
             <>
               <Button
                 size="small"
@@ -265,23 +269,27 @@ export default function RBACPage() {
       key: 'actions',
       render: (_: any, record: Permission) => (
         <Space>
-          <Button
-            size="small"
-            icon={<EditOutlined />}
-            onClick={() => openPermModal(record)}
-          />
-          <Button
-            size="small"
-            danger
-            icon={<DeleteOutlined />}
-            onClick={() => {
-              Modal.confirm({
-                title: 'Delete Permission',
-                content: 'Are you sure?',
-                onOk: () => deletePermMutation.mutate(record.id),
-              });
-            }}
-          />
+          {canManageRoles && (
+            <>
+              <Button
+                size="small"
+                icon={<EditOutlined />}
+                onClick={() => openPermModal(record)}
+              />
+              <Button
+                size="small"
+                danger
+                icon={<DeleteOutlined />}
+                onClick={() => {
+                  Modal.confirm({
+                    title: 'Delete Permission',
+                    content: 'Are you sure?',
+                    onOk: () => deletePermMutation.mutate(record.id),
+                  });
+                }}
+              />
+            </>
+          )}
         </Space>
       ),
     },
@@ -299,14 +307,16 @@ export default function RBACPage() {
               label: 'Roles',
               children: (
                 <div>
-                  <Button
-                    type="primary"
-                    icon={<PlusOutlined />}
-                    onClick={() => openRoleModal()}
-                    className="mb-4"
-                  >
-                    Create Role
-                  </Button>
+                  {canManageRoles && (
+                    <Button
+                      type="primary"
+                      icon={<PlusOutlined />}
+                      onClick={() => openRoleModal()}
+                      className="mb-4"
+                    >
+                      Create Role
+                    </Button>
+                  )}
                   <Table
                     columns={roleColumns}
                     dataSource={roles}
@@ -321,14 +331,16 @@ export default function RBACPage() {
               label: 'Permissions',
               children: (
                 <div>
-                  <Button
-                    type="primary"
-                    icon={<PlusOutlined />}
-                    onClick={() => openPermModal()}
-                    className="mb-4"
-                  >
-                    Create Permission
-                  </Button>
+                  {canManageRoles && (
+                    <Button
+                      type="primary"
+                      icon={<PlusOutlined />}
+                      onClick={() => openPermModal()}
+                      className="mb-4"
+                    >
+                      Create Permission
+                    </Button>
+                  )}
                   <Table
                     columns={permColumns}
                     dataSource={permissions}

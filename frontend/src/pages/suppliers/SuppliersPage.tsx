@@ -3,10 +3,14 @@ import { Card, Input, Button, List, message, Space, Tooltip, Popconfirm } from '
 import { PlusOutlined, CopyOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { productsApi } from '@/api/products';
+import { useAccessControl } from '@/hooks/useAccessControl';
 
 export default function SuppliersPage() {
   const queryClient = useQueryClient();
   const [newSupplier, setNewSupplier] = useState('');
+  const { canPerform } = useAccessControl();
+  const canCreate = canPerform('suppliers', 'create');
+  const canDelete = canPerform('suppliers', 'delete');
   const { data: apiSuppliers = [], isLoading } = useQuery({
     queryKey: ['product-suppliers'],
     queryFn: () => productsApi.getSuppliers(),
@@ -76,18 +80,20 @@ export default function SuppliersPage() {
       <h1 className="text-2xl font-bold">Suppliers</h1>
 
       <Card className="mt-4">
-        <Space align="start" style={{ width: '100%' }}>
-          <Input
-            placeholder="Add new supplier"
-            value={newSupplier}
-            onChange={(e) => setNewSupplier(e.target.value)}
-            onPressEnter={addSupplier}
-            style={{ width: 300 }}
-          />
-          <Button type="primary" icon={<PlusOutlined />} onClick={addSupplier}>
-            Add Supplier
-          </Button>
-        </Space>
+        {canCreate && (
+          <Space align="start" style={{ width: '100%' }}>
+            <Input
+              placeholder="Add new supplier"
+              value={newSupplier}
+              onChange={(e) => setNewSupplier(e.target.value)}
+              onPressEnter={addSupplier}
+              style={{ width: 300 }}
+            />
+            <Button type="primary" icon={<PlusOutlined />} onClick={addSupplier}>
+              Add Supplier
+            </Button>
+          </Space>
+        )}
       </Card>
 
       <Card title="Supplier List" className="mt-4">
@@ -100,7 +106,7 @@ export default function SuppliersPage() {
                 <Tooltip title="Copy" key="copy">
                   <Button type="link" icon={<CopyOutlined />} onClick={() => copyToClipboard(item)} />
                 </Tooltip>,
-                localSuppliers.includes(item) ? (
+                localSuppliers.includes(item) && canDelete ? (
                   <Popconfirm
                     key="delete"
                     title={`Delete local supplier "${item}"?`}

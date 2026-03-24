@@ -6,6 +6,7 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
+  Index,
 } from 'typeorm';
 import { SupplierEntity } from '../../suppliers/supplier.entity';
 
@@ -18,6 +19,7 @@ export enum APStatus {
 }
 
 @Entity('accounts_payable')
+@Index(['tenant_id', 'bill_number'], { unique: true })
 export class AccountPayableEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -25,7 +27,7 @@ export class AccountPayableEntity {
   @Column({ type: 'uuid' })
   tenant_id: string;
 
-  @Column({ type: 'varchar', length: 50, unique: true })
+  @Column({ type: 'varchar', length: 50 })
   bill_number: string;
 
   @Column({ type: 'uuid' })

@@ -26,6 +26,7 @@ import {
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '@/api/client';
+import { useAccessControl } from '@/hooks/useAccessControl';
 
 // Types
 interface Shipment {
@@ -59,6 +60,10 @@ const statusColors: Record<string, string> = {
 
 export default function TransportationPage() {
   const queryClient = useQueryClient();
+  const { canPerform } = useAccessControl();
+  const canCreate = canPerform('transportation', 'create');
+  const canEdit = canPerform('transportation', 'edit');
+  const canDelete = canPerform('transportation', 'delete');
   const [activeTab, setActiveTab] = useState('shipments');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState<'shipment' | 'courier'>('shipment');
@@ -218,9 +223,11 @@ export default function TransportationPage() {
             icon={<EyeOutlined />}
             onClick={() => setModalType('shipment')}
           />
-          <Popconfirm title="Delete shipment?" onConfirm={() => {}}>
-            <Button type="link" danger icon={<DeleteOutlined />} />
-          </Popconfirm>
+          {canDelete && (
+            <Popconfirm title="Delete shipment?" onConfirm={() => {}}>
+              <Button type="link" danger icon={<DeleteOutlined />} />
+            </Popconfirm>
+          )}
         </Space>
       ),
     },
@@ -257,10 +264,12 @@ export default function TransportationPage() {
       width: 150,
       render: () => (
         <Space>
-          <Button type="link" icon={<EditOutlined />} />
-          <Popconfirm title="Delete courier?" onConfirm={() => { }}>
-            <Button type="link" danger icon={<DeleteOutlined />} />
-          </Popconfirm>
+          {canEdit && <Button type="link" icon={<EditOutlined />} />}
+          {canDelete && (
+            <Popconfirm title="Delete courier?" onConfirm={() => { }}>
+              <Button type="link" danger icon={<DeleteOutlined />} />
+            </Popconfirm>
+          )}
         </Space>
       ),
     },
@@ -329,13 +338,15 @@ export default function TransportationPage() {
             children: (
               <Card>
                 <Space style={{ marginBottom: '16px' }}>
-                  <Button
-                    type="primary"
-                    icon={<PlusOutlined />}
-                    onClick={() => openModal('shipment')}
-                  >
-                    Create Shipment
-                  </Button>
+                  {canCreate && (
+                    <Button
+                      type="primary"
+                      icon={<PlusOutlined />}
+                      onClick={() => openModal('shipment')}
+                    >
+                      Create Shipment
+                    </Button>
+                  )}
                 </Space>
                 <Table
                   columns={shipmentColumns}
@@ -352,14 +363,16 @@ export default function TransportationPage() {
             label: '🚚 Couriers',
             children: (
               <Card>
-                <Button
-                  type="primary"
-                  icon={<PlusOutlined />}
-                  onClick={() => openModal('courier')}
-                  style={{ marginBottom: '16px' }}
-                >
-                  Add Courier
-                </Button>
+                {canCreate && (
+                  <Button
+                    type="primary"
+                    icon={<PlusOutlined />}
+                    onClick={() => openModal('courier')}
+                    style={{ marginBottom: '16px' }}
+                  >
+                    Add Courier
+                  </Button>
+                )}
                 <Table
                   columns={courierColumns}
                   dataSource={couriers}

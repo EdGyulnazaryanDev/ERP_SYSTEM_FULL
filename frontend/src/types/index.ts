@@ -2,7 +2,7 @@ export interface User {
   id: string;
   email: string;
   name: string;
-  tenantId: string;
+  tenantId: string | null;
   role: string;
   actorType: 'staff' | 'customer' | 'supplier';
   principalId?: string;

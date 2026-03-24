@@ -43,13 +43,13 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Post('portal-accounts')
   setPortalCredentials(@CurrentUser() user: JwtUser, @Body() dto: SetPortalCredentialsDto) {
-    return this.authService.setPortalCredentials(dto, user.tenantId);
+    return this.authService.setPortalCredentials(dto, user.tenantId!);
   }
 
   @UseGuards(JwtAuthGuard)
   @Post('logout')
   logout(@CurrentUser() user: JwtUser) {
-    return this.authService.logout(user.sub, user.tenantId);
+    return this.authService.logout(user.sub, user.tenantId!);
   }
 
   @Post('refresh')

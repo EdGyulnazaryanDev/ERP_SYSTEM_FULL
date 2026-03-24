@@ -37,6 +37,7 @@ import {
 import { ShipmentEntity, ShipmentStatus } from '../../transportation/entities/shipment.entity';
 import { AccountReceivableEntity, ARStatus } from '../../accounting/entities/account-receivable.entity';
 import { AccountPayableEntity, APStatus } from '../../accounting/entities/account-payable.entity';
+import { SystemAdmin } from '../../system-admin/entities/system-admin.entity';
 import type { JwtUser } from '../../../types/express';
 
 @Injectable()
@@ -81,6 +82,9 @@ export class AuthService {
     @InjectRepository(AccountPayableEntity)
     private accountPayableRepo: Repository<AccountPayableEntity>,
 
+    @InjectRepository(SystemAdmin)
+    private systemAdminRepo: Repository<SystemAdmin>,
+
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly rbacSeeder: DefaultRbacSeeder,
@@ -92,6 +96,44 @@ export class AuthService {
   async login(dto: LoginDto) {
     if (dto.actorType && dto.actorType !== 'staff') {
       return this.loginPortal(dto);
+    }
+
+    // Check platform system admin first
+    const systemAdmin = await this.systemAdminRepo.findOne({
+      where: { email: dto.email.trim().toLowerCase(), isActive: true },
+    });
+
+    if (systemAdmin) {
+      const isMatch = await bcrypt.compare(dto.password, systemAdmin.password);
+      if (!isMatch) throw new UnauthorizedException();
+
+      await this.complianceAuditService?.createAuditLog(
+        {
+          action: AuditAction.LOGIN,
+          entity_type: 'system_admin',
+          entity_id: systemAdmin.id,
+          description: 'Platform Super Admin login',
+          severity: AuditSeverity.LOW,
+        },
+        systemAdmin.id,
+        'system',
+      );
+
+      const tokens = await this.generateTokens(
+        systemAdmin.id,
+        null,
+        systemAdmin.email,
+        'staff',
+        systemAdmin.id,
+        'system_admin',
+        'Platform Admin',
+        true,
+      );
+
+      const hashed = await bcrypt.hash(tokens.refreshToken, 10);
+      await this.systemAdminRepo.update(systemAdmin.id, { refreshToken: hashed });
+
+      return tokens;
     }
 
     const user = await this.userRepo.findOne({ where: { email: dto.email } });
@@ -330,6 +372,24 @@ export class AuthService {
         secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
       });
 
+      // System admin refresh
+      if (payload.isSystemAdmin) {
+        const systemAdmin = await this.systemAdminRepo.findOne({
+          where: { id: payload.sub, isActive: true },
+        });
+        if (!systemAdmin || !systemAdmin.refreshToken) throw new UnauthorizedException();
+        const isMatch = await bcrypt.compare(refreshToken, systemAdmin.refreshToken);
+        if (!isMatch) throw new UnauthorizedException();
+
+        const tokens = await this.generateTokens(
+          systemAdmin.id, null, systemAdmin.email, 'staff',
+          systemAdmin.id, 'system_admin', 'Platform Admin', true,
+        );
+        const hashed = await bcrypt.hash(tokens.refreshToken, 10);
+        await this.systemAdminRepo.update(systemAdmin.id, { refreshToken: hashed });
+        return tokens;
+      }
+
       const user = await this.userRepo.findOne({
         where: { id: payload.sub },
       });
@@ -401,7 +461,7 @@ export class AuthService {
 
   private async generateTokens(
     userId: string,
-    tenantId: string,
+    tenantId: string | null,
     email: string,
     actorType: 'staff' | 'customer' | 'supplier',
     principalId: string,
@@ -529,8 +589,9 @@ export class AuthService {
   }
 
   private async getCustomerPortalSummary(user: JwtUser) {
+    const tenantId = user.tenantId!;
     const customer = await this.customerRepo.findOne({
-      where: { id: user.principalId, tenant_id: user.tenantId },
+      where: { id: user.principalId, tenant_id: tenantId },
     });
 
     if (!customer) {
@@ -540,7 +601,7 @@ export class AuthService {
     const [transactions, receivables, activities, quotes] = await Promise.all([
       this.transactionRepo.find({
         where: {
-          tenant_id: user.tenantId,
+          tenant_id: tenantId,
           customer_id: customer.id,
           type: TransactionType.SALE,
         },
@@ -549,14 +610,14 @@ export class AuthService {
       }),
       this.accountReceivableRepo.find({
         where: {
-          tenant_id: user.tenantId,
+          tenant_id: tenantId,
           customer_id: customer.id,
         },
         order: { due_date: 'ASC', created_at: 'DESC' },
       }),
       this.activityRepo.find({
         where: {
-          tenant_id: user.tenantId,
+          tenant_id: tenantId,
           related_to: RelatedToType.CUSTOMER,
           related_id: customer.id,
         },
@@ -565,7 +626,7 @@ export class AuthService {
       }),
       this.quoteRepo.find({
         where: {
-          tenant_id: user.tenantId,
+          tenant_id: tenantId,
           customer_id: customer.id,
         },
         relations: ['items'],
@@ -578,7 +639,7 @@ export class AuthService {
     const shipments = transactionIds.length
       ? await this.shipmentRepo.find({
           where: {
-            tenant_id: user.tenantId,
+            tenant_id: tenantId,
             transaction_id: In(transactionIds),
           },
           relations: ['items', 'courier'],
@@ -844,8 +905,9 @@ export class AuthService {
   }
 
   private async getSupplierPortalSummary(user: JwtUser) {
+    const tenantId = user.tenantId!;
     const supplier = await this.supplierRepo.findOne({
-      where: { id: user.principalId, tenant_id: user.tenantId },
+      where: { id: user.principalId, tenant_id: tenantId },
     });
 
     if (!supplier) {
@@ -855,7 +917,7 @@ export class AuthService {
     const [transactions, payables] = await Promise.all([
       this.transactionRepo.find({
         where: {
-          tenant_id: user.tenantId,
+          tenant_id: tenantId,
           supplier_id: supplier.id,
           type: TransactionType.PURCHASE,
         },
@@ -864,7 +926,7 @@ export class AuthService {
       }),
       this.accountPayableRepo.find({
         where: {
-          tenant_id: user.tenantId,
+          tenant_id: tenantId,
           vendor_id: supplier.id,
         },
         order: { due_date: 'ASC', created_at: 'DESC' },
@@ -875,7 +937,7 @@ export class AuthService {
     const shipments = transactionIds.length
       ? await this.shipmentRepo.find({
           where: {
-            tenant_id: user.tenantId,
+            tenant_id: tenantId,
             transaction_id: In(transactionIds),
           },
           relations: ['items', 'courier'],

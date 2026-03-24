@@ -37,6 +37,11 @@ export class PermissionGuard implements CanActivate {
       throw new ForbiddenException('User not authenticated');
     }
 
+    // System admin bypasses all permission checks
+    if (user.isSystemAdmin) {
+      return true;
+    }
+
     const tenantId = request.tenantId ?? user.tenantId;
     if (!tenantId) {
       throw new ForbiddenException('Missing tenant context');

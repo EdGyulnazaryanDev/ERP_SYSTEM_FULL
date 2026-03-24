@@ -195,8 +195,8 @@ export default function AccessGovernanceTab() {
     () => roles.find((role) => role.id === selectedRoleId),
     [roles, selectedRoleId],
   );
-  const canManagePlan = currentUserRoles.some((role) => isSuperAdminRoleName(role.name));
-  const canManageAccess = currentUserRoles.some((role) => isPrivilegedRoleName(role.name));
+  const canManagePlan = user?.isSystemAdmin || currentUserRoles.some((role) => isSuperAdminRoleName(role.name));
+  const canManageAccess = user?.isSystemAdmin || currentUserRoles.some((role) => isSuperAdminRoleName(role.name));
 
   const currentFeatures = currentSubscription?.plan.features ?? [];
 
@@ -225,11 +225,11 @@ export default function AccessGovernanceTab() {
         ...current[pageKey],
         ...(permissionKey === 'can_view' && !value
           ? {
-              can_create: false,
-              can_edit: false,
-              can_delete: false,
-              can_export: false,
-            }
+            can_create: false,
+            can_edit: false,
+            can_delete: false,
+            can_export: false,
+          }
           : {}),
         [permissionKey]: value,
       },
@@ -238,7 +238,7 @@ export default function AccessGovernanceTab() {
 
   const handleSaveAccess = () => {
     if (!canManageAccess) {
-      message.warning('Only admin or super admin can manage page rules');
+      message.warning('Only super admin can manage page rules');
       return;
     }
 
@@ -325,7 +325,7 @@ export default function AccessGovernanceTab() {
           checked={row[permissionKey]}
           disabled={
             !canManageAccess ||
-            row.plan_included === false ||
+            (!canManagePlan && row.plan_included === false) ||
             (permissionKey !== 'can_view' && !row.can_view)
           }
           onChange={(checked) => updateRow(row.page_key, permissionKey, checked)}
@@ -353,8 +353,8 @@ export default function AccessGovernanceTab() {
             <Alert
               type="warning"
               showIcon
-              message="Plan management is super-admin only"
-              description="Tenant admins can manage roles and page rules only inside the active plan. Only super admin can change that plan."
+              message="Access Governance is super-admin only"
+              description="Only super admin can manage plans, roles, and page rules."
             />
           )}
           <Radio.Group
@@ -438,11 +438,11 @@ export default function AccessGovernanceTab() {
             <Button
               disabled={!canManageAccess}
               onClick={() =>
-                    selectedRoleId
+                selectedRoleId
                   ? initializeRoleMutation.mutate({
-                      roleId: selectedRoleId,
-                      isAdmin: isPrivilegedRoleName(selectedRole?.name),
-                    })
+                    roleId: selectedRoleId,
+                    isAdmin: isPrivilegedRoleName(selectedRole?.name),
+                  })
                   : undefined
               }
               loading={initializeRoleMutation.isPending}

@@ -8,6 +8,8 @@ import {
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 import { User } from '../users/user.entity';
+import { UserRole } from '../roles/user-role.entity';
+import { Role } from '../roles/role.entity';
 import {
   BillingCycle,
   DEFAULT_PLAN_DEFINITIONS,
@@ -46,6 +48,10 @@ export class SubscriptionsService implements OnModuleInit {
     private readonly subscriptionRepository: Repository<CompanySubscription>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(UserRole)
+    private readonly userRoleRepository: Repository<UserRole>,
+    @InjectRepository(Role)
+    private readonly roleRepository: Repository<Role>,
     @InjectDataSource()
     private readonly dataSource: DataSource,
   ) {}
@@ -431,6 +437,50 @@ export class SubscriptionsService implements OnModuleInit {
         ),
       );
     }
+  }
+
+  async isSuperAdminUser(userId: string, tenantId: string): Promise<boolean> {
+    const user = await this.userRepository.findOne({ where: { id: userId, tenantId } });
+    // Global system admin always qualifies
+    if (user?.isSystemAdmin) return true;
+
+    // Check if user has a "superadmin" role within this tenant
+    const userRoles = await this.userRoleRepository.find({ where: { user_id: userId } });
+    if (userRoles.length === 0) return false;
+
+    const roleIds = userRoles.map((ur) => ur.role_id);
+    const roles = await this.roleRepository.find({
+      where: roleIds.map((id) => ({ id, tenant_id: tenantId })),
+    });
+
+    return roles.some((r) => this.normalizeRoleName(r.name) === 'superadmin');
+  }
+
+  async isAdminOrSuperAdminUser(userId: string, tenantId: string): Promise<boolean> {
+    const user = await this.userRepository.findOne({ where: { id: userId, tenantId } });
+    if (user?.isSystemAdmin) return true;
+
+    const userRoles = await this.userRoleRepository.find({ where: { user_id: userId } });
+    if (userRoles.length === 0) return false;
+
+    const roleIds = userRoles.map((ur) => ur.role_id);
+    const roles = await this.roleRepository.find({
+      where: roleIds.map((id) => ({ id, tenant_id: tenantId })),
+    });
+
+    return roles.some((r) => {
+      const n = this.normalizeRoleName(r.name);
+      return n === 'superadmin' || n === 'admin';
+    });
+  }
+
+  private normalizeRoleName(name: string): string {
+    return name.trim().toLowerCase().replace(/[\s_-]+/g, '');
+  }
+
+  async assertSuperAdmin(userId: string, tenantId: string): Promise<void> {
+    const ok = await this.isSuperAdminUser(userId, tenantId);
+    if (!ok) throw new ForbiddenException('Forbidden: super admin access required');
   }
 
   private mapPlan(plan: HydratedPlan) {

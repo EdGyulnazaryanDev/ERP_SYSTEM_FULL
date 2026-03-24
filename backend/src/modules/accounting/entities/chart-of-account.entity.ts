@@ -46,6 +46,7 @@ export enum AccountSubType {
 }
 
 @Entity('chart_of_accounts')
+@Index(['tenant_id', 'account_code'], { unique: true })
 export class ChartOfAccountEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -53,7 +54,7 @@ export class ChartOfAccountEntity {
   @Column({ type: 'uuid' })
   tenant_id: string;
 
-  @Column({ type: 'varchar', length: 50, unique: true })
+  @Column({ type: 'varchar', length: 50 })
   account_code: string;
 
   @Column({ type: 'varchar', length: 255 })

@@ -61,7 +61,9 @@ export function useAccessControl() {
   );
 
   const enabledFeatures = subscription?.plan.features ?? [];
-  const isPrivilegedUser = userRoles.some((role) => {
+  const isSystemAdmin = user?.isSystemAdmin === true;
+  // Only superadmin (and system admin) bypass all restrictions
+  const isPrivilegedUser = isSystemAdmin || userRoles.some((role) => {
     const normalizedName = normalizeRoleName(role.name);
     return normalizedName === 'superadmin';
   });
@@ -69,38 +71,40 @@ export function useAccessControl() {
   const getPageAccess = (pageKey: string) => pageAccessMap.get(pageKey);
 
   const canAccessPage = (pageKey: string) => {
+    if (isSystemAdmin) return true;
+    if (isPrivilegedUser) return true;
+
     const page = pageCatalogMap.get(pageKey);
     const access = pageAccessMap.get(pageKey);
 
-    const canView = access?.can_view ?? true;
-    const featureAllowed = isPrivilegedUser
-      ? true
-      : !page?.requiredFeature
-        || enabledFeatures.includes(page.requiredFeature as any);
+    // Feature gate check
+    const featureAllowed = !page?.requiredFeature
+      || enabledFeatures.includes(page.requiredFeature as any);
+
+    // No access row → deny
+    const canView = access?.can_view ?? false;
 
     return canView && featureAllowed;
   };
 
   const canPerform = (pageKey: string, action: PageAction) => {
-    if (!canAccessPage(pageKey)) {
-      return false;
-    }
+    // system admin can do everything
+    if (isSystemAdmin) return true;
+    // superadmin bypasses all restrictions
+    if (isPrivilegedUser) return true;
 
     const access = getPageAccess(pageKey);
 
+    // No access row configured → deny by default for non-privileged users
+    if (!access) return false;
+
     switch (action) {
-      case 'view':
-        return access?.can_view ?? true;
-      case 'create':
-        return access?.can_create ?? true;
-      case 'edit':
-        return access?.can_edit ?? true;
-      case 'delete':
-        return access?.can_delete ?? true;
-      case 'export':
-        return access?.can_export ?? true;
-      default:
-        return false;
+      case 'view':   return access.can_view   ?? false;
+      case 'create': return access.can_create ?? false;
+      case 'edit':   return access.can_edit   ?? false;
+      case 'delete': return access.can_delete ?? false;
+      case 'export': return access.can_export ?? false;
+      default:       return false;
     }
   };
 

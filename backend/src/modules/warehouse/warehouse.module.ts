@@ -10,6 +10,9 @@ import { TransactionEntity } from '../transactions/entities/transaction.entity';
 import { TransactionItemEntity } from '../transactions/entities/transaction-item.entity';
 import { ShipmentEntity } from '../transportation/entities/shipment.entity';
 import { ShipmentItemEntity } from '../transportation/entities/shipment-item.entity';
+import { AccountPayableEntity } from '../accounting/entities/account-payable.entity';
+import { AccountReceivableEntity } from '../accounting/entities/account-receivable.entity';
+import { AuditLogEntity } from '../compliance-audit/entities/audit-log.entity';
 import { InventoryModule } from '../inventory/inventory.module';
 
 @Module({
@@ -23,6 +26,9 @@ import { InventoryModule } from '../inventory/inventory.module';
       TransactionItemEntity,
       ShipmentEntity,
       ShipmentItemEntity,
+      AccountPayableEntity,
+      AccountReceivableEntity,
+      AuditLogEntity,
     ]),
     InventoryModule,
   ],
@@ -30,4 +36,4 @@ import { InventoryModule } from '../inventory/inventory.module';
   providers: [WarehouseService],
   exports: [WarehouseService],
 })
-export class WarehouseModule {}
+export class WarehouseModule { }

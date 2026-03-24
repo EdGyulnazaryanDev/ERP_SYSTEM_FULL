@@ -28,6 +28,11 @@ export class TenantInterceptor implements NestInterceptor {
       return next.handle();
     }
 
+    // System admin has no tenant — skip tenant validation
+    if (request.user.isSystemAdmin) {
+      return next.handle();
+    }
+
     if (!request.user?.tenantId) {
       throw new ForbiddenException('Tenant not found in token');
     }

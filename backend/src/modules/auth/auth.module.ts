@@ -25,6 +25,7 @@ import { TransactionEntity } from '../transactions/entities/transaction.entity';
 import { ShipmentEntity } from '../transportation/entities/shipment.entity';
 import { AccountReceivableEntity } from '../accounting/entities/account-receivable.entity';
 import { AccountPayableEntity } from '../accounting/entities/account-payable.entity';
+import { SystemAdmin } from '../system-admin/entities/system-admin.entity';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { AccountPayableEntity } from '../accounting/entities/account-payable.ent
       ShipmentEntity,
       AccountReceivableEntity,
       AccountPayableEntity,
+      SystemAdmin,
     ]),
     PassportModule,
     ConfigModule,

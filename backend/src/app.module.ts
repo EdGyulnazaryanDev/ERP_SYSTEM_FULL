@@ -34,6 +34,7 @@ import { WorkflowAutomationModule } from './modules/workflow-automation/workflow
 import { ComplianceAuditModule } from './modules/compliance-audit/compliance-audit.module';
 import { CommunicationModule } from './modules/communication/communication.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
+import { SystemAdminModule } from './modules/system-admin/system-admin.module';
 import { RedisModule } from './infrastructure/redis/redis.module';
 import { KafkaModule } from './infrastructure/kafka/kafka.module';
 import { MinioModule } from './infrastructure/minio/minio.module';
@@ -66,6 +67,7 @@ import { TenantInterceptor } from './common/interceptors/tenant.interceptor';
     }),
     CoreModule,
     SubscriptionsModule,
+    SystemAdminModule,
     AuthModule,
     TenantsModule,
     UsersModule,

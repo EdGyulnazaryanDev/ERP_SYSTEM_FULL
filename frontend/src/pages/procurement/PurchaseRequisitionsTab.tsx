@@ -193,12 +193,7 @@ export default function PurchaseRequisitionsTab() {
         rowKey="id"
         size="small"
         pagination={{ pageSize: 15, showTotal: (t, r) => `${r[0]}–${r[1]} of ${t}` }}
-        rowClassName={(r: any) => {
-          const s = (r.status || '').toLowerCase();
-          if (s === 'approved') return 'row-approved';
-          if (s === 'rejected') return 'row-rejected';
-          return '';
-        }}
+        rowClassName={() => ''}
         expandable={{
           expandedRowRender: (record: any) => {
             const items = record.items ?? [];
@@ -282,11 +277,6 @@ export default function PurchaseRequisitionsTab() {
           </Form>
         </Modal>
       )}
-
-      <style>{`
-        .row-approved td { background: #f6ffed !important; }
-        .row-rejected td { background: #fff2f0 !important; opacity: 0.8; }
-      `}</style>
     </div>
   );
 }

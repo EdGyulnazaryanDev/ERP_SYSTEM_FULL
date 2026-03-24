@@ -10,7 +10,7 @@ import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 export const DEFAULT_PAGES = [
   { key: 'dashboard', name: 'Dashboard', path: '/', category: 'Core' },
   { key: 'products', name: 'Products & Services', path: '/products', category: 'Operations' },
-  { key: 'suppliers', name: 'Suppliers', path: '/suppliers', category: 'Operations' },
+  { key: 'suppliers', name: 'Suppliers', path: '/suppliers', category: 'Operations', requiredFeature: PlanFeature.SUPPLIERS },
   { key: 'categories', name: 'Categories', path: '/categories', category: 'Operations' },
   { key: 'inventory', name: 'Inventory', path: '/inventory', category: 'Operations' },
   { key: 'transactions', name: 'Transactions', path: '/transactions', category: 'Operations' },
@@ -21,10 +21,10 @@ export const DEFAULT_PAGES = [
     category: 'Finance',
     requiredFeature: PlanFeature.ACCOUNTING,
   },
-  { key: 'payments', name: 'Payments', path: '/payments', category: 'Finance' },
-  { key: 'crm', name: 'CRM', path: '/crm', category: 'Sales' },
-  { key: 'hr', name: 'Human Resources', path: '/hr', category: 'People' },
-  { key: 'procurement', name: 'Procurement', path: '/procurement', category: 'Operations' },
+  { key: 'payments', name: 'Payments', path: '/payments', category: 'Finance', requiredFeature: PlanFeature.PAYMENTS },
+  { key: 'crm', name: 'CRM', path: '/crm', category: 'Sales', requiredFeature: PlanFeature.CRM },
+  { key: 'hr', name: 'Human Resources', path: '/hr', category: 'People', requiredFeature: PlanFeature.HR },
+  { key: 'procurement', name: 'Procurement', path: '/procurement', category: 'Operations', requiredFeature: PlanFeature.PROCUREMENT },
   {
     key: 'warehouse',
     name: 'Warehouse',
@@ -32,13 +32,13 @@ export const DEFAULT_PAGES = [
     category: 'Operations',
     requiredFeature: PlanFeature.WAREHOUSE,
   },
-  { key: 'transportation', name: 'Transportation', path: '/transportation', category: 'Logistics' },
-  { key: 'projects', name: 'Projects', path: '/projects', category: 'Execution' },
-  { key: 'manufacturing', name: 'Manufacturing', path: '/manufacturing', category: 'Operations' },
-  { key: 'equipment', name: 'Assets', path: '/equipment', category: 'Operations' },
-  { key: 'services', name: 'Services', path: '/services', category: 'Operations' },
-  { key: 'communication', name: 'Communication', path: '/communication', category: 'Collaboration' },
-  { key: 'compliance', name: 'Compliance', path: '/compliance', category: 'Governance' },
+  { key: 'transportation', name: 'Transportation', path: '/transportation', category: 'Logistics', requiredFeature: PlanFeature.TRANSPORTATION },
+  { key: 'projects', name: 'Projects', path: '/projects', category: 'Execution', requiredFeature: PlanFeature.PROJECTS },
+  { key: 'manufacturing', name: 'Manufacturing', path: '/manufacturing', category: 'Operations', requiredFeature: PlanFeature.MANUFACTURING },
+  { key: 'equipment', name: 'Assets', path: '/equipment', category: 'Operations', requiredFeature: PlanFeature.EQUIPMENT },
+  { key: 'services', name: 'Services', path: '/services', category: 'Operations', requiredFeature: PlanFeature.SERVICES },
+  { key: 'communication', name: 'Communication', path: '/communication', category: 'Collaboration', requiredFeature: PlanFeature.COMMUNICATION },
+  { key: 'compliance', name: 'Compliance', path: '/compliance', category: 'Governance', requiredFeature: PlanFeature.COMPLIANCE },
   {
     key: 'bi',
     name: 'BI & Reports',
@@ -126,25 +126,50 @@ export class SettingsService {
     userId: string,
     tenantId: string,
   ): Promise<any> {
+    const isSysAdmin = await this.subscriptionsService.isSuperAdminUser(userId, tenantId);
+
+    // System admin / superadmin gets full access to all pages — no RBAC rows needed
+    if (isSysAdmin) {
+      return DEFAULT_PAGES.map((page) => ({
+        page_key: page.key,
+        page_name: page.name,
+        page_path: page.path,
+        can_view: true,
+        can_create: true,
+        can_edit: true,
+        can_delete: true,
+        can_export: true,
+      }));
+    }
+
     const userRoles = await this.userRoleRepo.find({
       where: { user_id: userId },
     });
 
-    const roleIds = userRoles.map((ur) => ur.role_id);
-    const bypassSubscription = await this.subscriptionsService.isSuperAdminUser(
-      userId,
-      tenantId,
-    );
+    if (userRoles.length === 0) {
+      // No roles assigned — deny everything
+      return [];
+    }
 
-    return this.getPageAccessForUser(roleIds, tenantId, { bypassSubscription });
+    const roleIds = userRoles.map((ur) => ur.role_id);
+
+    // Auto-initialize default access rows for any role that has none yet
+    for (const roleId of roleIds) {
+      const existingCount = await this.pageAccessRepo.count({
+        where: { role_id: roleId, tenant_id: tenantId },
+      });
+      if (existingCount === 0) {
+        // Initialize with view-only defaults (no create/edit/delete/export)
+        await this.initializeDefaultAccess(roleId, tenantId, false);
+      }
+    }
+
+    return this.getPageAccessForUser(roleIds, tenantId, { bypassSubscription: false });
   }
 
   async getPageCatalog(tenantId: string, userId: string) {
-    const bypassSubscription = await this.subscriptionsService.isSuperAdminUser(
-      userId,
-      tenantId,
-    );
-    const allowedPageKeys = bypassSubscription
+    const isSuperAdmin = await this.subscriptionsService.isSuperAdminUser(userId, tenantId);
+    const allowedPageKeys = isSuperAdmin
       ? new Set(DEFAULT_PAGES.map((page) => page.key))
       : await this.getPlanAllowedPageKeys(tenantId);
 
@@ -159,7 +184,12 @@ export class SettingsService {
     await this.assertCanManagePageAccess(userId, tenantId, roleId);
     const accessList = await this.getPageAccessForRole(roleId, tenantId);
     const accessMap = new Map(accessList.map((access) => [access.page_key, access]));
-    const allowedPageKeys = await this.getPlanAllowedPageKeys(tenantId);
+
+    // Superadmin sees all pages as plan_included regardless of subscription
+    const isSuperAdmin = await this.subscriptionsService.isSuperAdminUser(userId, tenantId);
+    const allowedPageKeys = isSuperAdmin
+      ? new Set(DEFAULT_PAGES.map((p) => p.key))
+      : await this.getPlanAllowedPageKeys(tenantId);
 
     return DEFAULT_PAGES.map((page) => {
       const access = accessMap.get(page.key);
@@ -196,7 +226,10 @@ export class SettingsService {
     });
 
     const page = DEFAULT_PAGES.find((p) => p.key === pageKey);
-    const allowedPageKeys = await this.getPlanAllowedPageKeys(tenantId);
+    const isSuperAdmin = await this.subscriptionsService.isSuperAdminUser(userId, tenantId);
+    const allowedPageKeys = isSuperAdmin
+      ? new Set(DEFAULT_PAGES.map((p) => p.key))
+      : await this.getPlanAllowedPageKeys(tenantId);
     const sanitizedPermissions = this.sanitizePermissions(
       permissions,
       allowedPageKeys.has(pageKey),
@@ -319,12 +352,10 @@ export class SettingsService {
     tenantId: string,
     roleId: string,
   ) {
-    const canManage =
-      await this.subscriptionsService.isAdminOrSuperAdminUser(userId, tenantId);
+    // Only superadmin (or system admin) can manage page access rules
+    const canManage = await this.subscriptionsService.isSuperAdminUser(userId, tenantId);
     if (!canManage) {
-      throw new ForbiddenException(
-        'Only admin or super admin can manage page access',
-      );
+      throw new ForbiddenException('Only super admin can manage page access');
     }
 
     const targetRole = await this.roleRepo.findOne({
@@ -333,17 +364,6 @@ export class SettingsService {
 
     if (!targetRole) {
       throw new NotFoundException('Role not found');
-    }
-
-    const targetIsSuperAdmin =
-      this.normalizeRoleName(targetRole.name) === 'superadmin';
-    if (
-      targetIsSuperAdmin &&
-      !(await this.subscriptionsService.isSuperAdminUser(userId, tenantId))
-    ) {
-      throw new ForbiddenException(
-        'Only super admin can manage the super admin role',
-      );
     }
   }
 

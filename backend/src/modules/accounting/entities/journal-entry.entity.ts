@@ -5,6 +5,7 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   OneToMany,
+  Index,
 } from 'typeorm';
 import { JournalEntryLineEntity } from './journal-entry-line.entity';
 
@@ -26,6 +27,7 @@ export enum JournalEntryType {
 }
 
 @Entity('journal_entries')
+@Index(['tenant_id', 'entry_number'], { unique: true })
 export class JournalEntryEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -33,7 +35,7 @@ export class JournalEntryEntity {
   @Column({ type: 'uuid' })
   tenant_id: string;
 
-  @Column({ type: 'varchar', length: 50, unique: true })
+  @Column({ type: 'varchar', length: 50 })
   entry_number: string;
 
   @Column({ type: 'date' })

@@ -13,6 +13,7 @@ import {
 import { WarehouseService } from './warehouse.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentTenant } from '../../common/decorators/current-tenant.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { MovementType } from './entities/stock-movement.entity';
 import { RequireFeature } from '../subscriptions/decorators/require-feature.decorator';
 import { RequireFeatureGuard } from '../subscriptions/guards/require-feature.guard';
@@ -22,7 +23,7 @@ import { PlanFeature } from '../subscriptions/subscription.constants';
 @RequireFeature(PlanFeature.WAREHOUSE)
 @Controller('warehouse')
 export class WarehouseController {
-  constructor(private readonly warehouseService: WarehouseService) {}
+  constructor(private readonly warehouseService: WarehouseService) { }
 
   // ── Warehouses ──────────────────────────────────────────────
 
@@ -140,5 +141,36 @@ export class WarehouseController {
     @CurrentTenant() tenantId: string,
   ) {
     return this.warehouseService.deleteMovement(id, tenantId);
+  }
+
+  /**
+   * Approve a pending stock movement.
+   * Executes inventory change, creates JE, AP/AR bill, shipment (TRANSFER), compliance log.
+   */
+  @Post('movements/:id/approve')
+  approveMovement(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() user: { id: string },
+  ) {
+    return this.warehouseService.approveMovement(id, user?.id || 'system', tenantId);
+  }
+
+  /**
+   * Reject a pending stock movement. Releases any stock reservation.
+   */
+  @Post('movements/:id/reject')
+  rejectMovement(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { reason?: string },
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() user: { id: string },
+  ) {
+    return this.warehouseService.rejectMovement(
+      id,
+      user?.id || 'system',
+      body?.reason || 'No reason provided',
+      tenantId,
+    );
   }
 }

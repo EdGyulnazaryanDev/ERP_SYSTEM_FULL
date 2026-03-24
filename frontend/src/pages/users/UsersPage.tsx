@@ -17,6 +17,7 @@ import {
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { userService, roleService, type PaginatedResponse } from '@/services';
+import { useAccessControl } from '@/hooks/useAccessControl';
 
 interface User {
   id: string;
@@ -32,19 +33,18 @@ export default function UsersPage() {
   const [form] = Form.useForm();
   const queryClient = useQueryClient();
   const [filters, setFilters] = useState({ page: 1, pageSize: 10, search: '' });
-
-  console.log('UsersPage rendered, filters:', filters);
+  const { canPerform } = useAccessControl();
+  const canCreate = canPerform('users', 'create');
+  const canEdit = canPerform('users', 'edit');
+  const canDelete = canPerform('users', 'delete');
 
   const { data: users, isLoading, error, isError } = useQuery<PaginatedResponse<User>>({
     queryKey: ['users', filters],
     queryFn: async () => {
       try {
         const res = await userService.getAll({ page: filters.page, pageSize: filters.pageSize, search: filters.search });
-        // BaseService.getAll returns AxiosResponse<PaginatedResponse<User>>
-        console.log('Users fetched:', res.data);
         return res.data;
       } catch (e: any) {
-        console.error('Error fetching users:', e);
         throw e;
       }
     },
@@ -171,10 +171,12 @@ export default function UsersPage() {
       key: 'actions',
       render: (_: unknown, r: User) => (
         <Space>
-          <Button type="link" icon={<EditOutlined />} onClick={() => openEdit(r)}>Edit</Button>
-          <Popconfirm title={`Delete ${r.email}?`} onConfirm={() => deleteUserMutation.mutate(r.id)}>
-            <Button type="link" danger icon={<DeleteOutlined />}>Delete</Button>
-          </Popconfirm>
+          {canEdit && <Button type="link" icon={<EditOutlined />} onClick={() => openEdit(r)}>Edit</Button>}
+          {canDelete && (
+            <Popconfirm title={`Delete ${r.email}?`} onConfirm={() => deleteUserMutation.mutate(r.id)}>
+              <Button type="link" danger icon={<DeleteOutlined />}>Delete</Button>
+            </Popconfirm>
+          )}
         </Space>
       ),
     },
@@ -191,7 +193,7 @@ export default function UsersPage() {
             onSearch={(q) => setFilters({ ...filters, search: q as string, page: 1 })}
             style={{ width: 240 }}
           />
-          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>Create User</Button>
+          {canCreate && <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>Create User</Button>}
         </Space>
       </div>
 
