@@ -107,10 +107,14 @@ export class SettingsService {
   async getPageAccessForUserById(
     userId: string,
     tenantId: string,
+    jwtRole?: string,
   ): Promise<any> {
-    const isSysAdmin = await this.subscriptionsService.isSuperAdminUser(userId, tenantId);
+    const normalizedJwt = jwtRole?.trim().toLowerCase().replace(/[\s_-]+/g, '') ?? '';
+    const isJwtPrivileged = normalizedJwt === 'admin' || normalizedJwt === 'superadmin';
+    const isSysAdmin = isJwtPrivileged
+      || await this.subscriptionsService.isAdminOrSuperAdminUser(userId, tenantId);
 
-    // System admin / superadmin gets full access to all pages — no RBAC rows needed
+    // Admin / superadmin gets full access to all pages — no RBAC rows needed
     if (isSysAdmin) {
       return DEFAULT_PAGES.map((page) => ({
         page_key: page.key,
@@ -149,9 +153,11 @@ export class SettingsService {
     return this.getPageAccessForUser(roleIds, tenantId, { bypassSubscription: false });
   }
 
-  async getPageCatalog(tenantId: string, userId: string) {
-    const isSuperAdmin = await this.subscriptionsService.isSuperAdminUser(userId, tenantId);
-    const allowedPageKeys = isSuperAdmin
+  async getPageCatalog(tenantId: string, userId: string, jwtRole?: string) {
+    const normalizedJwt = jwtRole?.trim().toLowerCase().replace(/[\s_-]+/g, '') ?? '';
+    const isPrivileged = normalizedJwt === 'admin' || normalizedJwt === 'superadmin'
+      || await this.subscriptionsService.isAdminOrSuperAdminUser(userId, tenantId);
+    const allowedPageKeys = isPrivileged
       ? new Set(DEFAULT_PAGES.map((page) => page.key))
       : await this.getPlanAllowedPageKeys(tenantId);
 
@@ -162,16 +168,23 @@ export class SettingsService {
     roleId: string,
     tenantId: string,
     userId: string,
+    jwtRole?: string,
   ) {
-    await this.assertCanManagePageAccess(userId, tenantId, roleId);
+    await this.assertCanManagePageAccess(userId, tenantId, roleId, jwtRole);
+    
+    // Auto-initialize if no rows exist yet for this role
+    const existingCount = await this.pageAccessRepo.count({
+      where: { role_id: roleId, tenant_id: tenantId },
+    });
+    if (existingCount === 0) {
+      await this.initializeDefaultAccess(roleId, tenantId, false);
+    }
+
     const accessList = await this.getPageAccessForRole(roleId, tenantId);
     const accessMap = new Map(accessList.map((access) => [access.page_key, access]));
 
-    // Superadmin sees all pages as plan_included regardless of subscription
-    const isSuperAdmin = await this.subscriptionsService.isSuperAdminUser(userId, tenantId);
-    const allowedPageKeys = isSuperAdmin
-      ? new Set(DEFAULT_PAGES.map((p) => p.key))
-      : await this.getPlanAllowedPageKeys(tenantId);
+    // Always filter by actual subscription plan — admin privilege doesn't bypass plan limits
+    const allowedPageKeys = await this.getPlanAllowedPageKeys(tenantId);
 
     return DEFAULT_PAGES.map((page) => {
       const access = accessMap.get(page.key);
@@ -201,15 +214,18 @@ export class SettingsService {
     userId: string,
     pageKey: string,
     permissions: Partial<PageAccessEntity>,
+    jwtRole?: string,
   ): Promise<PageAccessEntity> {
-    await this.assertCanManagePageAccess(userId, tenantId, roleId);
+    await this.assertCanManagePageAccess(userId, tenantId, roleId, jwtRole);
     let access = await this.pageAccessRepo.findOne({
       where: { role_id: roleId, tenant_id: tenantId, page_key: pageKey },
     });
 
     const page = DEFAULT_PAGES.find((p) => p.key === pageKey);
-    const isSuperAdmin = await this.subscriptionsService.isSuperAdminUser(userId, tenantId);
-    const allowedPageKeys = isSuperAdmin
+    const normalizedJwt = jwtRole?.trim().toLowerCase().replace(/[\s_-]+/g, '') ?? '';
+    const isPrivileged = normalizedJwt === 'admin' || normalizedJwt === 'superadmin'
+      || await this.subscriptionsService.isAdminOrSuperAdminUser(userId, tenantId);
+    const allowedPageKeys = isPrivileged
       ? new Set(DEFAULT_PAGES.map((p) => p.key))
       : await this.getPlanAllowedPageKeys(tenantId);
     const sanitizedPermissions = this.sanitizePermissions(
@@ -238,6 +254,7 @@ export class SettingsService {
     tenantId: string,
     userIdOrIsAdmin: string | boolean,
     isAdmin = false,
+    jwtRole?: string,
   ): Promise<void> {
     const userId =
       typeof userIdOrIsAdmin === 'string' ? userIdOrIsAdmin : undefined;
@@ -245,7 +262,7 @@ export class SettingsService {
       typeof userIdOrIsAdmin === 'boolean' ? userIdOrIsAdmin : isAdmin;
 
     if (userId) {
-      await this.assertCanManagePageAccess(userId, tenantId, roleId);
+      await this.assertCanManagePageAccess(userId, tenantId, roleId, jwtRole);
     }
     const allowedPageKeys = await this.getPlanAllowedPageKeys(tenantId);
 
@@ -280,8 +297,9 @@ export class SettingsService {
       page_key: string;
       permissions: Partial<PageAccessEntity>;
     }>,
+    jwtRole?: string,
   ): Promise<PageAccessEntity[]> {
-    await this.assertCanManagePageAccess(userId, tenantId, roleId);
+    await this.assertCanManagePageAccess(userId, tenantId, roleId, jwtRole);
     const results: PageAccessEntity[] = [];
 
     for (const item of accessList) {
@@ -291,6 +309,7 @@ export class SettingsService {
         userId,
         item.page_key,
         item.permissions,
+        jwtRole,
       );
       results.push(access);
     }
@@ -336,11 +355,17 @@ export class SettingsService {
     userId: string,
     tenantId: string,
     roleId: string,
+    jwtRole?: string,
   ) {
-    // Only superadmin (or system admin) can manage page access rules
-    const canManage = await this.subscriptionsService.isSuperAdminUser(userId, tenantId);
-    if (!canManage) {
-      throw new ForbiddenException('Only super admin can manage page access');
+    // Fast-path: JWT role claim is admin or superadmin — no DB query needed
+    const normalizedJwtRole = jwtRole?.trim().toLowerCase().replace(/[\s_-]+/g, '') ?? '';
+    const isJwtPrivileged = normalizedJwtRole === 'admin' || normalizedJwtRole === 'superadmin';
+
+    if (!isJwtPrivileged) {
+      const canManage = await this.subscriptionsService.isAdminOrSuperAdminUser(userId, tenantId);
+      if (!canManage) {
+        throw new ForbiddenException('Only admin can manage page access');
+      }
     }
 
     const targetRole = await this.roleRepo.findOne({
@@ -349,6 +374,18 @@ export class SettingsService {
 
     if (!targetRole) {
       throw new NotFoundException('Role not found');
+    }
+
+    // Admin (non-superadmin) cannot manage superadmin role permissions
+    const isJwtSuperAdmin = normalizedJwtRole === 'superadmin';
+    if (!isJwtSuperAdmin) {
+      const isSuperAdmin = await this.subscriptionsService.isSuperAdminUser(userId, tenantId);
+      if (!isSuperAdmin) {
+        const targetNormalized = this.normalizeRoleName(targetRole.name);
+        if (targetNormalized === 'superadmin') {
+          throw new ForbiddenException('Admin cannot modify superadmin role permissions');
+        }
+      }
     }
   }
 

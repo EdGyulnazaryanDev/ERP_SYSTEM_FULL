@@ -277,7 +277,7 @@ export default function MainLayout() {
       key: '/rbac',
       pageKey: 'rbac',
       icon: <SafetyOutlined />,
-      label: 'RBAC',
+      label: 'Access Governance',
     },
     {
       key: '/settings',
@@ -285,6 +285,16 @@ export default function MainLayout() {
       icon: <SettingOutlined />,
       label: 'Settings',
     },
+    ...(isPrivilegedUser && !user?.isSystemAdmin
+      ? [
+          {
+            key: '/settings/subscription',
+            pageKey: undefined as unknown as string,
+            icon: <CrownOutlined />,
+            label: 'Manage Plan',
+          },
+        ]
+      : []),
   ];
 
   const visibleMenuItems = menuItems

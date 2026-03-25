@@ -47,9 +47,14 @@ export class PageAccessGuard implements CanActivate {
     const tenantId = request.tenantId ?? user.tenantId;
     if (!tenantId) throw new ForbiddenException('Tenant context is missing');
 
-    // Superadmin bypasses everything
-    const isSuperAdmin = await this.subscriptionsService.isSuperAdminUser(user.sub, tenantId);
-    if (isSuperAdmin) return true;
+    // Admin and superadmin bypass RBAC page-access checks
+    // Fast-path: use JWT role claim to avoid extra DB queries
+    if (user.role) {
+      const normalizedRole = user.role.trim().toLowerCase().replace(/[\s_-]+/g, '');
+      if (normalizedRole === 'admin' || normalizedRole === 'superadmin') return true;
+    }
+    const isPrivileged = await this.subscriptionsService.isAdminOrSuperAdminUser(user.sub, tenantId);
+    if (isPrivileged) return true;
 
     // Get user's roles
     const userRoles = await this.userRoleRepo.find({ where: { user_id: user.sub } });

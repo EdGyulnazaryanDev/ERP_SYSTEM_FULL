@@ -2,11 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Button,
-  Card,
-  Col,
   Empty,
-  Radio,
-  Row,
   Select,
   Space,
   Switch,
@@ -18,465 +14,223 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { rbacApi } from '@/api/rbac';
 import { useAuthStore } from '@/store/authStore';
-import {
-  settingsApi,
-  type PageAccessMatrixRow,
-  type PageAccessPermissionSet,
-} from '@/api/settings';
-import {
-  subscriptionsApi,
-  type BillingCycle,
-  type SubscriptionPlan,
-} from '@/api/subscriptions';
+import { settingsApi, type PageAccessMatrixRow, type PageAccessPermissionSet } from '@/api/settings';
+import { useAccessControl } from '@/hooks/useAccessControl';
 
-const { Paragraph, Text } = Typography;
+const { Text } = Typography;
 
-type EditableAccessRow = PageAccessMatrixRow & {
-  key: string;
-};
+type EditableRow = PageAccessMatrixRow & { key: string };
 
-const permissionKeys: Array<keyof PageAccessPermissionSet> = [
-  'can_view',
-  'can_create',
-  'can_edit',
-  'can_delete',
-  'can_export',
+const PERMISSION_KEYS: Array<keyof PageAccessPermissionSet> = [
+  'can_view', 'can_create', 'can_edit', 'can_delete', 'can_export',
 ];
 
-function isPrivilegedRoleName(roleName?: string) {
-  if (!roleName) {
-    return false;
-  }
-
-  const normalizedName = roleName.trim().toLowerCase().replace(/[\s_-]+/g, '');
-  return normalizedName === 'admin' || normalizedName === 'superadmin';
-}
-
-function isSuperAdminRoleName(roleName?: string) {
-  if (!roleName) {
-    return false;
-  }
-
-  return roleName.trim().toLowerCase().replace(/[\s_-]+/g, '') === 'superadmin';
+function normalizeRole(name?: string) {
+  return (name ?? '').trim().toLowerCase().replace(/[\s_-]+/g, '');
 }
 
 export default function AccessGovernanceTab() {
   const { user } = useAuthStore();
+  const { userRoles } = useAccessControl();
   const queryClient = useQueryClient();
+
+  const isSuperAdmin = user?.isSystemAdmin || userRoles.some((r) => normalizeRole(r.name) === 'superadmin')
+    || normalizeRole(user?.role) === 'superadmin';
+
+  const canManage = user?.isSystemAdmin || isSuperAdmin || userRoles.some((r) => {
+    const n = normalizeRole(r.name);
+    return n === 'admin' || n === 'superadmin';
+  }) || normalizeRole(user?.role) === 'admin';
+
   const [selectedRoleId, setSelectedRoleId] = useState<string>();
-  const [billingCycle, setBillingCycle] = useState<BillingCycle>('monthly');
-  const [pendingPlanCode, setPendingPlanCode] = useState<string>();
-  const [draftRows, setDraftRows] = useState<Record<string, EditableAccessRow>>(
-    {},
-  );
+  const [draftRows, setDraftRows] = useState<Record<string, EditableRow>>({});
 
   const { data: roles = [] } = useQuery({
     queryKey: ['rbac-roles'],
-    queryFn: async () => {
-      const response = await rbacApi.getRoles();
-      return response.data;
-    },
+    queryFn: async () => (await rbacApi.getRoles()).data,
   });
 
-  const { data: plans = [] } = useQuery({
-    queryKey: ['subscription-plans'],
-    queryFn: async () => {
-      const response = await subscriptionsApi.getPlans();
-      return response.data;
-    },
-  });
+  // Admin can manage all roles except superadmin
+  const manageableRoles = useMemo(
+    () => roles.filter((r) => isSuperAdmin ? true : normalizeRole(r.name) !== 'superadmin'),
+    [roles, isSuperAdmin],
+  );
 
-  const { data: currentSubscription } = useQuery({
-    queryKey: ['current-subscription'],
-    queryFn: async () => {
-      const response = await subscriptionsApi.getCurrentSubscription();
-      return response.data;
-    },
-  });
+  // Auto-select first role once loaded
+  useEffect(() => {
+    if (!selectedRoleId && manageableRoles.length > 0) {
+      setSelectedRoleId(manageableRoles[0].id);
+    }
+  }, [manageableRoles, selectedRoleId]);
 
-  const { data: currentUserRoles = [] } = useQuery({
-    queryKey: ['current-user-roles', user?.id],
-    queryFn: async () => {
-      const response = await rbacApi.getUserRoles(user!.id);
-      return response.data;
-    },
-    enabled: !!user?.id,
-  });
-
-  const { data: roleMatrix = [], isLoading: isMatrixLoading } = useQuery({
+  const { data: roleMatrix = [], isLoading } = useQuery({
     queryKey: ['page-access-matrix', selectedRoleId],
-    queryFn: async () => {
-      const response = await settingsApi.getRolePageAccessMatrix(selectedRoleId!);
-      return response.data;
-    },
+    queryFn: async () => (await settingsApi.getRolePageAccessMatrix(selectedRoleId!)).data,
     enabled: !!selectedRoleId,
   });
 
+  // Sync matrix into draft state
   useEffect(() => {
-    if (!selectedRoleId && roles.length > 0) {
-      setSelectedRoleId(roles[0].id);
-    }
-  }, [roles, selectedRoleId]);
-
-  useEffect(() => {
-    if (currentSubscription) {
-      setBillingCycle(currentSubscription.billingCycle);
-      setPendingPlanCode(currentSubscription.plan.code);
-    }
-  }, [currentSubscription]);
-
-  useEffect(() => {
-    const nextDrafts: Record<string, EditableAccessRow> = {};
-    roleMatrix.forEach((row) => {
-      nextDrafts[row.page_key] = {
-        ...row,
-        key: row.page_key,
-      };
-    });
-    setDraftRows(nextDrafts);
+    const next: Record<string, EditableRow> = {};
+    roleMatrix.forEach((row) => { next[row.page_key] = { ...row, key: row.page_key }; });
+    setDraftRows(next);
   }, [roleMatrix]);
 
-  const savePlanMutation = useMutation({
-    mutationFn: subscriptionsApi.selectPlan,
-    onSuccess: () => {
-      message.success('Subscription plan updated');
-      queryClient.invalidateQueries({ queryKey: ['current-subscription'] });
-      queryClient.invalidateQueries({ queryKey: ['subscription-plans'] });
-    },
-    onError: (error: any) => {
-      message.error(
-        error.response?.data?.message || 'Failed to update subscription plan',
-      );
-    },
-  });
+  const selectedRole = useMemo(
+    () => manageableRoles.find((r) => r.id === selectedRoleId),
+    [manageableRoles, selectedRoleId],
+  );
 
-  const initializeRoleMutation = useMutation({
+  const initMutation = useMutation({
     mutationFn: ({ roleId, isAdmin }: { roleId: string; isAdmin: boolean }) =>
       settingsApi.initializeRolePageAccess(roleId, isAdmin),
     onSuccess: () => {
-      message.success('Default page rules initialized');
-      queryClient.invalidateQueries({
-        queryKey: ['page-access-matrix', selectedRoleId],
-      });
+      message.success('Defaults initialized');
+      queryClient.invalidateQueries({ queryKey: ['page-access-matrix', selectedRoleId] });
     },
-    onError: (error: any) => {
-      message.error(
-        error.response?.data?.message || 'Failed to initialize page rules',
-      );
-    },
+    onError: (e: any) => message.error(e.response?.data?.message || 'Failed to initialize'),
   });
 
-  const saveMatrixMutation = useMutation({
-    mutationFn: ({
-      roleId,
-      accessList,
-    }: {
+  const saveMutation = useMutation({
+    mutationFn: ({ roleId, accessList }: {
       roleId: string;
-      accessList: Array<{
-        page_key: string;
-        permissions: Partial<PageAccessPermissionSet>;
-      }>;
+      accessList: Array<{ page_key: string; permissions: Partial<PageAccessPermissionSet> }>;
     }) => settingsApi.bulkSetRolePageAccess(roleId, accessList),
     onSuccess: () => {
-      message.success('Page access rules updated');
-      queryClient.invalidateQueries({
-        queryKey: ['page-access-matrix', selectedRoleId],
-      });
+      message.success('Page access saved');
+      queryClient.invalidateQueries({ queryKey: ['page-access-matrix', selectedRoleId] });
       queryClient.invalidateQueries({ queryKey: ['my-page-access'] });
     },
-    onError: (error: any) => {
-      message.error(
-        error.response?.data?.message || 'Failed to save page access rules',
-      );
-    },
+    onError: (e: any) => message.error(e.response?.data?.message || 'Failed to save'),
   });
 
-  const selectedRole = useMemo(
-    () => roles.find((role) => role.id === selectedRoleId),
-    [roles, selectedRoleId],
-  );
-  const canManagePlan = user?.isSystemAdmin || currentUserRoles.some((role) => isSuperAdminRoleName(role.name));
-  const canManageAccess = user?.isSystemAdmin || currentUserRoles.some((role) => isSuperAdminRoleName(role.name));
-
-  const currentFeatures = currentSubscription?.plan?.features ?? [];
-
-  const planCards = useMemo(
-    () =>
-      plans.map((plan) => ({
-        ...plan,
-        isCurrent: currentSubscription?.plan.code === plan.code,
-      })),
-    [plans, currentSubscription],
-  );
-
-  const tableData = useMemo(
-    () => Object.values(draftRows).sort((a, b) => a.page_name.localeCompare(b.page_name)),
-    [draftRows],
-  );
-
-  const updateRow = (
-    pageKey: string,
-    permissionKey: keyof PageAccessPermissionSet,
-    value: boolean,
-  ) => {
-    setDraftRows((current) => ({
-      ...current,
+  const updateRow = (pageKey: string, field: keyof PageAccessPermissionSet, value: boolean) => {
+    setDraftRows((prev) => ({
+      ...prev,
       [pageKey]: {
-        ...current[pageKey],
-        ...(permissionKey === 'can_view' && !value
-          ? {
-            can_create: false,
-            can_edit: false,
-            can_delete: false,
-            can_export: false,
-          }
+        ...prev[pageKey],
+        // turning off view also clears all other actions
+        ...(field === 'can_view' && !value
+          ? { can_create: false, can_edit: false, can_delete: false, can_export: false }
           : {}),
-        [permissionKey]: value,
+        [field]: value,
       },
     }));
   };
 
-  const handleSaveAccess = () => {
-    if (!canManageAccess) {
-      message.warning('Only super admin can manage page rules');
-      return;
-    }
-
-    if (!selectedRoleId) {
-      message.warning('Select a role first');
-      return;
-    }
-
-    const accessList = tableData.map((row) => ({
+  const handleSave = () => {
+    if (!selectedRoleId) return;
+    const accessList = Object.values(draftRows).map((row) => ({
       page_key: row.page_key,
-      permissions: permissionKeys.reduce<Partial<PageAccessPermissionSet>>(
-        (accumulator, key) => {
-          accumulator[key] = row[key];
-          return accumulator;
-        },
-        {},
-      ),
+      permissions: PERMISSION_KEYS.reduce<Partial<PageAccessPermissionSet>>((acc, k) => {
+        acc[k] = row[k];
+        return acc;
+      }, {}),
     }));
-
-    saveMatrixMutation.mutate({ roleId: selectedRoleId, accessList });
+    saveMutation.mutate({ roleId: selectedRoleId, accessList });
   };
 
-  const handlePlanSave = () => {
-    if (!canManagePlan) {
-      message.warning('Only super admin can change the subscription plan');
-      return;
-    }
-
-    if (!pendingPlanCode) {
-      message.warning('Select a plan');
-      return;
-    }
-
-    savePlanMutation.mutate({
-      planCode: pendingPlanCode,
-      billingCycle,
-      autoRenew: true,
-    });
-  };
+  const tableData = useMemo(
+    () => Object.values(draftRows)
+      .filter((row) => !row.locked_by_subscription)
+      .sort((a, b) => a.category.localeCompare(b.category) || a.page_name.localeCompare(b.page_name)),
+    [draftRows],
+  );
 
   const columns = [
     {
       title: 'Page',
       dataIndex: 'page_name',
       key: 'page_name',
-      render: (_: string, row: EditableAccessRow) => (
+      width: 200,
+      render: (_: string, row: EditableRow) => (
         <div>
-          <div className="font-medium">{row.page_name}</div>
-          <Text type="secondary">{row.page_path}</Text>
-          <div className="mt-1">
-            <Tag>{row.category}</Tag>
-            {row.required_feature ? (
-              <Tag color={currentFeatures.includes(row.required_feature as any) ? 'green' : 'orange'}>
-                Feature: {row.required_feature}
-              </Tag>
-            ) : (
-              <Tag color="blue">Core page</Tag>
-            )}
+          <Text strong>{row.page_name}</Text>
+          <div style={{ marginTop: 4 }}>
+            <Tag style={{ fontSize: 11 }}>{row.category}</Tag>
           </div>
         </div>
       ),
     },
-    {
-      title: 'Plan Status',
-      key: 'plan_status',
-      render: (_: unknown, row: EditableAccessRow) =>
-        row.plan_included === false ? (
-          <Tag color="red">Blocked by subscription</Tag>
-        ) : row.required_feature ? (
-          currentFeatures.includes(row.required_feature as any) ? (
-            <Tag color="green">Included in plan</Tag>
-          ) : (
-            <Tag color="orange">Feature required</Tag>
-          )
-        ) : (
-          <Tag color="default">Not feature-gated</Tag>
-        ),
-    },
-    ...permissionKeys.map((permissionKey) => ({
-      title: permissionKey.replace('can_', '').replace('_', ' '),
-      key: permissionKey,
-      render: (_: unknown, row: EditableAccessRow) => (
+    ...PERMISSION_KEYS.map((field) => ({
+      title: field.replace('can_', '').replace('_', ' ').replace(/^\w/, (c) => c.toUpperCase()),
+      key: field,
+      align: 'center' as const,
+      width: 90,
+      render: (_: unknown, row: EditableRow) => (
         <Switch
-          checked={row[permissionKey]}
+          size="small"
+          checked={row[field]}
           disabled={
-            !canManageAccess ||
-            (!canManagePlan && row.plan_included === false) ||
-            (permissionKey !== 'can_view' && !row.can_view)
+            !canManage ||
+            row.locked_by_subscription === true ||
+            (field !== 'can_view' && !row.can_view)
           }
-          onChange={(checked) => updateRow(row.page_key, permissionKey, checked)}
+          onChange={(v) => updateRow(row.page_key, field, v)}
         />
       ),
     })),
   ];
 
-  if (!roles.length) {
-    return <Empty description="No roles found. Create roles first in RBAC." />;
+  if (!canManage) {
+    return (
+      <Alert
+        type="warning"
+        showIcon
+        message="Admin access required"
+        description="Only admin or superadmin can manage page access rules."
+      />
+    );
+  }
+
+  if (roles.length === 0) {
+    return <Empty description="No roles found." />;
   }
 
   return (
-    <Space direction="vertical" size={24} style={{ width: '100%' }}>
+    <Space direction="vertical" size={16} style={{ width: '100%' }}>
       <Alert
         type="info"
         showIcon
-        message="How access works"
-        description="Subscription features decide whether a module is available at all. Page access rules decide which roles can view or act inside those pages."
+        message="Pages locked by your subscription plan cannot be enabled here. Go to Manage Plan to upgrade."
       />
 
-      <Card title="Subscription Planning">
-        <Space direction="vertical" size={16} style={{ width: '100%' }}>
-          {!canManagePlan && (
-            <Alert
-              type="warning"
-              showIcon
-              message="Access Governance is super-admin only"
-              description="Only super admin can manage plans, roles, and page rules."
-            />
-          )}
-          <Radio.Group
-            value={billingCycle}
-            onChange={(event) => setBillingCycle(event.target.value)}
-            disabled={!canManagePlan}
-          >
-            <Radio.Button value="monthly">Monthly</Radio.Button>
-            <Radio.Button value="yearly">Yearly</Radio.Button>
-          </Radio.Group>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+        <Select
+          style={{ width: 220 }}
+          value={selectedRoleId}
+          onChange={(v) => { setSelectedRoleId(v); setDraftRows({}); }}
+          options={manageableRoles.map((r) => ({ value: r.id, label: r.name }))}
+          placeholder="Select role"
+        />
+        <Button
+          onClick={() => selectedRoleId && initMutation.mutate({
+            roleId: selectedRoleId,
+            isAdmin: ['admin', 'superadmin'].includes(normalizeRole(selectedRole?.name)),
+          })}
+          loading={initMutation.isPending}
+          disabled={!selectedRoleId}
+        >
+          Initialize Defaults
+        </Button>
+        <Button
+          type="primary"
+          onClick={handleSave}
+          loading={saveMutation.isPending}
+          disabled={!selectedRoleId || Object.keys(draftRows).length === 0}
+        >
+          Save Changes
+        </Button>
+      </div>
 
-          <Row gutter={[16, 16]}>
-            {planCards.map((plan: SubscriptionPlan & { isCurrent: boolean }) => (
-              <Col xs={24} md={8} key={plan.code}>
-                <Card
-                  size="small"
-                  hoverable={canManagePlan}
-                  onClick={() => canManagePlan && setPendingPlanCode(plan.code)}
-                  style={{
-                    borderColor:
-                      pendingPlanCode === plan.code ? '#1677ff' : undefined,
-                    opacity: canManagePlan ? 1 : 0.82,
-                  }}
-                >
-                  <Space direction="vertical" size={8} style={{ width: '100%' }}>
-                    <div className="flex items-center justify-between">
-                      <Text strong>{plan.name}</Text>
-                      {plan.isCurrent ? <Tag color="green">Current</Tag> : null}
-                    </div>
-                    <Text type="secondary">{plan.description}</Text>
-                    <Text strong>
-                      $
-                      {billingCycle === 'yearly'
-                        ? plan.pricing.yearly
-                        : plan.pricing.monthly}
-                      /{billingCycle === 'yearly' ? 'year' : 'month'}
-                    </Text>
-                    <div>
-                      {plan.features.map((feature) => (
-                        <Tag key={feature} color="blue">
-                          {feature}
-                        </Tag>
-                      ))}
-                    </div>
-                    <Paragraph style={{ marginBottom: 0 }}>
-                      Users limit:{' '}
-                      {plan.limits.users === null ? 'Unlimited' : plan.limits.users}
-                    </Paragraph>
-                  </Space>
-                </Card>
-              </Col>
-            ))}
-          </Row>
-
-          <div className="flex justify-end">
-            <Button
-              type="primary"
-              onClick={handlePlanSave}
-              disabled={!canManagePlan}
-              loading={savePlanMutation.isPending}
-            >
-              Save Subscription Plan
-            </Button>
-          </div>
-        </Space>
-      </Card>
-
-      <Card
-        title="Role-Based Page Governance"
-        extra={
-          <Space>
-            <Select
-              style={{ width: 240 }}
-              value={selectedRoleId}
-              onChange={setSelectedRoleId}
-              options={roles.map((role) => ({
-                value: role.id,
-                label: role.name,
-              }))}
-            />
-            <Button
-              disabled={!canManageAccess}
-              onClick={() =>
-                selectedRoleId
-                  ? initializeRoleMutation.mutate({
-                    roleId: selectedRoleId,
-                    isAdmin: isPrivilegedRoleName(selectedRole?.name),
-                  })
-                  : undefined
-              }
-              loading={initializeRoleMutation.isPending}
-            >
-              Initialize Defaults
-            </Button>
-            <Button
-              type="primary"
-              disabled={!canManageAccess}
-              onClick={handleSaveAccess}
-              loading={saveMatrixMutation.isPending}
-            >
-              Save Page Rules
-            </Button>
-          </Space>
-        }
-      >
-        <Space direction="vertical" size={16} style={{ width: '100%' }}>
-          <Alert
-            type="warning"
-            showIcon
-            message="Role permissions do not bypass subscription limits"
-            description="The active subscription is now the hard ceiling. Admins can grant only pages and actions included in the current plan, while super admin alone can change the plan itself."
-          />
-
-          <Table
-            rowKey="page_key"
-            columns={columns}
-            dataSource={tableData}
-            loading={isMatrixLoading}
-            pagination={{ pageSize: 8 }}
-          />
-        </Space>
-      </Card>
+      <Table
+        rowKey="page_key"
+        columns={columns}
+        dataSource={tableData}
+        loading={isLoading}
+        pagination={{ pageSize: 10, showSizeChanger: false }}
+        size="small"
+      />
     </Space>
   );
 }

@@ -15,6 +15,8 @@ import {
   Checkbox,
   Spin,
   Typography,
+  Alert,
+  Badge,
 } from 'antd';
 import {
   PlusOutlined,
@@ -22,6 +24,7 @@ import {
   DeleteOutlined,
   SafetyOutlined,
   SaveOutlined,
+  LockOutlined,
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { rbacApi, type Role, type Permission } from '@/api/rbac';
@@ -30,17 +33,27 @@ import { useAccessControl } from '@/hooks/useAccessControl';
 
 const { Text } = Typography;
 
+function normalizeRole(name: string) {
+  return name.trim().toLowerCase().replace(/[\s_-]+/g, '');
+}
+
 // ─── Page Access Tab ────────────────────────────────────────────────────────
 
-function PageAccessTab({ roles }: { roles: Role[] }) {
+function PageAccessTab({ roles, isSuperAdmin }: { roles: Role[]; isSuperAdmin: boolean }) {
+  const { userRoles } = useAccessControl();
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
   const [dirty, setDirty] = useState<Record<string, Partial<PageAccessMatrixRow>>>({});
 
-  // Exclude Admin (tenant admin) and superadmin from the list — they have full access
+  // Admin can manage all roles except superadmin.
+  // Superadmin can manage all roles.
   const editableRoles = roles.filter((r) => {
-    const n = r.name.trim().toLowerCase().replace(/[\s_-]+/g, '');
-    return n !== 'admin' && n !== 'superadmin';
+    const n = normalizeRole(r.name);
+    if (isSuperAdmin) return true;
+    return n !== 'superadmin';
   });
+
+  // Pre-select the admin's own role if they only have one
+  const myRoleIds = new Set(userRoles.map((r) => r.id));
 
   const { data: matrix = [], isLoading } = useQuery({
     queryKey: ['role-page-access', selectedRoleId],
@@ -73,10 +86,11 @@ function PageAccessTab({ roles }: { roles: Role[] }) {
     return row[field];
   };
 
-  const toggle = (pageKey: string, field: string, current: boolean) => {
+  const toggle = (row: PageAccessMatrixRow, field: string, current: boolean) => {
+    if (row.locked_by_subscription) return;
     setDirty((prev) => ({
       ...prev,
-      [pageKey]: { ...prev[pageKey], [field]: !current },
+      [row.page_key]: { ...prev[row.page_key], [field]: !current },
     }));
   };
 
@@ -88,9 +102,15 @@ function PageAccessTab({ roles }: { roles: Role[] }) {
       width: 180,
       render: (name: string, row: PageAccessMatrixRow) => (
         <div>
-          <Text strong style={{ fontSize: 13 }}>{name}</Text>
+          <Text strong style={{ fontSize: 13, color: row.locked_by_subscription ? '#4a6070' : undefined }}>
+            {name}
+          </Text>
           {row.required_feature && (
-            <div><Tag color="purple" style={{ fontSize: 10, marginTop: 2 }}>{row.required_feature}</Tag></div>
+            <div>
+              <Tag color={row.locked_by_subscription ? 'default' : 'purple'} style={{ fontSize: 10, marginTop: 2 }}>
+                {row.required_feature}
+              </Tag>
+            </div>
           )}
         </div>
       ),
@@ -100,7 +120,21 @@ function PageAccessTab({ roles }: { roles: Role[] }) {
       dataIndex: 'category',
       key: 'category',
       width: 120,
-      render: (c: string) => <Tag>{c}</Tag>,
+      render: (c: string, row: PageAccessMatrixRow) => (
+        <Tag color={row.locked_by_subscription ? 'default' : undefined}>{c}</Tag>
+      ),
+    },
+    {
+      title: 'Plan',
+      key: 'plan',
+      width: 80,
+      align: 'center' as const,
+      render: (_: unknown, row: PageAccessMatrixRow) =>
+        row.locked_by_subscription ? (
+          <LockOutlined style={{ color: '#4a6070' }} title="Not included in current plan" />
+        ) : (
+          <Badge status="success" />
+        ),
     },
     ...(['can_view', 'can_create', 'can_edit', 'can_delete', 'can_export'] as const).map((field) => ({
       title: field.replace('can_', '').replace(/^\w/, (c) => c.toUpperCase()),
@@ -109,10 +143,13 @@ function PageAccessTab({ roles }: { roles: Role[] }) {
       align: 'center' as const,
       render: (_: unknown, row: PageAccessMatrixRow) => {
         const val = getVal(row, field) as boolean;
+        const locked = row.locked_by_subscription;
         return (
           <Checkbox
             checked={val}
-            onChange={() => toggle(row.page_key, field, val)}
+            disabled={locked}
+            onChange={() => toggle(row, field, val)}
+            style={{ opacity: locked ? 0.35 : 1 }}
           />
         );
       },
@@ -127,20 +164,41 @@ function PageAccessTab({ roles }: { roles: Role[] }) {
     return acc;
   }, {});
 
-  const tableData = Object.entries(grouped).flatMap(([cat, rows]) => [
-    { page_key: `__header__${cat}`, page_name: cat, _isHeader: true } as any,
+  type TableRow = (PageAccessMatrixRow & { _isHeader?: boolean });
+  const tableData: TableRow[] = Object.entries(grouped).flatMap(([cat, rows]) => [
+    { page_key: `__header__${cat}`, page_name: cat, _isHeader: true } as TableRow,
     ...rows,
   ]);
 
+  const selectedRole = editableRoles.find((r) => r.id === selectedRoleId);
+  const isOwnRole = selectedRoleId ? myRoleIds.has(selectedRoleId) : false;
+
   return (
     <div>
+      {!isSuperAdmin && (
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message="You can manage page-level permissions for all roles except superadmin. Pages locked by your subscription plan cannot be enabled."
+        />
+      )}
+
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 16 }}>
         <Select
           placeholder="Select a role to manage page access"
           style={{ width: 280 }}
           value={selectedRoleId}
           onChange={(v) => { setSelectedRoleId(v); setDirty({}); }}
-          options={editableRoles.map((r) => ({ value: r.id, label: r.name }))}
+          options={editableRoles.map((r) => ({
+            value: r.id,
+            label: (
+              <Space>
+                {r.name}
+                {myRoleIds.has(r.id) && <Tag color="blue" style={{ fontSize: 10 }}>My Role</Tag>}
+              </Space>
+            ),
+          }))}
         />
         {selectedRoleId && Object.keys(dirty).length > 0 && (
           <Button
@@ -151,6 +209,9 @@ function PageAccessTab({ roles }: { roles: Role[] }) {
           >
             Save Changes
           </Button>
+        )}
+        {selectedRole && isOwnRole && (
+          <Tag color="blue">Managing your own role permissions</Tag>
         )}
       </div>
 
@@ -175,6 +236,8 @@ function PageAccessTab({ roles }: { roles: Role[] }) {
           onRow={(row) => ({
             style: row._isHeader
               ? { background: 'rgba(22, 119, 255, 0.06)', fontWeight: 700, pointerEvents: 'none' }
+              : row.locked_by_subscription
+              ? { opacity: 0.5 }
               : {},
           })}
         />
@@ -187,8 +250,12 @@ function PageAccessTab({ roles }: { roles: Role[] }) {
 
 export default function RBACPage() {
   const queryClient = useQueryClient();
-  const { isPrivilegedUser } = useAccessControl();
+  const { isPrivilegedUser, userRoles } = useAccessControl();
   const canManageRoles = isPrivilegedUser;
+
+  // Determine if current user is superadmin (can manage superadmin role too)
+  const isSuperAdmin = userRoles.some((r) => normalizeRole(r.name) === 'superadmin');
+
   const [roleForm] = Form.useForm();
   const [permForm] = Form.useForm();
 
@@ -318,6 +385,11 @@ export default function RBACPage() {
     else createPermMutation.mutate(values);
   };
 
+  // Admin can only see/edit non-superadmin roles in the roles tab
+  const visibleRoles = isSuperAdmin
+    ? roles
+    : roles.filter((r) => normalizeRole(r.name) !== 'superadmin');
+
   const roleColumns = [
     {
       title: 'Name',
@@ -334,24 +406,27 @@ export default function RBACPage() {
     {
       title: 'Actions',
       key: 'actions',
-      render: (_: any, record: Role) => (
-        <Space>
-          <Button size="small" icon={<SafetyOutlined />} onClick={() => openAssignModal(record)}>
-            Permissions
-          </Button>
-          {canManageRoles && !record.is_system && (
-            <>
-              <Button size="small" icon={<EditOutlined />} onClick={() => openRoleModal(record)} />
-              <Button size="small" danger icon={<DeleteOutlined />}
-                onClick={() => Modal.confirm({
-                  title: 'Delete Role', content: 'Are you sure?',
-                  onOk: () => deleteRoleMutation.mutate(record.id),
-                })}
-              />
-            </>
-          )}
-        </Space>
-      ),
+      render: (_: any, record: Role) => {
+        const isProtected = normalizeRole(record.name) === 'superadmin' && !isSuperAdmin;
+        return (
+          <Space>
+            <Button size="small" icon={<SafetyOutlined />} onClick={() => openAssignModal(record)}>
+              Permissions
+            </Button>
+            {canManageRoles && !record.is_system && !isProtected && (
+              <>
+                <Button size="small" icon={<EditOutlined />} onClick={() => openRoleModal(record)} />
+                <Button size="small" danger icon={<DeleteOutlined />}
+                  onClick={() => Modal.confirm({
+                    title: 'Delete Role', content: 'Are you sure?',
+                    onOk: () => deleteRoleMutation.mutate(record.id),
+                  })}
+                />
+              </>
+            )}
+          </Space>
+        );
+      },
     },
   ];
 
@@ -383,21 +458,26 @@ export default function RBACPage() {
 
   return (
     <div className="p-6">
-      <h1 className="text-2xl font-bold mb-6">Roles & Permissions</h1>
+      <h1 className="text-2xl font-bold mb-6">Access Governance</h1>
       <Card>
         <Tabs
           items={[
+            {
+              key: 'page-access',
+              label: 'Page Access',
+              children: <PageAccessTab roles={roles} isSuperAdmin={isSuperAdmin} />,
+            },
             {
               key: 'roles',
               label: 'Roles',
               children: (
                 <div>
-                  {canManageRoles && (
+                  {canManageRoles && isSuperAdmin && (
                     <Button type="primary" icon={<PlusOutlined />} onClick={() => openRoleModal()} className="mb-4">
                       Create Role
                     </Button>
                   )}
-                  <Table columns={roleColumns} dataSource={roles} loading={rolesLoading} rowKey="id" />
+                  <Table columns={roleColumns} dataSource={visibleRoles} loading={rolesLoading} rowKey="id" />
                 </div>
               ),
             },
@@ -406,7 +486,7 @@ export default function RBACPage() {
               label: 'Permissions',
               children: (
                 <div>
-                  {canManageRoles && (
+                  {canManageRoles && isSuperAdmin && (
                     <Button type="primary" icon={<PlusOutlined />} onClick={() => openPermModal()} className="mb-4">
                       Create Permission
                     </Button>
@@ -415,16 +495,11 @@ export default function RBACPage() {
                 </div>
               ),
             },
-            {
-              key: 'page-access',
-              label: 'Page Access',
-              children: <PageAccessTab roles={roles} />,
-            },
           ]}
         />
       </Card>
 
-      {/* Role Modal */}
+      {/* Role Modal — superadmin only */}
       <Modal
         title={editingRole ? 'Edit Role' : 'Create Role'}
         open={roleModalOpen}
@@ -442,7 +517,7 @@ export default function RBACPage() {
         </Form>
       </Modal>
 
-      {/* Permission Modal */}
+      {/* Permission Modal — superadmin only */}
       <Modal
         title={editingPerm ? 'Edit Permission' : 'Create Permission'}
         open={permModalOpen}

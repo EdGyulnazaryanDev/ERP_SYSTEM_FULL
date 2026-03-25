@@ -23,7 +23,7 @@ export class SettingsController {
     @CurrentUser() user: JwtUser,
     @CurrentTenant() tenantId: string,
   ) {
-    return this.settingsService.getPageCatalog(tenantId, user.sub);
+    return this.settingsService.getPageCatalog(tenantId, user.sub, user.role);
   }
 
   @Get('page-access/role/:roleId')
@@ -44,6 +44,7 @@ export class SettingsController {
       roleId,
       tenantId,
       user.sub,
+      user.role,
     );
   }
 
@@ -52,8 +53,7 @@ export class SettingsController {
     @CurrentUser() user: JwtUser,
     @CurrentTenant() tenantId: string,
   ) {
-    // Fetch user's roles from the service
-    return this.settingsService.getPageAccessForUserById(user.sub, tenantId);
+    return this.settingsService.getPageAccessForUserById(user.sub, tenantId, user.role);
   }
 
   @Post('page-access/role/:roleId')
@@ -73,6 +73,7 @@ export class SettingsController {
       user.sub,
       body.page_key,
       body.permissions,
+      user.role,
     );
   }
 
@@ -94,6 +95,7 @@ export class SettingsController {
       tenantId,
       user.sub,
       body.accessList,
+      user.role,
     );
   }
 
@@ -109,6 +111,7 @@ export class SettingsController {
       tenantId,
       user.sub,
       body.isAdmin,
+      user.role,
     );
   }
 }

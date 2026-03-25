@@ -23,9 +23,8 @@ import { CurrentTenant } from '../../common/decorators/current-tenant.decorator'
 export class RolesController {
   constructor(private readonly rolesService: RolesService) {}
 
-  // Reading roles is allowed for anyone with rbac view access
+  // Reading roles — any authenticated tenant user can list roles
   @Get()
-  @CheckPageAccess('rbac', 'view')
   findAll(@CurrentTenant() tenantId: string) {
     return this.rolesService.findAll(tenantId);
   }

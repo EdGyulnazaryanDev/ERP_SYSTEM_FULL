@@ -68,8 +68,13 @@ export function useAccessControl() {
 
   const enabledFeatures = subscription?.plan?.features ?? [];
   const isSystemAdmin = user?.isSystemAdmin === true;
+
+  // Check JWT role as fast-path fallback (covers fresh tenants with no user_roles rows yet)
+  const jwtRoleNormalized = user?.role ? normalizeRoleName(user.role) : '';
+  const isJwtPrivileged = jwtRoleNormalized === 'admin' || jwtRoleNormalized === 'superadmin';
+
   // isPrivilegedUser: bypasses RBAC page-access checks only (not subscription gating)
-  const isPrivilegedUser = isSystemAdmin || userRoles.some((role) => {
+  const isPrivilegedUser = isSystemAdmin || isJwtPrivileged || userRoles.some((role) => {
     const normalizedName = normalizeRoleName(role.name);
     return normalizedName === 'superadmin' || normalizedName === 'admin';
   });
