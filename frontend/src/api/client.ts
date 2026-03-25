@@ -2,7 +2,9 @@ import axios from 'axios';
 import { useAuthStore } from '@/store/authStore';
 
 // Determine base URL - use /api for Vite dev proxy, or environment variable
-const baseURL = import.meta.env.DEV ? '/api' : (import.meta.env.VITE_API_URL || 'http://localhost:3000/api');
+const baseURL = import.meta.env.DEV
+  ? '/api'
+  : (import.meta.env.VITE_API_URL || 'https://spontaneous-dori-lumaportal-1f50f5d0.koyeb.app/api');
 
 const apiClient = axios.create({
   baseURL,
