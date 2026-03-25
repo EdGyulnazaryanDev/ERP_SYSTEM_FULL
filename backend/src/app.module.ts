@@ -63,6 +63,7 @@ import { TenantInterceptor } from './common/interceptors/tenant.interceptor';
         database: config.get('POSTGRES_DB'),
         autoLoadEntities: true,
         synchronize: true,
+        ssl: config.get('DB_SSL') === 'true' ? { rejectUnauthorized: false } : false,
       }),
     }),
     CoreModule,
