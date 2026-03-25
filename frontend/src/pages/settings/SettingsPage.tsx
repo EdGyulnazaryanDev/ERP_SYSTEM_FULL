@@ -1,32 +1,12 @@
-import { Tabs } from 'antd';
-import {
-  TeamOutlined,
-  SafetyOutlined,
-  SettingOutlined,
-  ControlOutlined,
-} from '@ant-design/icons';
+import { Tabs, Alert } from 'antd';
+import { TeamOutlined, SafetyOutlined, SettingOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
 import RolesTab from './tabs/RolesTab';
 import PermissionsTab from './tabs/PermissionsTab';
 import UsersTab from './tabs/UsersTab';
-import AccessGovernanceTab from './tabs/AccessGovernanceTab';
-import { useAuthStore } from '@/store/authStore';
-import { useAccessControl } from '@/hooks/useAccessControl';
-
-function normalizeRole(name?: string) {
-  return (name ?? '').trim().toLowerCase().replace(/[\s_-]+/g, '');
-}
+import { useNavigate } from 'react-router-dom';
 
 export default function SettingsPage() {
-  const { user } = useAuthStore();
-  const { userRoles } = useAccessControl();
-
-  const isAdmin = user?.isSystemAdmin
-    || normalizeRole(user?.role) === 'admin'
-    || normalizeRole(user?.role) === 'superadmin'
-    || userRoles.some((r) => {
-      const n = normalizeRole(r.name);
-      return n === 'admin' || n === 'superadmin';
-    });
+  const navigate = useNavigate();
 
   const items = [
     {
@@ -44,16 +24,24 @@ export default function SettingsPage() {
       label: <span><SettingOutlined /> User Management</span>,
       children: <UsersTab />,
     },
-    ...(isAdmin ? [{
-      key: 'access-governance',
-      label: <span><ControlOutlined /> Access Governance</span>,
-      children: <AccessGovernanceTab />,
-    }] : []),
   ];
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">Settings</h1>
+      <h1 className="text-2xl font-bold mb-4">Settings</h1>
+      <Alert
+        type="info"
+        showIcon
+        icon={<SafetyCertificateOutlined />}
+        message="Access Governance"
+        description="Manage page-level permissions for each role from the Access Governance section."
+        action={
+          <a onClick={() => navigate('/rbac')} style={{ whiteSpace: 'nowrap', cursor: 'pointer' }}>
+            Go to Access Governance →
+          </a>
+        }
+        style={{ marginBottom: 20 }}
+      />
       <Tabs defaultActiveKey="roles" items={items} />
     </div>
   );
