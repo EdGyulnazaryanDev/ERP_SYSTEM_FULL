@@ -50,8 +50,12 @@ export default function MiniChat() {
   const [connected, setConnected] = useState(false);
   const [loading, setLoading] = useState(false);
   const socketRef = useRef<Socket | null>(null);
+  const openRef = useRef(open);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+
+  // Keep openRef in sync so the socket handler can read current value without being a dependency
+  useEffect(() => { openRef.current = open; }, [open]);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
     const el = messagesContainerRef.current;
@@ -60,33 +64,45 @@ export default function MiniChat() {
   }, []);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Connect socket
+  // Connect socket — intentionally excludes `open` to avoid re-registering listeners on toggle
   useEffect(() => {
     if (!token) return;
     const sock = getSocket(token);
     socketRef.current = sock;
 
-    sock.on('connect', () => { setConnected(true); setLoading(false); });
-    sock.on('disconnect', () => setConnected(false));
-    sock.on('history', (msgs: Msg[]) => { setMessages(msgs); setLoading(false); });
-    sock.on('new_message', (msg: Msg) => {
+    const onConnect = () => { setConnected(true); setLoading(false); };
+    const onDisconnect = () => setConnected(false);
+    const onHistory = (msgs: Msg[]) => { setMessages(msgs); setLoading(false); };
+    const onNewMessage = (msg: Msg) => {
       setMessages((prev) => [...prev, msg]);
-      if (!open) setUnread((n) => n + 1);
-    });
-    sock.on('message_updated', (msg: Msg) => {
+      if (!openRef.current) setUnread((n) => n + 1);
+    };
+    const onMessageUpdated = (msg: Msg) => {
       setMessages((prev) => prev.map((m) => m.id === msg.id ? msg : m));
-    });
-    sock.on('presence', (p: Presence[]) => setPresence(p));
-    sock.on('unread', (n: number) => setUnread(n));
+    };
+    const onPresence = (p: Presence[]) => setPresence(p);
+    const onUnread = (n: number) => setUnread(n);
+
+    sock.on('connect', onConnect);
+    sock.on('disconnect', onDisconnect);
+    sock.on('history', onHistory);
+    sock.on('new_message', onNewMessage);
+    sock.on('message_updated', onMessageUpdated);
+    sock.on('presence', onPresence);
+    sock.on('unread', onUnread);
 
     if (!sock.connected) { setLoading(true); sock.connect(); }
 
     return () => {
-      sock.off('connect'); sock.off('disconnect'); sock.off('history');
-      sock.off('new_message'); sock.off('message_updated');
-      sock.off('presence'); sock.off('unread');
+      sock.off('connect', onConnect);
+      sock.off('disconnect', onDisconnect);
+      sock.off('history', onHistory);
+      sock.off('new_message', onNewMessage);
+      sock.off('message_updated', onMessageUpdated);
+      sock.off('presence', onPresence);
+      sock.off('unread', onUnread);
     };
-  }, [token, open]);
+  }, [token]);
 
   // Heartbeat every 20s
   useEffect(() => {
@@ -135,6 +151,9 @@ export default function MiniChat() {
 
   const typingUsers = presence.filter((p) => p.is_typing && p.user_id !== user?.id);
   const onlineCount = presence.filter((p) => p.user_id !== user?.id).length;
+
+  // Only show for tenant staff users — hide for system admins and portal users
+  if (!user || user.isSystemAdmin || user.actorType !== 'staff') return null;
 
   if (!open) {
     return (

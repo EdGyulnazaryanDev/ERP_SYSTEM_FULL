@@ -32,8 +32,15 @@ export default function AdminLayout() {
   const { token: { borderRadiusLG } } = theme.useToken();
 
   const userMenuItems = [
-    { key: 'logout', icon: <LogoutOutlined />, label: 'Logout', onClick: () => { logout(); navigate('/auth/login'); } },
+    { key: 'profile', icon: <UserOutlined />, label: 'Profile' },
+    { type: 'divider' as const },
+    { key: 'logout', icon: <LogoutOutlined />, label: 'Logout' },
   ];
+
+  const handleUserMenuClick = ({ key }: { key: string }) => {
+    if (key === 'profile') navigate('/admin/profile');
+    if (key === 'logout') { logout(); navigate('/auth/login'); }
+  };
 
   return (
     <Layout style={{ minHeight: '100vh', background: 'transparent' }}>
@@ -103,7 +110,7 @@ export default function AdminLayout() {
               </div>
             </div>
 
-            <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
+            <Dropdown menu={{ items: userMenuItems, onClick: handleUserMenuClick }} placement="bottomRight">
               <div className="flex items-center gap-3 cursor-pointer" style={{
                 padding: '6px 12px 6px 10px', borderRadius: 15,
                 border: '1px solid rgba(239, 68, 68, 0.15)',

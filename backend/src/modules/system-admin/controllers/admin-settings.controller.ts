@@ -12,17 +12,52 @@ const ALLOWED_KEYS = new Set([
   'maintenance_mode',
   'default_plan',
   'registration_enabled',
+  // Theme
+  'theme_primary_color',
+  'theme_logo_url',
+  'theme_dark_mode',
+  // Notifications
+  'notify_new_tenant',
+  'notify_plan_change',
+  'notify_email',
+  // Footer
+  'footer_text',
+  'footer_links',
+  'footer_show_powered_by',
+]);
+
+// Keys that are safe to expose publicly (no auth needed)
+const PUBLIC_KEYS = new Set([
+  'platform_name',
+  'theme_primary_color',
+  'theme_logo_url',
+  'theme_dark_mode',
+  'footer_text',
+  'footer_links',
+  'footer_show_powered_by',
 ]);
 
 @Controller('admin/settings')
-@UseGuards(JwtAuthGuard, SystemAdminGuard)
 export class AdminSettingsController {
   constructor(
     @InjectRepository(GlobalSetting)
     private readonly settingsRepo: Repository<GlobalSetting>,
   ) {}
 
+  /** Public endpoint — no auth required, returns only safe display settings */
+  @Get('public')
+  async getPublic() {
+    const rows = await this.settingsRepo.find();
+    return rows
+      .filter((r) => PUBLIC_KEYS.has(r.key))
+      .reduce<Record<string, string>>((acc, row) => {
+        acc[row.key] = row.value;
+        return acc;
+      }, {});
+  }
+
   @Get()
+  @UseGuards(JwtAuthGuard, SystemAdminGuard)
   async getAll() {
     const rows = await this.settingsRepo.find();
     return rows.reduce<Record<string, string>>((acc, row) => {
@@ -32,6 +67,7 @@ export class AdminSettingsController {
   }
 
   @Patch()
+  @UseGuards(JwtAuthGuard, SystemAdminGuard)
   async update(@Body() body: Record<string, string>) {
     const toSave: GlobalSetting[] = [];
 

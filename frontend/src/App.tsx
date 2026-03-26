@@ -47,6 +47,7 @@ import PlanAssignmentPage from '@/pages/admin/PlanAssignmentPage';
 import GlobalSettingsPage from '@/pages/admin/GlobalSettingsPage';
 import SubscriptionPage from '@/pages/settings/SubscriptionPage';
 import TenantAdminRoute from '@/components/TenantAdminRoute';
+import MyProfilePage from '@/pages/profile/MyProfilePage';
 
 function guarded(pageKey: string, element: JSX.Element) {
   return <PageAccessGuard pageKey={pageKey}>{element}</PageAccessGuard>;
@@ -91,6 +92,7 @@ function App() {
         <Route path="plans" element={<SubscriptionPlansPage />} />
         <Route path="plan-assignment" element={<PlanAssignmentPage />} />
         <Route path="settings" element={<GlobalSettingsPage />} />
+        <Route path="profile" element={<MyProfilePage />} />
         <Route index element={<Navigate to="tenants" replace />} />
       </Route>
 
@@ -177,6 +179,9 @@ function App() {
         <Route element={<TenantAdminRoute />}>
           <Route path="settings/subscription" element={<SubscriptionPage />} />
         </Route>
+
+        {/* Profile — all staff users */}
+        <Route path="profile" element={<MyProfilePage />} />
       </Route>
 
       <Route

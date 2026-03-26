@@ -10,6 +10,13 @@ export interface TenantRecord {
   planName: string | null;
 }
 
+export interface TenantStats {
+  tenant: TenantRecord;
+  userCount: number;
+  activityCount: number;
+  recentUsers: { id: string; email: string; name: string; isActive: boolean; createdAt: string }[];
+}
+
 export const adminTenantsApi = {
   list: (params?: { page?: number; limit?: number; name?: string; isActive?: boolean }) =>
     apiClient.get<{ data: TenantRecord[]; total: number; page: number; limit: number }>('/admin/tenants', { params }),
@@ -28,6 +35,12 @@ export const adminTenantsApi = {
 
   delete: (id: string) =>
     apiClient.delete<{ message: string; id: string }>(`/admin/tenants/${id}`),
+
+  stats: (id: string) =>
+    apiClient.get<TenantStats>(`/admin/tenants/${id}/stats`),
+
+  impersonate: (tenantId: string) =>
+    apiClient.post<{ accessToken: string; tenantName: string; userEmail: string }>(`/admin/impersonate/${tenantId}`),
 };
 
 export const adminSubscriptionsApi = {
@@ -38,4 +51,8 @@ export const adminSubscriptionsApi = {
 export const adminSettingsApi = {
   get: () => apiClient.get<Record<string, string>>('/admin/settings'),
   update: (body: Record<string, string>) => apiClient.patch<Record<string, string>>('/admin/settings', body),
+};
+
+export const adminActivityLogApi = {
+  list: () => apiClient.get<any[]>('/admin/activity-log'),
 };

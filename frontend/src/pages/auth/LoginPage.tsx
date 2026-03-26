@@ -177,12 +177,7 @@ export default function LoginPage() {
             Create one now
           </Link>
         </div>
-        <div className="mt-2">
-          <span className="text-gray-600">Customer or supplier? </span>
-          <Link to="/auth/activate" className="text-blue-500 hover:text-blue-700 font-medium">
-            Activate portal access
-          </Link>
-        </div>
+
       </div>
     </Card>
   );
