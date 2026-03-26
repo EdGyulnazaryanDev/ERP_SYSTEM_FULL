@@ -88,4 +88,17 @@ export class UsersController {
   ) {
     return this.usersService.changePassword(oldPassword, newPassword, tenantId);
   }
+
+  @Patch(':id/set-password')
+  @CheckPageAccess('users', 'edit')
+  setPassword(
+    @Param('id') id: string,
+    @Body('newPassword') newPassword: string,
+    @CurrentTenant() tenantId: string,
+  ) {
+    if (!newPassword || newPassword.length < 6) {
+      throw new BadRequestException('Password must be at least 6 characters');
+    }
+    return this.usersService.setPasswordByAdmin(id, newPassword, tenantId);
+  }
 }

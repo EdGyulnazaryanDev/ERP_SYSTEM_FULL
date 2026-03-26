@@ -223,4 +223,16 @@ export class UsersService extends BaseTenantService<User> {
 
     return { success: true };
   }
+
+  // Admin: set password for any user (no old password required)
+  async setPasswordByAdmin(
+    id: string,
+    newPassword: string,
+    tenantId: string,
+  ): Promise<{ success: boolean }> {
+    const user = await this.findOne(id, tenantId);
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await this.userRepository.update(user.id, { password: hashedPassword });
+    return { success: true };
+  }
 }

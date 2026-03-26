@@ -14,11 +14,12 @@ import {
   Row,
   Col,
 } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
+import { PlusOutlined, EditOutlined, DeleteOutlined, KeyOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { userService, roleService, type PaginatedResponse } from '@/services';
 import { useAccessControl } from '@/hooks/useAccessControl';
 import { usePlanLimits } from '@/hooks/usePlanLimits';
+import apiClient from '@/api/client';
 
 interface User {
   id: string;
@@ -31,7 +32,9 @@ interface User {
 export default function UsersPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [passwordUser, setPasswordUser] = useState<User | null>(null);
   const [form] = Form.useForm();
+  const [passwordForm] = Form.useForm();
   const queryClient = useQueryClient();
   const [filters, setFilters] = useState({ page: 1, pageSize: 10, search: '' });
   const { canPerform } = useAccessControl();
@@ -133,6 +136,19 @@ export default function UsersPage() {
     },
   });
 
+  const setPasswordMutation = useMutation({
+    mutationFn: ({ id, newPassword }: { id: string; newPassword: string }) =>
+      apiClient.patch(`/users/${id}/set-password`, { newPassword }),
+    onSuccess: () => {
+      message.success('Password updated');
+      setPasswordUser(null);
+      passwordForm.resetFields();
+    },
+    onError: (e: any) => {
+      message.error(e?.response?.data?.message || 'Failed to set password');
+    },
+  });
+
   const userLimit = getLimit('users');
   const currentUserCount = users?.total ?? 0;
   const atUserLimit = userLimit !== null && currentUserCount >= userLimit;
@@ -178,6 +194,11 @@ export default function UsersPage() {
       render: (_: unknown, r: User) => (
         <Space>
           {canEdit && <Button type="link" icon={<EditOutlined />} onClick={() => openEdit(r)}>Edit</Button>}
+          {canEdit && (
+            <Button type="link" icon={<KeyOutlined />} onClick={() => { setPasswordUser(r); passwordForm.resetFields(); }}>
+              Set Password
+            </Button>
+          )}
           {canDelete && (
             <Popconfirm title={`Delete ${r.email}?`} onConfirm={() => deleteUserMutation.mutate(r.id)}>
               <Button type="link" danger icon={<DeleteOutlined />}>Delete</Button>
@@ -277,6 +298,45 @@ export default function UsersPage() {
                 {editingUser ? 'Update' : 'Create'}
               </Button>
             </Space>
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={`Set Password — ${passwordUser?.email}`}
+        open={!!passwordUser}
+        onCancel={() => { setPasswordUser(null); passwordForm.resetFields(); }}
+        onOk={() => passwordForm.submit()}
+        confirmLoading={setPasswordMutation.isPending}
+        okText="Set Password"
+      >
+        <Form
+          form={passwordForm}
+          layout="vertical"
+          onFinish={(values) => setPasswordMutation.mutate({ id: passwordUser!.id, newPassword: values.newPassword })}
+        >
+          <Form.Item
+            name="newPassword"
+            label="New Password"
+            rules={[{ required: true, min: 6, message: 'At least 6 characters' }]}
+          >
+            <Input.Password placeholder="Enter new password" />
+          </Form.Item>
+          <Form.Item
+            name="confirmPassword"
+            label="Confirm Password"
+            dependencies={['newPassword']}
+            rules={[
+              { required: true },
+              ({ getFieldValue }) => ({
+                validator(_, value) {
+                  if (!value || getFieldValue('newPassword') === value) return Promise.resolve();
+                  return Promise.reject('Passwords do not match');
+                },
+              }),
+            ]}
+          >
+            <Input.Password placeholder="Confirm new password" />
           </Form.Item>
         </Form>
       </Modal>
