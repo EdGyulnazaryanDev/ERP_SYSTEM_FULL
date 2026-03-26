@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
+import MiniChat from '@/components/MiniChat';
 import { Layout, Menu, Avatar, Dropdown, Spin, Drawer, Grid, theme, Button, Row, Col, Tag, Switch, Modal, notification, Divider, Typography } from 'antd';
 import {
   DashboardOutlined,
@@ -881,6 +882,7 @@ export default function MainLayout() {
           <Outlet />
         </Content>
       </Layout>
+      <MiniChat />
     </Layout>
   );
 }
