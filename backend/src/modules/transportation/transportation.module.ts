@@ -24,6 +24,6 @@ import { AccountingModule } from '../accounting/accounting.module';
   ],
   controllers: [TransportationController],
   providers: [TransportationService],
-  exports: [TransportationService],
+  exports: [TransportationService, TypeOrmModule],
 })
 export class TransportationModule {}
