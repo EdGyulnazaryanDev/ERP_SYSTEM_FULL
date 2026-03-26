@@ -35,6 +35,8 @@ import { ComplianceAuditModule } from './modules/compliance-audit/compliance-aud
 import { CommunicationModule } from './modules/communication/communication.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
 import { SystemAdminModule } from './modules/system-admin/system-admin.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { ChatModule } from './modules/chat/chat.module';
 import { RedisModule } from './infrastructure/redis/redis.module';
 import { KafkaModule } from './infrastructure/kafka/kafka.module';
 import { MinioModule } from './infrastructure/minio/minio.module';
@@ -99,6 +101,8 @@ import { TenantInterceptor } from './common/interceptors/tenant.interceptor';
     WorkflowAutomationModule,
     ComplianceAuditModule,
     CommunicationModule,
+    DashboardModule,
+    ChatModule,
     RedisModule,
     KafkaModule,
     MinioModule,
