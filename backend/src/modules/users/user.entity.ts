@@ -39,6 +39,9 @@ export class User {
   @Column({ name: 'is_system_admin', default: false })
   isSystemAdmin: boolean;
 
+  @Column({ name: 'avatar_url', nullable: true, type: 'text' })
+  avatar_url: string | null;
+
   @Column({ name: 'refresh_token', nullable: true, type: 'text' })
   refreshToken: string | null;
 

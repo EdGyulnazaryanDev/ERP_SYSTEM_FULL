@@ -51,7 +51,7 @@ export function useAppSettings() {
 
   return {
     settings,
-    primaryColor: settings.theme_primary_color || '#1677ff',
+    primaryColor: settings.theme_primary_color || '#0f766e',
     isDarkMode: settings.theme_dark_mode !== 'false',
     platformName: settings.platform_name || 'ERP System',
     footerText: settings.footer_text || '',

@@ -1,18 +1,19 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Card, Row, Col, Avatar, Typography, Form, Input, Button,
-  Divider, Tag, message, Spin,
+  Tag, message, Spin,
 } from 'antd';
 import {
   UserOutlined, MailOutlined, LockOutlined, EditOutlined,
-  SaveOutlined, CrownOutlined, SafetyOutlined,
+  SaveOutlined, CrownOutlined, SafetyOutlined, CameraOutlined,
 } from '@ant-design/icons';
-import apiClient from '@/api/client';
-import { useAuthStore } from '@/store/authStore';
 import { useAccessControl } from '@/hooks/useAccessControl';
+import { toPublicAvatarUrl } from '@/hooks/useMyProfile';
+import apiClient from '@/api/client';
 
 const { Title, Text } = Typography;
+
 
 const CARD = {
   background: 'rgba(8,25,40,0.6)',
@@ -29,19 +30,35 @@ interface UserProfile {
   is_active: boolean;
   isSystemAdmin: boolean;
   created_at: string;
+  avatar_url?: string | null;
 }
 
 export default function ProfilePage() {
-  const { user } = useAuthStore();
   const { subscription, userRoles } = useAccessControl();
   const queryClient = useQueryClient();
   const [editMode, setEditMode] = useState(false);
   const [profileForm] = Form.useForm();
   const [passwordForm] = Form.useForm();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: profile, isLoading } = useQuery({
     queryKey: ['my-profile'],
     queryFn: async () => (await apiClient.get<UserProfile>('/users/me')).data,
+  });
+
+  const avatarMutation = useMutation({
+    mutationFn: (file: File) => {
+      const form = new FormData();
+      form.append('file', file);
+      return apiClient.post('/users/upload-avatar', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+    },
+    onSuccess: () => {
+      message.success('Avatar updated');
+      queryClient.invalidateQueries({ queryKey: ['my-profile'] });
+    },
+    onError: (e: any) => message.error(e?.response?.data?.message || 'Upload failed'),
   });
 
   const updateMutation = useMutation({
@@ -81,9 +98,38 @@ export default function ProfilePage() {
       {/* Avatar + summary */}
       <Card style={CARD} bodyStyle={{ padding: 28 }}>
         <div style={{ display: 'flex', gap: 24, alignItems: 'center', flexWrap: 'wrap' }}>
-          <Avatar size={80} style={{ background: 'linear-gradient(135deg, #1677ff, #722ed1)', fontSize: 28, fontWeight: 700, flexShrink: 0 }}>
-            {initials}
-          </Avatar>
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            <Avatar
+              size={80}
+              src={toPublicAvatarUrl(profile.avatar_url)}
+              style={{ background: 'linear-gradient(135deg, #1677ff, #722ed1)', fontSize: 28, fontWeight: 700, cursor: 'pointer' }}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {!toPublicAvatarUrl(profile.avatar_url) && initials}
+            </Avatar>
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              style={{
+                position: 'absolute', bottom: 0, right: 0,
+                background: '#1677ff', borderRadius: '50%',
+                width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', border: '2px solid #081928',
+              }}
+            >
+              <CameraOutlined style={{ fontSize: 11, color: '#fff' }} />
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) avatarMutation.mutate(file);
+                e.target.value = '';
+              }}
+            />
+          </div>
           <div style={{ flex: 1 }}>
             <Title level={4} style={{ color: '#f0f6ff', margin: 0 }}>{fullName}</Title>
             <Text style={{ color: '#8a9bb0' }}>{profile.email}</Text>

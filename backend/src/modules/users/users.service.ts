@@ -12,6 +12,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { PaginatedResponse } from './types';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
+import { MinioService } from '../../infrastructure/minio/minio.service';
 
 @Injectable()
 export class UsersService extends BaseTenantService<User> {
@@ -19,6 +20,7 @@ export class UsersService extends BaseTenantService<User> {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly subscriptionsService: SubscriptionsService,
+    private readonly minioService: MinioService,
   ) {
     super(userRepository);
   }
@@ -234,5 +236,30 @@ export class UsersService extends BaseTenantService<User> {
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     await this.userRepository.update(user.id, { password: hashedPassword });
     return { success: true };
+  }
+
+  // Upload avatar to MinIO and save URL on user
+  async uploadAvatar(
+    userId: string,
+    tenantId: string,
+    buffer: Buffer,
+    mimeType: string,
+    originalName: string,
+  ): Promise<{ avatar_url: string }> {
+    const ext = originalName.split('.').pop();
+    // Use timestamp in object name so each upload is a unique file (no browser cache issues)
+    const objectName = `avatars/${tenantId}/${userId}_${Date.now()}.${ext}`;
+
+    // Delete old avatar if exists
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (user?.avatar_url) {
+      // Extract object path: URL is like http://minio:9000/uploads/avatars/...
+      const match = user.avatar_url.match(/\/uploads\/(.+?)(\?|$)/);
+      if (match?.[1]) await this.minioService.deleteFile(match[1]);
+    }
+
+    const url = await this.minioService.uploadFile(objectName, buffer, mimeType);
+    await this.userRepository.update(userId, { avatar_url: url });
+    return { avatar_url: url };
   }
 }

@@ -1,15 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { jwtDecode } from 'jwt-decode';
 import type { User } from '@/types';
-
-function decodeJwt(token: string): Record<string, unknown> {
-  try {
-    const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-    return JSON.parse(atob(base64));
-  } catch {
-    return {};
-  }
-}
 
 interface AuthState {
   user: User | null;
@@ -22,21 +14,39 @@ interface AuthState {
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       user: null,
       token: null,
       isAuthenticated: false,
       isSystemAdmin: false,
       setAuth: (user, token) => {
-        const payload = decodeJwt(token);
-        const isSystemAdmin = payload.isSystemAdmin === true;
-        set({ user: { ...user, isSystemAdmin }, token, isAuthenticated: true, isSystemAdmin });
+        // Always re-decode from token to get correct UTF-8 name (jwtDecode handles multi-byte chars)
+        try {
+          const payload = jwtDecode<{ name?: string; isSystemAdmin?: boolean }>(token);
+          const isSystemAdmin = payload.isSystemAdmin === true;
+          const name = payload.name || user.name;
+          set({ user: { ...user, name, isSystemAdmin }, token, isAuthenticated: true, isSystemAdmin });
+        } catch {
+          set({ user, token, isAuthenticated: true, isSystemAdmin: false });
+        }
       },
       logout: () =>
         set({ user: null, token: null, isAuthenticated: false, isSystemAdmin: false }),
     }),
     {
       name: 'auth-storage',
+      // Re-hydrate: fix any garbled name from old stored token
+      onRehydrateStorage: () => (state) => {
+        if (!state?.token || !state?.user) return;
+        try {
+          const payload = jwtDecode<{ name?: string; isSystemAdmin?: boolean }>(state.token);
+          if (payload.name && payload.name !== state.user.name) {
+            state.user = { ...state.user, name: payload.name };
+          }
+        } catch {
+          // ignore
+        }
+      },
     }
   )
 );

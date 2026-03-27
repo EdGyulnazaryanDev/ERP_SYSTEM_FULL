@@ -3,6 +3,7 @@ import { Button, Input, Avatar, Typography, Empty, Spin, Tag, Badge, Tooltip, Po
 import { MessageOutlined, SendOutlined, CloseOutlined, EditOutlined, DeleteOutlined, SmileOutlined } from '@ant-design/icons';
 import { io, Socket } from 'socket.io-client';
 import { useAuthStore } from '@/store/authStore';
+import { useMyProfile } from '@/hooks/useMyProfile';
 
 const { Text } = Typography;
 
@@ -39,6 +40,7 @@ function getSocket(token: string): Socket {
 
 export default function MiniChat() {
   const { user, token } = useAuthStore();
+  const { avatarUrl: myAvatarUrl } = useMyProfile();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [text, setText] = useState('');
@@ -205,8 +207,8 @@ export default function MiniChat() {
           const isMe = msg.user_id === user?.id;
           return (
             <div key={msg.id} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', flexDirection: isMe ? 'row-reverse' : 'row' }}>
-              <Avatar size={26} style={{ background: isMe ? '#1677ff' : '#722ed1', flexShrink: 0, fontSize: 11 }}>
-                {msg.user_name[0]?.toUpperCase()}
+              <Avatar size={26} src={isMe ? myAvatarUrl : undefined} style={{ background: isMe ? '#1677ff' : '#722ed1', flexShrink: 0, fontSize: 11 }}>
+                {(!isMe || !myAvatarUrl) && msg.user_name[0]?.toUpperCase()}
               </Avatar>
               <div style={{ maxWidth: '75%' }}>
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 2, flexDirection: isMe ? 'row-reverse' : 'row' }}>

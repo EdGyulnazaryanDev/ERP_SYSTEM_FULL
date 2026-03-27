@@ -9,7 +9,10 @@ import {
   UseGuards,
   Query,
   BadRequestException,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PageAccessGuard } from '../../common/guards/page-access.guard';
 import { CheckPageAccess } from '../../common/decorators/check-page-access.decorator';
@@ -95,6 +98,25 @@ export class UsersController {
     @CurrentTenant() tenantId: string,
   ) {
     return this.usersService.changePassword(oldPassword, newPassword, tenantId);
+  }
+
+  @Post('upload-avatar')
+  @UseInterceptors(FileInterceptor('file', {
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+    fileFilter: (_, file, cb) => {
+      if (!file.mimetype.startsWith('image/')) {
+        return cb(new BadRequestException('Only image files are allowed'), false);
+      }
+      cb(null, true);
+    },
+  }))
+  uploadAvatar(
+    @UploadedFile() file: any,
+    @CurrentUser() user: JwtUser,
+    @CurrentTenant() tenantId: string,
+  ) {
+    if (!file) throw new BadRequestException('No file provided');
+    return this.usersService.uploadAvatar(user.sub, tenantId, file.buffer, file.mimetype, file.originalname);
   }
 
   @Patch(':id/set-password')

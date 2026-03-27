@@ -35,6 +35,7 @@ import {
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/authStore';
 import { useAccessControl } from '@/hooks/useAccessControl';
+import { useMyProfile } from '@/hooks/useMyProfile';
 import { subscriptionsApi, type SubscriptionPlan } from '@/api/subscriptions';
 
 const { Header, Sider, Content } = Layout;
@@ -67,6 +68,7 @@ export default function MainLayout() {
   // Plan selection hooks - MUST be declared before any conditional returns
   const queryClient = useQueryClient();
   const [yearly, setYearly] = useState(false);
+  const { avatarUrl } = useMyProfile();
 
   // Force plan selection when tenant has no active subscription (only after loading completes)
   // ALL tenant users (including Admin role) must select a plan — only system admins bypass this
@@ -784,6 +786,7 @@ export default function MainLayout() {
                   />
                   <Avatar
                     size={30}
+                    src={avatarUrl}
                     style={{
                       position: 'relative',
                       background: 'linear-gradient(135deg, #14b8a6 0%, #38bdf8 100%)',
@@ -794,7 +797,7 @@ export default function MainLayout() {
                       boxShadow: '0 6px 14px rgba(20, 184, 166, 0.22)',
                     }}
                   >
-                    {userInitials}
+                    {!avatarUrl && userInitials}
                   </Avatar>
                   <span
                     style={{
