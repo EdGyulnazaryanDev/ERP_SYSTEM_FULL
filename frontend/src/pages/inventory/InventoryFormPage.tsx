@@ -64,13 +64,8 @@ export default function InventoryFormPage() {
       }
       return inventoryApi.create(payload);
     },
-    onSuccess: (_data, values) => {
-      const requestedQty = Number(values?.quantity || 0);
-      if (!id && requestedQty > 0) {
-        message.success('Inventory item created. Opening stock is now pending approval and inbound delivery.');
-      } else {
-        message.success(`Inventory item ${id ? 'updated' : 'created'} successfully`);
-      }
+    onSuccess: () => {
+      message.success(`Inventory item ${id ? 'updated' : 'created'} successfully`);
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
       queryClient.invalidateQueries({ queryKey: ['inventory-summary'] });
       queryClient.invalidateQueries({ queryKey: ['purchase-requisitions'] });
@@ -130,8 +125,8 @@ export default function InventoryFormPage() {
             type="info"
             showIcon
             style={{ marginBottom: 16, borderRadius: 10 }}
-            message="New item receiving flow"
-            description="If you enter an opening quantity, the system will create a pending procurement/accounting workflow. Stock will stay at zero until the requisition is approved and the inbound shipment is delivered."
+            message="Opening stock"
+            description="Enter the quantity currently on hand. Stock will be registered immediately and accounting will reflect the opening balance."
           />
         )}
         <Form
@@ -173,7 +168,7 @@ export default function InventoryFormPage() {
           <Row gutter={16}>
             <Col span={8}>
               <Form.Item
-                label={id ? 'Quantity' : 'Requested Opening Qty'}
+                label="Quantity"
                 name="quantity"
                 rules={[{ required: true }]}
               >

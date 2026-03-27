@@ -20,6 +20,7 @@ import { SubscriptionsService } from '../../subscriptions/subscriptions.service'
 import { ComplianceAuditService } from '../../compliance-audit/compliance-audit.service';
 import { AuditAction, AuditSeverity } from '../../compliance-audit/entities/audit-log.entity';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
+import { DefaultCoaSeeder } from '../../../database/seeders/default-coa.seeder';
 import type { JwtUser } from '../../../types/express';
 
 @Controller('admin/tenants')
@@ -30,7 +31,17 @@ export class AdminTenantsController {
     private readonly tenantRepo: Repository<Tenant>,
     private readonly subscriptionsService: SubscriptionsService,
     private readonly complianceAuditService: ComplianceAuditService,
+    private readonly coaSeeder: DefaultCoaSeeder,
   ) {}
+
+  /** POST /admin/tenants/:id/seed-coa — seed default CoA for an existing tenant */
+  @Post(':id/seed-coa')
+  async seedCoa(@Param('id') id: string) {
+    const tenant = await this.tenantRepo.findOne({ where: { id } });
+    if (!tenant) throw new NotFoundException('Tenant not found');
+    await this.coaSeeder.seed(id);
+    return { message: `CoA seeded for tenant "${tenant.name}"` };
+  }
 
   @Get()
   async list(

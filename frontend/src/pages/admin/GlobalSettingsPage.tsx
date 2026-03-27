@@ -137,6 +137,12 @@ function TenantStatsTab() {
     enabled: !!selectedId,
   });
 
+  const seedCoaMutation = useMutation({
+    mutationFn: (id: string) => adminTenantsApi.seedCoa(id),
+    onSuccess: (res) => notification.success({ message: res.data.message }),
+    onError: () => notification.error({ message: 'Failed to seed CoA' }),
+  });
+
   const columns = [
     { title: 'Name', dataIndex: 'name', key: 'name', render: (v: string) => <Text style={{ color: '#f0f6ff' }}>{v}</Text> },
     { title: 'Plan', dataIndex: 'planName', key: 'plan', render: (v: string | null) => v ? <Tag color="blue">{v}</Tag> : <Tag>No plan</Tag> },
@@ -144,9 +150,16 @@ function TenantStatsTab() {
     {
       title: 'Actions', key: 'actions',
       render: (_: unknown, r: any) => (
-        <Button size="small" icon={<EyeOutlined />} onClick={() => { setSelectedId(r.id); setStatsOpen(true); }}>
-          View Stats
-        </Button>
+        <Space>
+          <Button size="small" icon={<EyeOutlined />} onClick={() => { setSelectedId(r.id); setStatsOpen(true); }}>
+            View Stats
+          </Button>
+          <Tooltip title="Seed default Chart of Accounts for this tenant (fixes missing JE accounts)">
+            <Button size="small" onClick={() => seedCoaMutation.mutate(r.id)} loading={seedCoaMutation.isPending}>
+              Seed CoA
+            </Button>
+          </Tooltip>
+        </Space>
       ),
     },
   ];

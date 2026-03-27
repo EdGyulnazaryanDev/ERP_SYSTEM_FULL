@@ -41,6 +41,9 @@ export const adminTenantsApi = {
 
   impersonate: (tenantId: string) =>
     apiClient.post<{ accessToken: string; tenantName: string; userEmail: string }>(`/admin/impersonate/${tenantId}`),
+
+  seedCoa: (tenantId: string) =>
+    apiClient.post<{ message: string }>(`/admin/tenants/${tenantId}/seed-coa`),
 };
 
 export const adminSubscriptionsApi = {

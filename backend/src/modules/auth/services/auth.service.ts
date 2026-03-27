@@ -25,6 +25,7 @@ import { SetPortalCredentialsDto } from '../dto/set-portal-credentials.dto';
 import { ConfigService } from '@nestjs/config';
 import { JwtPayload } from '../interfaces/jwt-payload.interface';
 import { DefaultRbacSeeder } from '../../../database/seeders/default-rbac.seeder';
+import { DefaultCoaSeeder } from '../../../database/seeders/default-coa.seeder';
 import { ComplianceAuditService } from '../../compliance-audit/compliance-audit.service';
 import { AuditAction, AuditSeverity } from '../../compliance-audit/entities/audit-log.entity';
 import { SubscriptionsService } from '../../subscriptions/subscriptions.service';
@@ -88,6 +89,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly rbacSeeder: DefaultRbacSeeder,
+    private readonly coaSeeder: DefaultCoaSeeder,
     private readonly subscriptionsService: SubscriptionsService,
     @Optional()
     private readonly complianceAuditService?: ComplianceAuditService,
@@ -297,6 +299,9 @@ export class AuthService {
 
     // Seed default RBAC for new tenant
     await this.rbacSeeder.seed(tenant.id);
+
+    // Seed default Chart of Accounts so financial brain can create JEs automatically
+    await this.coaSeeder.seed(tenant.id);
 
     // Get default Admin role
     const adminRole = await this.rbacSeeder.getDefaultAdminRole(tenant.id);

@@ -100,7 +100,7 @@ export class InventoryController {
         error?.stack || error?.message,
         { data },
       );
-      if (error instanceof BadRequestException) throw error;
+      if (error?.status) throw error;
       throw new InternalServerErrorException('Failed to create inventory item');
     }
   }

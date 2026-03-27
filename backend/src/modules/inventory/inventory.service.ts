@@ -16,6 +16,8 @@ import { PurchaseRequisitionEntity, RequisitionStatus, RequisitionPriority } fro
 import { PurchaseRequisitionItemEntity } from '../procurement/entities/purchase-requisition-item.entity';
 import { TransactionEntity, TransactionType, TransactionStatus } from '../transactions/entities/transaction.entity';
 import { TransactionItemEntity } from '../transactions/entities/transaction-item.entity';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
+import { PlanLimitKey } from '../subscriptions/subscription.constants';
 
 @Injectable()
 export class InventoryService {
@@ -34,6 +36,7 @@ export class InventoryService {
     private transactionItemRepo: Repository<TransactionItemEntity>,
     private eventEmitter: EventEmitter2,
     private accountingService: AccountingService,
+    private readonly subscriptionsService: SubscriptionsService,
   ) {}
 
   async findAll(tenantId: string): Promise<InventoryEntity[]> {
@@ -72,7 +75,11 @@ export class InventoryService {
     tenantId: string,
   ): Promise<InventoryEntity> {
     try {
-      const requestedOpeningQty = Math.max(Number(data.quantity || 0), 0);
+      const openingQty = Math.max(Number(data.quantity || 0), 0);
+
+      // Enforce plan limit — inventory items count against the products limit
+      const currentCount = await this.inventoryRepo.count({ where: { tenant_id: tenantId } });
+      await this.subscriptionsService.assertWithinLimit(tenantId, PlanLimitKey.PRODUCTS, currentCount);
 
       // Check SKU uniqueness within tenant
       if (data.sku) {
@@ -84,26 +91,36 @@ export class InventoryService {
         }
       }
 
+      // Opening stock is set immediately — it represents physical stock already on hand
+      // being registered in the system for the first time.
+      // Reorder workflows are only triggered later when stock drops below reorder_level.
       const inventory = this.inventoryRepo.create({
         ...data,
         tenant_id: tenantId,
-        quantity: 0,
+        quantity: openingQty,
         reserved_quantity: 0,
-        available_quantity: 0,
+        available_quantity: openingQty,
       });
 
       const saved = await this.inventoryRepo.save(inventory);
 
-      // Professional inbound flow: requested opening stock is received only after approval + delivered shipment.
-      if (requestedOpeningQty > 0) {
-        await this.createInboundProcurementWorkflow(
-          saved,
-          tenantId,
-          requestedOpeningQty,
-          'new_item',
-          `Initial stock request for ${saved.product_name}`,
-          true,
-        );
+      // Emit a stock-in financial event so accounting reflects the opening balance
+      if (openingQty > 0) {
+        const unitCost = Number(saved.unit_cost);
+        const totalCost = openingQty * unitCost;
+        if (totalCost > 0) {
+          const event = new StockMovedEvent();
+          event.tenantId = tenantId;
+          event.productId = saved.id;
+          event.productName = saved.product_name;
+          event.quantity = openingQty;
+          event.movementType = 'IN';
+          event.unitCost = unitCost;
+          event.totalCost = totalCost;
+          event.reference = `OPENING-${saved.sku}`;
+          event.source = 'opening';
+          this.eventEmitter.emit(FinancialEventType.STOCK_MOVED, event);
+        }
       }
 
       return saved;
@@ -113,7 +130,8 @@ export class InventoryService {
         err?.stack || err?.message,
         { data },
       );
-      if (err instanceof ConflictException) throw err;
+      // Re-throw all HTTP exceptions as-is (ForbiddenException, ConflictException, etc.)
+      if (err?.status) throw err;
       throw new InternalServerErrorException('Failed to create inventory item');
     }
   }
@@ -125,12 +143,11 @@ export class InventoryService {
   ): Promise<InventoryEntity> {
     const inventory = await this.findOne(id, tenantId);
 
-    Object.assign(inventory, data);
+    // Strip quantity fields — stock levels must only change via adjustStock() or inbound delivery.
+    // Allowing direct quantity edits would bypass the procurement workflow and cause double-counting.
+    const { quantity, reserved_quantity, available_quantity, ...safeData } = data as any;
 
-    if (data.quantity !== undefined || data.reserved_quantity !== undefined) {
-      inventory.available_quantity =
-        inventory.quantity - inventory.reserved_quantity;
-    }
+    Object.assign(inventory, safeData);
 
     return this.inventoryRepo.save(inventory);
   }

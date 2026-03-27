@@ -41,6 +41,11 @@ export class TransportationController {
     });
   }
 
+  @Get('shipments/pending-count')
+  getPendingShipmentsCount(@CurrentTenant() tenantId: string) {
+    return this.transportationService.getPendingShipmentsCount(tenantId);
+  }
+
   @Get('shipments/track/:trackingNumber')
   trackShipment(@Param('trackingNumber') trackingNumber: string) {
     return this.transportationService.findShipmentByTracking(trackingNumber);

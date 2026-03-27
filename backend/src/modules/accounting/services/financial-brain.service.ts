@@ -164,20 +164,34 @@ export class FinancialBrainService {
         }, event.tenantId);
         await this.accountingService.postJournalEntry(je.id, {}, event.tenantId);
         this.logger.log(`[BRAIN] Auto-posted COGS JE for stock OUT: ${event.productName}`);
-      } else if (event.movementType === 'IN' && inventoryAccount && apAccount) {
-        // Stock IN: Debit Inventory, Credit AP (goods received)
+      } else if (event.movementType === 'IN' && inventoryAccount) {
+        // Opening balance → credit Owner Equity (not AP — no supplier involved)
+        // Delivery / reorder receipt → credit AP (goods received from supplier)
+        let creditAccount = apAccount;
+        if (event.source === 'opening') {
+          creditAccount = await this.accountingService['findDefaultAccount'](event.tenantId, 'retained_earnings')
+            || await this.accountingService['findDefaultAccount'](event.tenantId, 'owner_equity')
+            || apAccount;
+        }
+        if (!creditAccount) {
+          this.logger.warn(`[BRAIN] Missing credit account for STOCK_MOVED IN — need accounts_payable or equity`);
+          return;
+        }
+        const description = event.source === 'opening'
+          ? `Opening stock: ${event.productName} x${event.quantity}`
+          : `Inventory received: ${event.productName} x${event.quantity}`;
         const je = await this.accountingService.createJournalEntry({
           entry_date: new Date().toISOString().split('T')[0],
-          entry_type: JournalEntryType.PURCHASE,
-          description: `Inventory received: ${event.productName} x${event.quantity}`,
+          entry_type: event.source === 'opening' ? JournalEntryType.GENERAL : JournalEntryType.PURCHASE,
+          description,
           reference: event.reference,
           lines: [
             { account_id: inventoryAccount.id, description: `Inventory IN - ${event.productName}`, debit: event.totalCost, credit: 0 },
-            { account_id: apAccount.id, description: `Payable - ${event.productName}`, debit: 0, credit: event.totalCost },
+            { account_id: creditAccount.id, description: `${event.source === 'opening' ? 'Opening equity' : 'Payable'} - ${event.productName}`, debit: 0, credit: event.totalCost },
           ],
         }, event.tenantId);
         await this.accountingService.postJournalEntry(je.id, {}, event.tenantId);
-        this.logger.log(`[BRAIN] Auto-posted Inventory IN JE: ${event.productName}`);
+        this.logger.log(`[BRAIN] Auto-posted Inventory IN JE (${event.source ?? 'manual'}): ${event.productName}`);
       } else if (event.movementType === 'ADJUSTMENT' && inventoryAccount) {
         // Adjustment: use equity/retained earnings as the other side if available, else AP
         const equityAccount = await this.accountingService['findDefaultAccount'](event.tenantId, 'retained_earnings')

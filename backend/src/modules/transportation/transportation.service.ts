@@ -10,12 +10,23 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ShipmentEntity, ShipmentStatus } from './entities/shipment.entity';
 import { ShipmentItemEntity } from './entities/shipment-item.entity';
 import { CourierEntity } from './entities/courier.entity';
-import { DeliveryRouteEntity, RouteStatus } from './entities/delivery-route.entity';
+import {
+  DeliveryRouteEntity,
+  RouteStatus,
+} from './entities/delivery-route.entity';
 import { InventoryEntity } from '../inventory/entities/inventory.entity';
 import type { CreateShipmentDto } from './dto/create-shipment.dto';
-import { FinancialEventType, ShipmentDeliveredEvent, StockMovedEvent } from '../accounting/events/financial.events';
+import {
+  FinancialEventType,
+  ShipmentDeliveredEvent,
+  StockMovedEvent,
+} from '../accounting/events/financial.events';
 import { AccountingService } from '../accounting/accounting.service';
-import { TransactionEntity, TransactionStatus } from '../transactions/entities/transaction.entity';
+import {
+  TransactionEntity,
+  TransactionStatus,
+  TransactionType,
+} from '../transactions/entities/transaction.entity';
 
 @Injectable()
 export class TransportationService {
@@ -39,6 +50,16 @@ export class TransportationService {
   ) {}
 
   // Shipments
+  async getPendingShipmentsCount(tenantId: string): Promise<{ count: number }> {
+    const count = await this.shipmentRepo.count({
+      where: {
+        tenant_id: tenantId,
+        status: ShipmentStatus.PENDING,
+      },
+    });
+    return { count };
+  }
+
   async findAllShipments(
     tenantId: string,
     filters?: {
@@ -72,10 +93,7 @@ export class TransportationService {
     });
   }
 
-  async findOneShipment(
-    id: string,
-    tenantId: string,
-  ): Promise<ShipmentEntity> {
+  async findOneShipment(id: string, tenantId: string): Promise<ShipmentEntity> {
     const shipment = await this.shipmentRepo.findOne({
       where: { id, tenant_id: tenantId },
       relations: ['courier', 'items'],
@@ -109,8 +127,7 @@ export class TransportationService {
   ): Promise<ShipmentEntity> {
     const trackingNumber = await this.generateTrackingNumber(tenantId);
 
-    const totalCost =
-      (data.shipping_cost || 0) + (data.insurance_cost || 0);
+    const totalCost = (data.shipping_cost || 0) + (data.insurance_cost || 0);
 
     const shipment = this.shipmentRepo.create({
       tenant_id: tenantId,
@@ -167,7 +184,9 @@ export class TransportationService {
       ),
     });
 
-    return this.shipmentRepo.save(shipment) as unknown as Promise<ShipmentEntity>;
+    return this.shipmentRepo.save(
+      shipment,
+    ) as unknown as Promise<ShipmentEntity>;
   }
 
   async updateShipmentStatus(
@@ -193,7 +212,8 @@ export class TransportationService {
     ];
 
     if (status === ShipmentStatus.DELIVERED) {
-      shipment.actual_delivery_date = shipment.actual_delivery_date || new Date();
+      shipment.actual_delivery_date =
+        shipment.actual_delivery_date || new Date();
 
       if (!wasDelivered) {
         await this.processDeliveredShipment(shipment, tenantId);
@@ -249,7 +269,8 @@ export class TransportationService {
     }
 
     const shippingCost =
-      Number(shipment.shipping_cost || 0) + Number(shipment.insurance_cost || 0);
+      Number(shipment.shipping_cost || 0) +
+      Number(shipment.insurance_cost || 0);
     if (shippingCost > 0) {
       const shippingEvent = new ShipmentDeliveredEvent();
       shippingEvent.tenantId = tenantId;
@@ -257,39 +278,36 @@ export class TransportationService {
       shippingEvent.trackingNumber = shipment.tracking_number;
       shippingEvent.shippingCost = shippingCost;
       shippingEvent.date = new Date().toISOString().split('T')[0];
-      this.eventEmitter.emit(FinancialEventType.SHIPMENT_DELIVERED, shippingEvent);
+      this.eventEmitter.emit(
+        FinancialEventType.SHIPMENT_DELIVERED,
+        shippingEvent,
+      );
     }
 
-    const isInbound =
-      shipment.origin_name?.toLowerCase().includes('supplier') ||
-      shipment.tracking_number?.startsWith('SHP-REQ');
+    // ── Inbound stock receipt ────────────────────────────────────────────────
+    // If no transaction is linked, treat as a manual inbound delivery —
+    // update inventory from shipment items and emit STOCK_MOVED so the
+    // financial brain creates the JE (Debit Inventory / Credit AP).
+    if (!shipment.transaction_id) {
+      if (!shipment.items?.length) return;
 
-    if (!isInbound || !shipment.items?.length) {
-      return;
-    }
-
-    let linkedTransaction: TransactionEntity | null = null;
-    if (shipment.transaction_id) {
-      linkedTransaction = await this.transactionRepo.findOne({
-        where: { id: shipment.transaction_id, tenant_id: tenantId },
-        relations: ['items'],
-      });
-    }
-
-    for (const item of shipment.items) {
-      if (!item.product_id) continue;
-
-      try {
-        let inv = await this.inventoryRepo.findOne({
-          where: { id: item.product_id, tenant_id: tenantId },
-        });
-        if (!inv) {
-          inv = await this.inventoryRepo.findOne({
-            where: { product_id: item.product_id, tenant_id: tenantId },
+      for (const item of shipment.items) {
+        if (!item.product_id) continue;
+        try {
+          let inv = await this.inventoryRepo.findOne({
+            where: { id: item.product_id, tenant_id: tenantId },
           });
-        }
+          if (!inv)
+            inv = await this.inventoryRepo.findOne({
+              where: { product_id: item.product_id, tenant_id: tenantId },
+            });
+          if (!inv) {
+            this.logger.warn(
+              `[DELIVERY] No inventory for product ${item.product_id}`,
+            );
+            continue;
+          }
 
-        if (inv) {
           const qty = Number(item.quantity);
           inv.quantity += qty;
           inv.available_quantity = inv.quantity - inv.reserved_quantity;
@@ -297,8 +315,84 @@ export class TransportationService {
 
           const unitCost = Number(inv.unit_cost);
           const totalCost = qty * unitCost;
+          if (totalCost > 0) {
+            const e = new StockMovedEvent();
+            e.tenantId = tenantId;
+            e.productId = inv.id;
+            e.productName = inv.product_name;
+            e.quantity = qty;
+            e.movementType = 'IN';
+            e.unitCost = unitCost;
+            e.totalCost = totalCost;
+            e.reference = shipment.tracking_number;
+            e.source = 'delivery';
+            this.eventEmitter.emit(FinancialEventType.STOCK_MOVED, e);
+          }
+          this.logger.log(
+            `[DELIVERY] Manual inbound: ${inv.product_name} +${qty} (shipment ${shipment.tracking_number})`,
+          );
+        } catch (e: any) {
+          this.logger.error(
+            `[DELIVERY] Failed for product ${item.product_id}: ${e.message}`,
+          );
+        }
+      }
+      return;
+    }
 
-          if (totalCost > 0 && !linkedTransaction) {
+    const linkedTransaction = await this.transactionRepo.findOne({
+      where: { id: shipment.transaction_id, tenant_id: tenantId },
+      relations: ['items'],
+    });
+
+    if (!linkedTransaction) {
+      this.logger.warn(
+        `[DELIVERY] Linked transaction ${shipment.transaction_id} not found — skipping inventory update`,
+      );
+      return;
+    }
+
+    // Only PURCHASE transactions trigger inbound stock receipt
+    if (linkedTransaction.type !== TransactionType.PURCHASE) {
+      this.logger.log(
+        `[DELIVERY] Shipment ${shipment.tracking_number} linked to ${linkedTransaction.type} transaction — no inventory update needed`,
+      );
+      return;
+    }
+
+    // Guard: if transaction already completed, don't double-count
+    if (linkedTransaction.status === TransactionStatus.COMPLETED) {
+      this.logger.warn(
+        `[DELIVERY] Transaction ${linkedTransaction.transaction_number} already COMPLETED — skipping duplicate inventory update`,
+      );
+      return;
+    }
+
+    // Update inventory for each item in the purchase transaction
+    for (const txItem of linkedTransaction.items ?? []) {
+      if (!txItem.product_id) continue;
+
+      try {
+        // product_id on transaction items maps to inventory.id (set by the workflow)
+        let inv = await this.inventoryRepo.findOne({
+          where: { id: txItem.product_id, tenant_id: tenantId },
+        });
+        if (!inv) {
+          inv = await this.inventoryRepo.findOne({
+            where: { product_id: txItem.product_id, tenant_id: tenantId },
+          });
+        }
+
+        if (inv) {
+          const qty = Number(txItem.quantity);
+          inv.quantity += qty;
+          inv.available_quantity = inv.quantity - inv.reserved_quantity;
+          await this.inventoryRepo.save(inv);
+
+          const unitCost = Number(inv.unit_cost);
+          const totalCost = qty * unitCost;
+
+          if (totalCost > 0) {
             const stockEvent = new StockMovedEvent();
             stockEvent.tenantId = tenantId;
             stockEvent.productId = inv.id;
@@ -312,35 +406,34 @@ export class TransportationService {
           }
 
           this.logger.log(
-            `[DELIVERY] Inventory updated: ${inv.product_name} +${qty} → new qty ${inv.quantity} (shipment ${shipment.tracking_number})`,
+            `[DELIVERY] Inventory updated: ${inv.product_name} +${qty} → qty ${inv.quantity} (shipment ${shipment.tracking_number}, tx ${linkedTransaction.transaction_number})`,
           );
         } else {
           this.logger.warn(
-            `[DELIVERY] Product ${item.product_id} not found in inventory — skipping stock update`,
+            `[DELIVERY] Inventory item for product ${txItem.product_id} not found — skipping`,
           );
         }
       } catch (e: any) {
         this.logger.error(
-          `[DELIVERY] Failed to update inventory for item ${item.product_id}: ${e.message}`,
+          `[DELIVERY] Failed to update inventory for product ${txItem.product_id}: ${e.message}`,
         );
       }
     }
 
-    if (linkedTransaction) {
-      if (linkedTransaction.status !== TransactionStatus.COMPLETED) {
-        linkedTransaction.status = TransactionStatus.COMPLETED;
-        linkedTransaction.notes = `${linkedTransaction.notes || ''} Received via shipment ${shipment.tracking_number}`.trim();
-        await this.transactionRepo.save(linkedTransaction);
-      }
+    // Mark transaction as completed and post any draft journal entries
+    linkedTransaction.status = TransactionStatus.COMPLETED;
+    linkedTransaction.notes =
+      `${linkedTransaction.notes || ''} Received via shipment ${shipment.tracking_number}`.trim();
+    await this.transactionRepo.save(linkedTransaction);
 
-      const draftEntries = await this.accountingService.findJournalEntriesByReference(
+    const draftEntries =
+      await this.accountingService.findJournalEntriesByReference(
         linkedTransaction.transaction_number,
         tenantId,
       );
-      for (const entry of draftEntries) {
-        if (entry.status === 'draft') {
-          await this.accountingService.postJournalEntry(entry.id, {}, tenantId);
-        }
+    for (const entry of draftEntries) {
+      if (entry.status === 'draft') {
+        await this.accountingService.postJournalEntry(entry.id, {}, tenantId);
       }
     }
   }
@@ -408,7 +501,10 @@ export class TransportationService {
     }
 
     // Detach courier from non-active shipments before deleting
-    await this.shipmentRepo.update({ courier_id: id }, { courier_id: null as any });
+    await this.shipmentRepo.update(
+      { courier_id: id },
+      { courier_id: null as any },
+    );
 
     // Delete any routes assigned to this courier
     await this.routeRepo.delete({ courier_id: id });
@@ -518,9 +614,7 @@ export class TransportationService {
         shipment.actual_delivery_date &&
         shipment.estimated_delivery_date
       ) {
-        if (
-          shipment.actual_delivery_date <= shipment.estimated_delivery_date
-        ) {
+        if (shipment.actual_delivery_date <= shipment.estimated_delivery_date) {
           analytics.onTimeDeliveries++;
         } else {
           analytics.lateDeliveries++;
@@ -531,8 +625,7 @@ export class TransportationService {
     analytics.averageCost =
       shipments.length > 0 ? analytics.totalCost / shipments.length : 0;
 
-    const deliveredCount =
-      analytics.byStatus[ShipmentStatus.DELIVERED] || 0;
+    const deliveredCount = analytics.byStatus[ShipmentStatus.DELIVERED] || 0;
     analytics.deliveryRate =
       shipments.length > 0 ? (deliveredCount / shipments.length) * 100 : 0;
 

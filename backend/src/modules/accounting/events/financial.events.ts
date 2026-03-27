@@ -61,6 +61,8 @@ export class StockMovedEvent {
   unitCost: number;
   totalCost: number;
   reference?: string;
+  /** opening = initial inventory registration, delivery = inbound shipment receipt, manual = adjustStock call */
+  source?: 'opening' | 'delivery' | 'manual';
 }
 
 export class ShipmentDeliveredEvent {

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ComprehensiveSeeder } from './comprehensive.seeder';
+import { DefaultCoaSeeder } from './default-coa.seeder';
 import { Role } from '../../modules/roles/role.entity';
 import { Permission } from '../../modules/permissions/permission.entity';
 import { RolePermission } from '../../modules/permissions/role-permission.entity';
@@ -63,7 +64,7 @@ import { LeadEntity } from '../../modules/crm/entities/lead.entity';
     ]),
     SettingsModule,
   ],
-  providers: [ComprehensiveSeeder],
-  exports: [ComprehensiveSeeder],
+  providers: [ComprehensiveSeeder, DefaultCoaSeeder],
+  exports: [ComprehensiveSeeder, DefaultCoaSeeder],
 })
 export class SeederModule {}
