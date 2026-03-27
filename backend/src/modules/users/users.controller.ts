@@ -15,8 +15,10 @@ import { PageAccessGuard } from '../../common/guards/page-access.guard';
 import { CheckPageAccess } from '../../common/decorators/check-page-access.decorator';
 import { UsersService } from './users.service';
 import { CurrentTenant } from '../../common/decorators/current-tenant.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import type { JwtUser } from '../../types/express';
 
 @UseGuards(JwtAuthGuard, PageAccessGuard)
 @Controller('users')
@@ -41,6 +43,12 @@ export class UsersController {
   ) {
     if (!tenantId) throw new BadRequestException('Tenant ID is required');
     return this.usersService.findAllPaginated(tenantId, parseInt(page, 10), parseInt(pageSize, 10), search);
+  }
+
+  // Profile and password — users can always manage their own account
+  @Get('me')
+  getMe(@CurrentUser() user: JwtUser, @CurrentTenant() tenantId: string) {
+    return this.usersService.findOne(user.sub, tenantId);
   }
 
   @Get(':id')
@@ -71,13 +79,13 @@ export class UsersController {
     return this.usersService.bulkDelete(ids, tenantId);
   }
 
-  // Profile and password — users can always manage their own account
   @Patch('profile/update')
   updateProfile(
     @Body() updateDto: UpdateUserDto,
+    @CurrentUser() user: JwtUser,
     @CurrentTenant() tenantId: string,
   ) {
-    return this.usersService.updateProfile(updateDto, tenantId);
+    return this.usersService.update(user.sub, updateDto, tenantId);
   }
 
   @Post('change-password')

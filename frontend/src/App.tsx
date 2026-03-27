@@ -47,6 +47,7 @@ import PlanAssignmentPage from '@/pages/admin/PlanAssignmentPage';
 import GlobalSettingsPage from '@/pages/admin/GlobalSettingsPage';
 import SubscriptionPage from '@/pages/settings/SubscriptionPage';
 import TenantAdminRoute from '@/components/TenantAdminRoute';
+import ProfilePage from '@/pages/profile/ProfilePage';
 import MyProfilePage from '@/pages/profile/MyProfilePage';
 
 function guarded(pageKey: string, element: JSX.Element) {
@@ -179,6 +180,9 @@ function App() {
         <Route element={<TenantAdminRoute />}>
           <Route path="settings/subscription" element={<SubscriptionPage />} />
         </Route>
+
+        {/* Profile — any authenticated tenant user */}
+        <Route path="profile" element={<ProfilePage />} />
 
         {/* Profile — all staff users */}
         <Route path="profile" element={<MyProfilePage />} />

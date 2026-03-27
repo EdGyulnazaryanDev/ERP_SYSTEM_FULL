@@ -550,7 +550,8 @@ export default function MainLayout() {
     {
       key: 'profile',
       icon: <UserOutlined />,
-      label: 'Profile',
+      label: 'My Profile',
+      onClick: () => navigate('/profile'),
     },
     {
       type: 'divider' as const,
