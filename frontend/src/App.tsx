@@ -45,6 +45,7 @@ import SubscriptionPlansPage from '@/pages/admin/SubscriptionPlansPage';
 import TenantsPage from '@/pages/admin/TenantsPage';
 import PlanAssignmentPage from '@/pages/admin/PlanAssignmentPage';
 import GlobalSettingsPage from '@/pages/admin/GlobalSettingsPage';
+import SystemHealthPage from '@/pages/admin/SystemHealthPage';
 import SubscriptionPage from '@/pages/settings/SubscriptionPage';
 import TenantAdminRoute from '@/components/TenantAdminRoute';
 import ProfilePage from '@/pages/profile/ProfilePage';
@@ -93,6 +94,7 @@ function App() {
         <Route path="plans" element={<SubscriptionPlansPage />} />
         <Route path="plan-assignment" element={<PlanAssignmentPage />} />
         <Route path="settings" element={<GlobalSettingsPage />} />
+        <Route path="system-health" element={<SystemHealthPage />} />
         <Route path="profile" element={<MyProfilePage />} />
         <Route index element={<Navigate to="tenants" replace />} />
       </Route>

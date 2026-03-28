@@ -9,4 +9,6 @@ COPY . .
 
 EXPOSE 3000
 
+ENV NODE_OPTIONS="--expose-gc"
+
 CMD ["npm", "run", "start:dev"]

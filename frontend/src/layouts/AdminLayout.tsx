@@ -11,6 +11,7 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   DownOutlined,
+  DashboardOutlined,
 } from '@ant-design/icons';
 import { useAuthStore } from '@/store/authStore';
 
@@ -20,6 +21,7 @@ const menuItems = [
   { key: '/admin/tenants', icon: <TeamOutlined />, label: 'Tenants' },
   { key: '/admin/plans', icon: <CrownOutlined />, label: 'Subscription Plans' },
   { key: '/admin/plan-assignment', icon: <SwapOutlined />, label: 'Plan Assignment' },
+  { key: '/admin/system-health', icon: <DashboardOutlined />, label: 'System Health' },
   { key: '/admin/settings', icon: <SettingOutlined />, label: 'Global Settings' },
 ];
 

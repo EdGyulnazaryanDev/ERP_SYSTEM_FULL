@@ -21,4 +21,4 @@ COPY --from=builder /app/dist ./dist
 
 EXPOSE 3000
 
-CMD ["node", "--max-old-space-size=400", "dist/main"]
+CMD ["node", "--max-old-space-size=400", "--expose-gc", "dist/main"]

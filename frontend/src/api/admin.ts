@@ -59,3 +59,9 @@ export const adminSettingsApi = {
 export const adminActivityLogApi = {
   list: () => apiClient.get<any[]>('/admin/activity-log'),
 };
+
+export const adminSystemHealthApi = {
+  get: () => apiClient.get<any>('/admin/system-health'),
+  optimize: () => apiClient.post<any>('/admin/system-health/optimize'),
+  gc: () => apiClient.post<any>('/admin/system-health/gc'),
+};

@@ -2,14 +2,15 @@ import { useEffect, useState } from 'react';
 import {
   Form, Input, Button, Typography, Card, Switch, notification, Spin, Tabs,
   Table, Tag, Space, Tooltip, Modal, Avatar, Descriptions, Badge, ColorPicker,
+  Progress, Statistic, Row, Col, Alert,
 } from 'antd';
 import {
   UserOutlined, LoginOutlined, EyeOutlined, ReloadOutlined,
   BgColorsOutlined, BellOutlined, LayoutOutlined, TeamOutlined,
-  AuditOutlined,
+  AuditOutlined, DashboardOutlined, DatabaseOutlined, ThunderboltOutlined,
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { adminSettingsApi, adminTenantsApi, adminActivityLogApi, type TenantStats } from '@/api/admin';
+import { adminSettingsApi, adminTenantsApi, adminActivityLogApi, adminSystemHealthApi, type TenantStats } from '@/api/admin';
 import { useAuthStore } from '@/store/authStore';
 
 const { Title, Text } = Typography;
@@ -355,6 +356,129 @@ function GeneralTab({ settings, onSave, saving }: { settings: Record<string, str
 }
 
 // ── Main Page ────────────────────────────────────────────────────────────────
+// ── System Health Tab ────────────────────────────────────────────────────────
+function SystemHealthTab() {
+  const { data, isLoading, refetch, isFetching } = useQuery({
+    queryKey: ['admin-system-health'],
+    queryFn: () => adminSystemHealthApi.get().then(r => r.data),
+    refetchInterval: 30_000,
+  });
+
+  const statusColor = (s: string) => s === 'ok' ? '#52c41a' : '#ff4d4f';
+  const statusTag = (s: string) => <Tag color={s === 'ok' ? 'success' : 'error'}>{s === 'ok' ? 'Online' : 'Error'}</Tag>;
+
+  const formatUptime = (s: number) => {
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    return `${h}h ${m}m`;
+  };
+
+  if (isLoading) return <Spin style={{ display: 'block', margin: '40px auto' }} />;
+  if (!data) return null;
+
+  const { infrastructure: inf, business, uptimeSeconds } = data;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <Text style={{ color: 'var(--app-text)', fontWeight: 600, fontSize: 15 }}>System Health</Text>
+          <Text style={{ color: 'var(--app-text-muted)', fontSize: 12, marginLeft: 12 }}>
+            Last updated: {new Date(data.timestamp).toLocaleTimeString()} · auto-refreshes every 30s
+          </Text>
+        </div>
+        <Button size="small" icon={<ReloadOutlined />} loading={isFetching} onClick={() => refetch()}>Refresh</Button>
+      </div>
+
+      {/* Service Status */}
+      <Row gutter={12}>
+        <Col span={8}>
+          <Card size="small" style={cardStyle}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Space><DatabaseOutlined style={{ color: '#1677ff' }} /><Text style={{ color: 'var(--app-text)' }}>PostgreSQL</Text></Space>
+              {statusTag(inf.database.status)}
+            </div>
+            <Text style={{ color: 'var(--app-text-muted)', fontSize: 11 }}>Latency: {inf.database.latencyMs}ms</Text>
+            {inf.database.error && <Alert type="error" message={inf.database.error} style={{ marginTop: 6 }} />}
+          </Card>
+        </Col>
+        <Col span={8}>
+          <Card size="small" style={cardStyle}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Space><ThunderboltOutlined style={{ color: '#fa8c16' }} /><Text style={{ color: 'var(--app-text)' }}>Redis</Text></Space>
+              {statusTag(inf.redis.status)}
+            </div>
+            <Text style={{ color: 'var(--app-text-muted)', fontSize: 11 }}>Latency: {inf.redis.latencyMs}ms</Text>
+            {inf.redis.error && <Alert type="error" message={inf.redis.error} style={{ marginTop: 6 }} />}
+          </Card>
+        </Col>
+        <Col span={8}>
+          <Card size="small" style={cardStyle}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Space><DashboardOutlined style={{ color: '#52c41a' }} /><Text style={{ color: 'var(--app-text)' }}>API Server</Text></Space>
+              <Tag color="success">Online</Tag>
+            </div>
+            <Text style={{ color: 'var(--app-text-muted)', fontSize: 11 }}>Uptime: {formatUptime(uptimeSeconds)}</Text>
+          </Card>
+        </Col>
+      </Row>
+
+      {/* CPU & Memory */}
+      <Row gutter={12}>
+        <Col span={12}>
+          <Card size="small" style={cardStyle} title={<Text style={{ color: 'var(--app-text)' }}>CPU</Text>}>
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                <Text style={{ color: 'var(--app-text-muted)', fontSize: 12 }}>Load ({inf.cpu.cores} cores)</Text>
+                <Text style={{ color: 'var(--app-text)', fontSize: 12, fontWeight: 600 }}>{inf.cpu.usagePercent}%</Text>
+              </div>
+              <Progress percent={inf.cpu.usagePercent} strokeColor={inf.cpu.usagePercent > 80 ? '#ff4d4f' : inf.cpu.usagePercent > 60 ? '#fa8c16' : '#52c41a'} showInfo={false} size="small" />
+            </div>
+            <Text style={{ color: 'var(--app-text-muted)', fontSize: 11 }}>
+              Load avg: {inf.cpu.loadAvg1m} / {inf.cpu.loadAvg5m} / {inf.cpu.loadAvg15m} (1m/5m/15m)
+            </Text>
+          </Card>
+        </Col>
+        <Col span={12}>
+          <Card size="small" style={cardStyle} title={<Text style={{ color: 'var(--app-text)' }}>Memory</Text>}>
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                <Text style={{ color: 'var(--app-text-muted)', fontSize: 12 }}>{inf.memory.usedMb} MB / {inf.memory.totalMb} MB</Text>
+                <Text style={{ color: 'var(--app-text)', fontSize: 12, fontWeight: 600 }}>{inf.memory.usagePercent}%</Text>
+              </div>
+              <Progress percent={inf.memory.usagePercent} strokeColor={inf.memory.usagePercent > 85 ? '#ff4d4f' : inf.memory.usagePercent > 70 ? '#fa8c16' : '#52c41a'} showInfo={false} size="small" />
+            </div>
+            <Text style={{ color: 'var(--app-text-muted)', fontSize: 11 }}>
+              Node heap: {inf.process.heapUsedMb} MB / {inf.process.heapTotalMb} MB · RSS: {inf.process.rssM} MB
+            </Text>
+          </Card>
+        </Col>
+      </Row>
+
+      {/* Business Metrics */}
+      <Card size="small" style={cardStyle} title={<Text style={{ color: 'var(--app-text)' }}>Business Metrics</Text>}>
+        <Row gutter={24}>
+          <Col span={6}><Statistic title={<span style={{ color: 'var(--app-text-muted)', fontSize: 12 }}>Total Tenants</span>} value={business.totalTenants} valueStyle={{ color: 'var(--app-text)', fontSize: 22 }} /></Col>
+          <Col span={6}><Statistic title={<span style={{ color: 'var(--app-text-muted)', fontSize: 12 }}>Active Tenants</span>} value={business.activeTenants} valueStyle={{ color: '#52c41a', fontSize: 22 }} /></Col>
+          <Col span={6}><Statistic title={<span style={{ color: 'var(--app-text-muted)', fontSize: 12 }}>Inactive Tenants</span>} value={business.inactiveTenants} valueStyle={{ color: 'var(--app-text-muted)', fontSize: 22 }} /></Col>
+          <Col span={6}><Statistic title={<span style={{ color: 'var(--app-text-muted)', fontSize: 12 }}>Total Users</span>} value={business.totalUsers} valueStyle={{ color: '#1677ff', fontSize: 22 }} /></Col>
+        </Row>
+      </Card>
+
+      {/* Process Info */}
+      <Card size="small" style={cardStyle} title={<Text style={{ color: 'var(--app-text)' }}>Process Info</Text>}>
+        <Descriptions size="small" column={3}>
+          <Descriptions.Item label="Node.js">{inf.process.nodeVersion}</Descriptions.Item>
+          <Descriptions.Item label="Platform">{inf.process.platform}</Descriptions.Item>
+          <Descriptions.Item label="PID">{inf.process.pid}</Descriptions.Item>
+          <Descriptions.Item label="CPU Model" span={3}>{inf.cpu.model}</Descriptions.Item>
+        </Descriptions>
+      </Card>
+    </div>
+  );
+}
+
 export default function GlobalSettingsPage() {
   const qc = useQueryClient();
 
@@ -398,6 +522,11 @@ export default function GlobalSettingsPage() {
       key: 'footer',
       label: <span><LayoutOutlined /> Footer</span>,
       children: <FooterTab settings={settings} onSave={(v) => saveMutation.mutate(v)} saving={saveMutation.isPending} />,
+    },
+    {
+      key: 'system-health',
+      label: <span><DashboardOutlined /> System Health</span>,
+      children: <SystemHealthTab />,
     },
     {
       key: 'tenant-stats',
