@@ -910,7 +910,7 @@ export class ComprehensiveSeeder {
           currency: 'USD',
           opening_balance: 0,
           current_balance: 0,
-          is_active: true,
+          is_active: false,
           is_system_account: true,
         });
       }

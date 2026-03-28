@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Table, Button, Space, Modal, Form, Input, Select, message, Tag, Tooltip, Row, Col } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined, AccountBookOutlined } from '@ant-design/icons';
+import { Table, Button, Space, Modal, Form, Input, Select, Switch, message, Tag, Tooltip, Row, Col } from 'antd';
+import { PlusOutlined, EditOutlined, DeleteOutlined, AccountBookOutlined, PoweroffOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { accountingApi } from '@/api/accounting';
 
@@ -107,6 +107,15 @@ export default function ChartOfAccountsTab() {
     },
   });
 
+  const toggleMutation = useMutation({
+    mutationFn: ({ id, is_active }: { id: string; is_active: boolean }) =>
+      accountingApi.updateAccount(id, { is_active }),
+    onSuccess: (_, vars) => {
+      message.success(vars.is_active ? 'Account activated' : 'Account deactivated');
+      queryClient.invalidateQueries({ queryKey: ['chart-of-accounts'] });
+    },
+  });
+
   const rawData: any[] = Array.isArray(data) ? data : data?.data || [];
   const filtered = typeFilter ? rawData.filter(r => r.account_type === typeFilter) : rawData;
 
@@ -179,10 +188,18 @@ export default function ChartOfAccountsTab() {
     {
       title: '',
       key: 'actions',
-      width: 80,
+      width: 100,
       align: 'center' as const,
       render: (_: any, record: any) => (
         <Space size={4}>
+          <Tooltip title={record.is_active ? 'Deactivate' : 'Activate'}>
+            <Button
+              type="link" size="small"
+              icon={<PoweroffOutlined style={{ color: record.is_active ? '#52c41a' : 'var(--app-text-muted)' }} />}
+              loading={toggleMutation.isPending && (toggleMutation.variables as any)?.id === record.id}
+              onClick={() => toggleMutation.mutate({ id: record.id, is_active: !record.is_active })}
+            />
+          </Tooltip>
           <Tooltip title="Edit">
             <Button type="link" size="small" icon={<EditOutlined />}
               onClick={() => {
@@ -291,6 +308,11 @@ export default function ChartOfAccountsTab() {
           <Form.Item name="description" label="Description">
             <Input.TextArea rows={2} />
           </Form.Item>
+          {editingRecord && (
+            <Form.Item name="is_active" label="Status" valuePropName="checked">
+              <Switch checkedChildren="Active" unCheckedChildren="Inactive" />
+            </Form.Item>
+          )}
           <Form.Item style={{ marginBottom: 0 }}>
             <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
               <Button onClick={() => setIsModalVisible(false)}>Cancel</Button>

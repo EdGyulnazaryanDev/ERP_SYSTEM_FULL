@@ -170,7 +170,7 @@ export class FinancialBrainService {
         let creditAccount = apAccount;
         if (event.source === 'opening') {
           creditAccount = await this.accountingService['findDefaultAccount'](event.tenantId, 'retained_earnings')
-            || await this.accountingService['findDefaultAccount'](event.tenantId, 'owner_equity')
+            || await this.accountingService['findDefaultAccount'](event.tenantId, 'capital')
             || apAccount;
         }
         if (!creditAccount) {

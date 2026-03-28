@@ -52,17 +52,22 @@ export class DefaultCoaSeeder {
   ) {}
 
   async seed(tenantId: string): Promise<void> {
-    const existing = await this.coaRepo.count({ where: { tenant_id: tenantId } });
-    if (existing > 0) {
-      this.logger.log(`CoA already seeded for tenant ${tenantId} (${existing} accounts)`);
-      return;
+    let created = 0;
+    for (const tpl of DEFAULT_COA) {
+      const existing = await this.coaRepo.findOne({
+        where: { tenant_id: tenantId, account_sub_type: tpl.account_sub_type as any },
+      });
+      if (!existing) {
+        await this.coaRepo.save(
+          this.coaRepo.create({ ...tpl, tenant_id: tenantId, is_active: false }),
+        );
+        created++;
+      }
     }
-
-    const accounts = DEFAULT_COA.map((tpl) =>
-      this.coaRepo.create({ ...tpl, tenant_id: tenantId, is_active: true }),
-    );
-
-    await this.coaRepo.save(accounts);
-    this.logger.log(`Seeded ${accounts.length} default CoA accounts for tenant ${tenantId}`);
+    if (created > 0) {
+      this.logger.log(`Seeded ${created} default CoA accounts for tenant ${tenantId}`);
+    } else {
+      this.logger.log(`CoA already complete for tenant ${tenantId}`);
+    }
   }
 }
