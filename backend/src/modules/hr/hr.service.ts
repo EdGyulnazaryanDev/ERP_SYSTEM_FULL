@@ -7,23 +7,49 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { FinancialEventType, PayrollProcessedEvent } from '../accounting/events/financial.events';
+import {
+  FinancialEventType,
+  PayrollProcessedEvent,
+} from '../accounting/events/financial.events';
 import { EmployeeEntity } from './entities/employee.entity';
 import { EmploymentContractService } from './employment-contract.service';
-import { AttendanceEntity, AttendanceStatus } from './entities/attendance.entity';
+import {
+  AttendanceEntity,
+  AttendanceStatus,
+} from './entities/attendance.entity';
 import { LeaveTypeEntity } from './entities/leave-type.entity';
 import { LeaveBalanceEntity } from './entities/leave-balance.entity';
-import { LeaveRequestEntity, LeaveRequestStatus } from './entities/leave-request.entity';
+import {
+  LeaveRequestEntity,
+  LeaveRequestStatus,
+} from './entities/leave-request.entity';
 import { SalaryComponentEntity } from './entities/salary-component.entity';
 import { EmployeeSalaryEntity } from './entities/employee-salary.entity';
 import { PayslipEntity, PayslipStatus } from './entities/payslip.entity';
 import type { CreateEmployeeDto } from './dto/create-employee.dto';
 import type { UpdateEmployeeDto } from './dto/update-employee.dto';
-import type { CreateAttendanceDto, ClockInDto, ClockOutDto } from './dto/create-attendance.dto';
-import type { CreateLeaveTypeDto, UpdateLeaveTypeDto } from './dto/create-leave-type.dto';
-import type { CreateLeaveRequestDto, ApproveLeaveDto, RejectLeaveDto } from './dto/create-leave-request.dto';
-import type { CreateSalaryComponentDto, UpdateSalaryComponentDto } from './dto/create-salary-component.dto';
-import type { CreateEmployeeSalaryDto, UpdateEmployeeSalaryDto } from './dto/create-employee-salary.dto';
+import type {
+  CreateAttendanceDto,
+  ClockInDto,
+  ClockOutDto,
+} from './dto/create-attendance.dto';
+import type {
+  CreateLeaveTypeDto,
+  UpdateLeaveTypeDto,
+} from './dto/create-leave-type.dto';
+import type {
+  CreateLeaveRequestDto,
+  ApproveLeaveDto,
+  RejectLeaveDto,
+} from './dto/create-leave-request.dto';
+import type {
+  CreateSalaryComponentDto,
+  UpdateSalaryComponentDto,
+} from './dto/create-salary-component.dto';
+import type {
+  CreateEmployeeSalaryDto,
+  UpdateEmployeeSalaryDto,
+} from './dto/create-employee-salary.dto';
 
 @Injectable()
 export class HrService {
@@ -50,11 +76,25 @@ export class HrService {
 
   // ==================== EMPLOYEE METHODS ====================
 
-  async findAllEmployees(tenantId: string): Promise<EmployeeEntity[]> {
-    return this.employeeRepo.find({
+  async findAllEmployees(
+    tenantId: string,
+    page = 1,
+    limit = 50,
+  ): Promise<{
+    data: EmployeeEntity[];
+    total: number;
+    page: number;
+    limit: number;
+  }> {
+    const p = Math.max(1, page);
+    const l = Math.min(500, Math.max(1, limit));
+    const [data, total] = await this.employeeRepo.findAndCount({
       where: { tenant_id: tenantId },
       order: { created_at: 'DESC' },
+      skip: (p - 1) * l,
+      take: l,
     });
+    return { data, total, page: p, limit: l };
   }
 
   async findOneEmployee(id: string, tenantId: string): Promise<EmployeeEntity> {
@@ -69,7 +109,10 @@ export class HrService {
     return employee;
   }
 
-  async createEmployee(data: CreateEmployeeDto, tenantId: string): Promise<EmployeeEntity> {
+  async createEmployee(
+    data: CreateEmployeeDto,
+    tenantId: string,
+  ): Promise<EmployeeEntity> {
     const existing = await this.employeeRepo.findOne({
       where: [
         { email: data.email, tenant_id: tenantId },
@@ -78,7 +121,9 @@ export class HrService {
     });
 
     if (existing) {
-      throw new ConflictException('Employee with this email or code already exists');
+      throw new ConflictException(
+        'Employee with this email or code already exists',
+      );
     }
 
     const employee = this.employeeRepo.create({
@@ -90,7 +135,11 @@ export class HrService {
     return this.employeeRepo.save(employee);
   }
 
-  async updateEmployee(id: string, data: UpdateEmployeeDto, tenantId: string): Promise<EmployeeEntity> {
+  async updateEmployee(
+    id: string,
+    data: UpdateEmployeeDto,
+    tenantId: string,
+  ): Promise<EmployeeEntity> {
     const employee = await this.findOneEmployee(id, tenantId);
 
     if (data.email && data.email !== employee.email) {
@@ -117,18 +166,28 @@ export class HrService {
     return this.contractService.generateContractPdf(employee);
   }
 
-  async signContract(id: string, tenantId: string, signature: string): Promise<EmployeeEntity> {
+  async signContract(
+    id: string,
+    tenantId: string,
+    signature: string,
+  ): Promise<EmployeeEntity> {
     return this.contractService.signContract(id, tenantId, signature);
   }
 
-  async getEmployeesByDepartment(department: string, tenantId: string): Promise<EmployeeEntity[]> {
+  async getEmployeesByDepartment(
+    department: string,
+    tenantId: string,
+  ): Promise<EmployeeEntity[]> {
     return this.employeeRepo.find({
       where: { department, tenant_id: tenantId },
       order: { last_name: 'ASC' },
     });
   }
 
-  async searchEmployees(query: string, tenantId: string): Promise<EmployeeEntity[]> {
+  async searchEmployees(
+    query: string,
+    tenantId: string,
+  ): Promise<EmployeeEntity[]> {
     return this.employeeRepo
       .createQueryBuilder('employee')
       .where('employee.tenant_id = :tenantId', { tenantId })
@@ -175,7 +234,10 @@ export class HrService {
     return this.attendanceRepo.save(attendance);
   }
 
-  async clockOut(data: ClockOutDto, tenantId: string): Promise<AttendanceEntity> {
+  async clockOut(
+    data: ClockOutDto,
+    tenantId: string,
+  ): Promise<AttendanceEntity> {
     const today = new Date().toISOString().split('T')[0];
     const attendance = await this.attendanceRepo.findOne({
       where: {
@@ -193,7 +255,10 @@ export class HrService {
     const clockOutTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
 
     attendance.clock_out_time = clockOutTime;
-    attendance.work_hours = this.calculateWorkHours(attendance.clock_in_time, clockOutTime);
+    attendance.work_hours = this.calculateWorkHours(
+      attendance.clock_in_time,
+      clockOutTime,
+    );
 
     return this.attendanceRepo.save(attendance);
   }
@@ -208,7 +273,10 @@ export class HrService {
     return Number(((outTotalMinutes - inTotalMinutes) / 60).toFixed(2));
   }
 
-  async markAttendance(data: CreateAttendanceDto, tenantId: string): Promise<AttendanceEntity> {
+  async markAttendance(
+    data: CreateAttendanceDto,
+    tenantId: string,
+  ): Promise<AttendanceEntity> {
     await this.findOneEmployee(data.employee_id, tenantId);
 
     const existing = await this.attendanceRepo.findOne({
@@ -261,7 +329,10 @@ export class HrService {
 
   // ==================== LEAVE TYPE METHODS ====================
 
-  async createLeaveType(data: CreateLeaveTypeDto, tenantId: string): Promise<LeaveTypeEntity> {
+  async createLeaveType(
+    data: CreateLeaveTypeDto,
+    tenantId: string,
+  ): Promise<LeaveTypeEntity> {
     const leaveType = this.leaveTypeRepo.create({
       ...data,
       tenant_id: tenantId,
@@ -277,7 +348,11 @@ export class HrService {
     });
   }
 
-  async updateLeaveType(id: string, data: UpdateLeaveTypeDto, tenantId: string): Promise<LeaveTypeEntity> {
+  async updateLeaveType(
+    id: string,
+    data: UpdateLeaveTypeDto,
+    tenantId: string,
+  ): Promise<LeaveTypeEntity> {
     const leaveType = await this.leaveTypeRepo.findOne({
       where: { id, tenant_id: tenantId },
     });
@@ -292,7 +367,11 @@ export class HrService {
 
   // ==================== LEAVE BALANCE METHODS ====================
 
-  async initializeLeaveBalance(employeeId: string, year: number, tenantId: string): Promise<void> {
+  async initializeLeaveBalance(
+    employeeId: string,
+    year: number,
+    tenantId: string,
+  ): Promise<void> {
     await this.findOneEmployee(employeeId, tenantId);
     const leaveTypes = await this.getLeaveTypes(tenantId);
 
@@ -323,7 +402,10 @@ export class HrService {
     }
   }
 
-  async getLeaveBalance(employeeId: string, tenantId: string): Promise<LeaveBalanceEntity[]> {
+  async getLeaveBalance(
+    employeeId: string,
+    tenantId: string,
+  ): Promise<LeaveBalanceEntity[]> {
     const currentYear = new Date().getFullYear();
     return this.leaveBalanceRepo.find({
       where: {
@@ -337,7 +419,11 @@ export class HrService {
 
   // ==================== LEAVE REQUEST METHODS ====================
 
-  async requestLeave(data: CreateLeaveRequestDto, employeeId: string, tenantId: string): Promise<LeaveRequestEntity> {
+  async requestLeave(
+    data: CreateLeaveRequestDto,
+    employeeId: string,
+    tenantId: string,
+  ): Promise<LeaveRequestEntity> {
     await this.findOneEmployee(employeeId, tenantId);
 
     const currentYear = new Date().getFullYear();
@@ -367,7 +453,11 @@ export class HrService {
     return this.leaveRequestRepo.save(leaveRequest);
   }
 
-  async approveLeave(requestId: string, data: ApproveLeaveDto, tenantId: string): Promise<LeaveRequestEntity> {
+  async approveLeave(
+    requestId: string,
+    data: ApproveLeaveDto,
+    tenantId: string,
+  ): Promise<LeaveRequestEntity> {
     const request = await this.leaveRequestRepo.findOne({
       where: { id: requestId, tenant_id: tenantId },
     });
@@ -391,8 +481,10 @@ export class HrService {
     });
 
     if (balance) {
-      balance.used_days = Number(balance.used_days) + Number(request.days_count);
-      balance.remaining_days = Number(balance.remaining_days) - Number(request.days_count);
+      balance.used_days =
+        Number(balance.used_days) + Number(request.days_count);
+      balance.remaining_days =
+        Number(balance.remaining_days) - Number(request.days_count);
       await this.leaveBalanceRepo.save(balance);
     }
 
@@ -403,7 +495,11 @@ export class HrService {
     return this.leaveRequestRepo.save(request);
   }
 
-  async rejectLeave(requestId: string, data: RejectLeaveDto, tenantId: string): Promise<LeaveRequestEntity> {
+  async rejectLeave(
+    requestId: string,
+    data: RejectLeaveDto,
+    tenantId: string,
+  ): Promise<LeaveRequestEntity> {
     const request = await this.leaveRequestRepo.findOne({
       where: { id: requestId, tenant_id: tenantId },
     });
@@ -424,7 +520,10 @@ export class HrService {
     return this.leaveRequestRepo.save(request);
   }
 
-  async getLeaveRequests(tenantId: string, status?: LeaveRequestStatus): Promise<LeaveRequestEntity[]> {
+  async getLeaveRequests(
+    tenantId: string,
+    status?: LeaveRequestStatus,
+  ): Promise<LeaveRequestEntity[]> {
     const where: any = { tenant_id: tenantId };
     if (status) {
       where.status = status;
@@ -437,7 +536,10 @@ export class HrService {
     });
   }
 
-  async getEmployeeLeaveRequests(employeeId: string, tenantId: string): Promise<LeaveRequestEntity[]> {
+  async getEmployeeLeaveRequests(
+    employeeId: string,
+    tenantId: string,
+  ): Promise<LeaveRequestEntity[]> {
     return this.leaveRequestRepo.find({
       where: { employee_id: employeeId, tenant_id: tenantId },
       relations: ['leave_type'],
@@ -447,13 +549,18 @@ export class HrService {
 
   // ==================== SALARY COMPONENT METHODS ====================
 
-  async createSalaryComponent(data: CreateSalaryComponentDto, tenantId: string): Promise<SalaryComponentEntity> {
+  async createSalaryComponent(
+    data: CreateSalaryComponentDto,
+    tenantId: string,
+  ): Promise<SalaryComponentEntity> {
     const existing = await this.salaryComponentRepo.findOne({
       where: { code: data.code, tenant_id: tenantId },
     });
 
     if (existing) {
-      throw new ConflictException('Salary component with this code already exists');
+      throw new ConflictException(
+        'Salary component with this code already exists',
+      );
     }
 
     const component = this.salaryComponentRepo.create({
@@ -464,7 +571,9 @@ export class HrService {
     return this.salaryComponentRepo.save(component);
   }
 
-  async getSalaryComponents(tenantId: string): Promise<SalaryComponentEntity[]> {
+  async getSalaryComponents(
+    tenantId: string,
+  ): Promise<SalaryComponentEntity[]> {
     return this.salaryComponentRepo.find({
       where: { tenant_id: tenantId, is_active: true },
       order: { sort_order: 'ASC', name: 'ASC' },
@@ -490,7 +599,9 @@ export class HrService {
 
   // ==================== EMPLOYEE SALARY METHODS ====================
 
-  async getAllSalaryStructures(tenantId: string): Promise<EmployeeSalaryEntity[]> {
+  async getAllSalaryStructures(
+    tenantId: string,
+  ): Promise<EmployeeSalaryEntity[]> {
     return this.employeeSalaryRepo.find({
       where: { is_active: true, tenant_id: tenantId },
       relations: ['employee'],
@@ -498,7 +609,10 @@ export class HrService {
     });
   }
 
-  async createSalaryStructure(data: CreateEmployeeSalaryDto, tenantId: string): Promise<EmployeeSalaryEntity> {
+  async createSalaryStructure(
+    data: CreateEmployeeSalaryDto,
+    tenantId: string,
+  ): Promise<EmployeeSalaryEntity> {
     await this.findOneEmployee(data.employee_id, tenantId);
 
     const existing = await this.employeeSalaryRepo.findOne({
@@ -539,7 +653,10 @@ export class HrService {
     return this.employeeSalaryRepo.save(salary);
   }
 
-  async getSalaryStructure(employeeId: string, tenantId: string): Promise<EmployeeSalaryEntity | null> {
+  async getSalaryStructure(
+    employeeId: string,
+    tenantId: string,
+  ): Promise<EmployeeSalaryEntity | null> {
     return this.employeeSalaryRepo.findOne({
       where: {
         employee_id: employeeId,
@@ -551,8 +668,12 @@ export class HrService {
 
   // ==================== PAYROLL METHODS ====================
 
-  async generatePayslips(month: number, year: number, tenantId: string): Promise<PayslipEntity[]> {
-    const employees = await this.findAllEmployees(tenantId);
+  async generatePayslips(
+    month: number,
+    year: number,
+    tenantId: string,
+  ): Promise<PayslipEntity[]> {
+    const { data: employees } = await this.findAllEmployees(tenantId, 1, 500);
 
     for (const employee of employees) {
       const existing = await this.payslipRepo.findOne({
@@ -590,7 +711,9 @@ export class HrService {
     const salary = await this.getSalaryStructure(employeeId, tenantId);
 
     if (!salary) {
-      throw new BadRequestException(`No salary structure found for employee ${employeeId}`);
+      throw new BadRequestException(
+        `No salary structure found for employee ${employeeId}`,
+      );
     }
 
     const m = +month;
@@ -606,7 +729,9 @@ export class HrService {
       },
     });
 
-    const presentDays = attendances.filter((a) => a.status === AttendanceStatus.PRESENT).length;
+    const presentDays = attendances.filter(
+      (a) => a.status === AttendanceStatus.PRESENT,
+    ).length;
     const workingDays = this.getWorkingDaysInMonth(m, y);
 
     const payslipNumber = `PAY-${y}${m.toString().padStart(2, '0')}-${employeeId.substring(0, 8)}`;
@@ -621,7 +746,8 @@ export class HrService {
       working_days: workingDays,
       present_days: presentDays,
       earnings: salary.components?.filter((c) => c.type === 'earning') || [],
-      deductions: salary.components?.filter((c) => c.type === 'deduction') || [],
+      deductions:
+        salary.components?.filter((c) => c.type === 'deduction') || [],
       gross_salary: salary.gross_salary,
       total_deductions: salary.total_deductions,
       net_salary: salary.net_salary,
@@ -647,7 +773,11 @@ export class HrService {
     return workingDays;
   }
 
-  async getPayslips(tenantId: string, month?: number, year?: number): Promise<PayslipEntity[]> {
+  async getPayslips(
+    tenantId: string,
+    month?: number,
+    year?: number,
+  ): Promise<PayslipEntity[]> {
     const where: any = { tenant_id: tenantId };
     if (month) where.month = month;
     if (year) where.year = year;
@@ -659,14 +789,21 @@ export class HrService {
     });
   }
 
-  async getEmployeePayslips(employeeId: string, tenantId: string): Promise<PayslipEntity[]> {
+  async getEmployeePayslips(
+    employeeId: string,
+    tenantId: string,
+  ): Promise<PayslipEntity[]> {
     return this.payslipRepo.find({
       where: { employee_id: employeeId, tenant_id: tenantId },
       order: { year: 'DESC', month: 'DESC' },
     });
   }
 
-  async updatePayslipStatus(id: string, status: PayslipStatus, tenantId: string): Promise<PayslipEntity> {
+  async updatePayslipStatus(
+    id: string,
+    status: PayslipStatus,
+    tenantId: string,
+  ): Promise<PayslipEntity> {
     const payslip = await this.payslipRepo.findOne({
       where: { id, tenant_id: tenantId },
     });

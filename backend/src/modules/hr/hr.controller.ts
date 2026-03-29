@@ -32,8 +32,16 @@ export class HrController {
   // ==================== EMPLOYEE ENDPOINTS ====================
 
   @Get('employees')
-  findAllEmployees(@CurrentTenant() tenantId: string) {
-    return this.hrService.findAllEmployees(tenantId);
+  findAllEmployees(
+    @CurrentTenant() tenantId: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.hrService.findAllEmployees(
+      tenantId,
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 50,
+    );
   }
 
   @Get('employees/search')

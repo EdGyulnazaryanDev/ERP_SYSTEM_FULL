@@ -197,7 +197,7 @@ export const transportationApi = {
     courier_id?: string;
     startDate?: string;
     endDate?: string;
-  }) => apiClient.get<Shipment[]>('/transportation/shipments', { params }),
+  }) => apiClient.get<{ data: Shipment[]; total: number; page: number; limit: number }>('/transportation/shipments', { params }),
 
   getShipment: (id: string) =>
     apiClient.get<Shipment>(`/transportation/shipments/${id}`),

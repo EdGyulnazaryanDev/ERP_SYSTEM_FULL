@@ -29,104 +29,209 @@ export class FinancialBrainService {
   // ── AR: Invoice Created → JE: Debit AR, Credit Revenue ──────────────────────
   @OnEvent(FinancialEventType.INVOICE_CREATED)
   async onInvoiceCreated(event: InvoiceCreatedEvent) {
-    this.logger.log(`[BRAIN] Invoice created: ${event.invoiceNumber} for $${event.amount}`);
+    this.logger.log(
+      `[BRAIN] Invoice created: ${event.invoiceNumber} for $${event.amount}`,
+    );
     try {
-      await this.accountingService.createAR({
-        customer_id: event.customerId,
-        invoice_number: event.invoiceNumber,
-        invoice_date: event.date,
-        amount: event.amount,
-        description: event.description,
-        reference: event.invoiceNumber,
-        initial_approval_status: ARApprovalStatus.PENDING_APPROVAL,
-      }, event.tenantId);
-      this.logger.log(`[BRAIN] Created invoice workflow record ${event.invoiceNumber} in pending approval state`);
+      await this.accountingService.createAR(
+        {
+          customer_id: event.customerId,
+          invoice_number: event.invoiceNumber,
+          invoice_date: event.date,
+          amount: event.amount,
+          description: event.description,
+          reference: event.invoiceNumber,
+          initial_approval_status: ARApprovalStatus.PENDING_APPROVAL,
+        },
+        event.tenantId,
+      );
+      this.logger.log(
+        `[BRAIN] Created invoice workflow record ${event.invoiceNumber} in pending approval state`,
+      );
     } catch (e) {
-      this.logger.error(`[BRAIN] Failed to create invoice workflow for ${event.invoiceNumber}: ${e.message}`);
+      this.logger.error(
+        `[BRAIN] Failed to create invoice workflow for ${event.invoiceNumber}: ${String(e)}`,
+      );
     }
   }
 
   // ── AR: Payment Received → JE: Debit Bank, Credit AR ────────────────────────
   @OnEvent(FinancialEventType.PAYMENT_RECEIVED)
   async onPaymentReceived(event: PaymentReceivedEvent) {
-    this.logger.log(`[BRAIN] Payment received: $${event.amount} for invoice ${event.invoiceNumber}`);
+    this.logger.log(
+      `[BRAIN] Payment received: $${event.amount} for invoice ${event.invoiceNumber}`,
+    );
     try {
       const bankAccount =
-        await this.accountingService['findDefaultAccount'](event.tenantId, 'bank')
-        || await this.accountingService['findDefaultAccount'](event.tenantId, 'cash');
-      const arAccount = await this.accountingService['findDefaultAccount'](event.tenantId, 'accounts_receivable');
+        (await this.accountingService['findDefaultAccount'](
+          event.tenantId,
+          'bank',
+        )) ||
+        (await this.accountingService['findDefaultAccount'](
+          event.tenantId,
+          'cash',
+        ));
+      const arAccount = await this.accountingService['findDefaultAccount'](
+        event.tenantId,
+        'accounts_receivable',
+      );
 
       if (bankAccount && arAccount) {
-        const je = await this.accountingService.createJournalEntry({
-          entry_date: event.date,
-          entry_type: JournalEntryType.RECEIPT,
-          description: `Payment received for invoice ${event.invoiceNumber}`,
-          reference: event.reference || event.invoiceNumber,
-          lines: [
-            { account_id: bankAccount.id, description: `Payment - ${event.invoiceNumber}`, debit: event.amount, credit: 0 },
-            { account_id: arAccount.id, description: `AR cleared - ${event.invoiceNumber}`, debit: 0, credit: event.amount },
-          ],
-        }, event.tenantId);
-        await this.accountingService.postJournalEntry(je.id, {}, event.tenantId);
-        this.logger.log(`[BRAIN] Auto-posted JE ${je.entry_number} for payment on ${event.invoiceNumber}`);
+        const je = await this.accountingService.createJournalEntry(
+          {
+            entry_date: event.date,
+            entry_type: JournalEntryType.RECEIPT,
+            description: `Payment received for invoice ${event.invoiceNumber}`,
+            reference: event.reference || event.invoiceNumber,
+            lines: [
+              {
+                account_id: bankAccount.id,
+                description: `Payment - ${event.invoiceNumber}`,
+                debit: event.amount,
+                credit: 0,
+              },
+              {
+                account_id: arAccount.id,
+                description: `AR cleared - ${event.invoiceNumber}`,
+                debit: 0,
+                credit: event.amount,
+              },
+            ],
+          },
+          event.tenantId,
+        );
+        await this.accountingService.postJournalEntry(
+          je.id,
+          {},
+          event.tenantId,
+        );
+        this.logger.log(
+          `[BRAIN] Auto-posted JE ${je.entry_number} for payment on ${event.invoiceNumber}`,
+        );
       }
     } catch (e) {
-      this.logger.error(`[BRAIN] Failed to create JE for payment: ${e.message}`);
+      this.logger.error(
+        `[BRAIN] Failed to create JE for payment: ${String(e)}`,
+      );
     }
   }
 
   // ── AP: Bill Created → JE: Debit Expense, Credit AP ─────────────────────────
   @OnEvent(FinancialEventType.BILL_CREATED)
   async onBillCreated(event: BillCreatedEvent) {
-    this.logger.log(`[BRAIN] Bill created: ${event.billNumber} for $${event.amount}`);
+    this.logger.log(
+      `[BRAIN] Bill created: ${event.billNumber} for $${event.amount}`,
+    );
     try {
-      const expenseAccount = await this.accountingService['findDefaultAccount'](event.tenantId, 'operating_expense')
-        || await this.accountingService['findDefaultAccount'](event.tenantId, 'administrative_expense');
-      const apAccount = await this.accountingService['findDefaultAccount'](event.tenantId, 'accounts_payable');
+      const expenseAccount =
+        (await this.accountingService['findDefaultAccount'](
+          event.tenantId,
+          'operating_expense',
+        )) ||
+        (await this.accountingService['findDefaultAccount'](
+          event.tenantId,
+          'administrative_expense',
+        ));
+      const apAccount = await this.accountingService['findDefaultAccount'](
+        event.tenantId,
+        'accounts_payable',
+      );
 
       if (expenseAccount && apAccount) {
-        const je = await this.accountingService.createJournalEntry({
-          entry_date: event.date,
-          entry_type: JournalEntryType.PURCHASE,
-          description: `Bill ${event.billNumber}${event.description ? ': ' + event.description : ''}`,
-          reference: event.billNumber,
-          lines: [
-            { account_id: expenseAccount.id, description: `Expense - ${event.billNumber}`, debit: event.amount, credit: 0 },
-            { account_id: apAccount.id, description: `AP - ${event.billNumber}`, debit: 0, credit: event.amount },
-          ],
-        }, event.tenantId);
-        await this.accountingService.postJournalEntry(je.id, {}, event.tenantId);
-        this.logger.log(`[BRAIN] Auto-posted JE ${je.entry_number} for bill ${event.billNumber}`);
+        const je = await this.accountingService.createJournalEntry(
+          {
+            entry_date: event.date,
+            entry_type: JournalEntryType.PURCHASE,
+            description: `Bill ${event.billNumber}${event.description ? ': ' + event.description : ''}`,
+            reference: event.billNumber,
+            lines: [
+              {
+                account_id: expenseAccount.id,
+                description: `Expense - ${event.billNumber}`,
+                debit: event.amount,
+                credit: 0,
+              },
+              {
+                account_id: apAccount.id,
+                description: `AP - ${event.billNumber}`,
+                debit: 0,
+                credit: event.amount,
+              },
+            ],
+          },
+          event.tenantId,
+        );
+        await this.accountingService.postJournalEntry(
+          je.id,
+          {},
+          event.tenantId,
+        );
+        this.logger.log(
+          `[BRAIN] Auto-posted JE ${je.entry_number} for bill ${event.billNumber}`,
+        );
       }
     } catch (e) {
-      this.logger.error(`[BRAIN] Failed to create JE for bill ${event.billNumber}: ${e.message}`);
+      this.logger.error(
+        `[BRAIN] Failed to create JE for bill ${event.billNumber}: ${String(e)}`,
+      );
     }
   }
 
   // ── AP: Payment Made → JE: Debit AP, Credit Bank ────────────────────────────
   @OnEvent(FinancialEventType.PAYMENT_MADE)
   async onPaymentMade(event: PaymentMadeEvent) {
-    this.logger.log(`[BRAIN] Payment made: $${event.amount} for bill ${event.billNumber}`);
+    this.logger.log(
+      `[BRAIN] Payment made: $${event.amount} for bill ${event.billNumber}`,
+    );
     try {
-      const apAccount = await this.accountingService['findDefaultAccount'](event.tenantId, 'accounts_payable');
-      const bankAccount = await this.accountingService['findDefaultAccount'](event.tenantId, 'bank')
-        || await this.accountingService['findDefaultAccount'](event.tenantId, 'cash');
+      const apAccount = await this.accountingService['findDefaultAccount'](
+        event.tenantId,
+        'accounts_payable',
+      );
+      const bankAccount =
+        (await this.accountingService['findDefaultAccount'](
+          event.tenantId,
+          'bank',
+        )) ||
+        (await this.accountingService['findDefaultAccount'](
+          event.tenantId,
+          'cash',
+        ));
 
       if (apAccount && bankAccount) {
-        const je = await this.accountingService.createJournalEntry({
-          entry_date: event.date,
-          entry_type: JournalEntryType.PAYMENT,
-          description: `Payment for bill ${event.billNumber}`,
-          reference: event.reference || event.billNumber,
-          lines: [
-            { account_id: apAccount.id, description: `AP cleared - ${event.billNumber}`, debit: event.amount, credit: 0 },
-            { account_id: bankAccount.id, description: `Payment - ${event.billNumber}`, debit: 0, credit: event.amount },
-          ],
-        }, event.tenantId);
-        await this.accountingService.postJournalEntry(je.id, {}, event.tenantId);
+        const je = await this.accountingService.createJournalEntry(
+          {
+            entry_date: event.date,
+            entry_type: JournalEntryType.PAYMENT,
+            description: `Payment for bill ${event.billNumber}`,
+            reference: event.reference || event.billNumber,
+            lines: [
+              {
+                account_id: apAccount.id,
+                description: `AP cleared - ${event.billNumber}`,
+                debit: event.amount,
+                credit: 0,
+              },
+              {
+                account_id: bankAccount.id,
+                description: `Payment - ${event.billNumber}`,
+                debit: 0,
+                credit: event.amount,
+              },
+            ],
+          },
+          event.tenantId,
+        );
+        await this.accountingService.postJournalEntry(
+          je.id,
+          {},
+          event.tenantId,
+        );
       }
     } catch (e) {
-      this.logger.error(`[BRAIN] Failed to create JE for AP payment: ${e.message}`);
+      this.logger.error(
+        `[BRAIN] Failed to create JE for AP payment: ${String(e)}`,
+      );
     }
   }
 
@@ -146,70 +251,155 @@ export class FinancialBrainService {
       `[BRAIN] Stock moved: ${event.productName} qty=${event.quantity} cost=${event.totalCost} type=${event.movementType}`,
     );
     try {
-      const inventoryAccount = await this.accountingService['findDefaultAccount'](event.tenantId, 'inventory');
-      const cogsAccount = await this.accountingService['findDefaultAccount'](event.tenantId, 'cost_of_goods_sold');
-      const apAccount = await this.accountingService['findDefaultAccount'](event.tenantId, 'accounts_payable');
+      const inventoryAccount = await this.accountingService[
+        'findDefaultAccount'
+      ](event.tenantId, 'inventory');
+      const cogsAccount = await this.accountingService['findDefaultAccount'](
+        event.tenantId,
+        'cost_of_goods_sold',
+      );
+      const apAccount = await this.accountingService['findDefaultAccount'](
+        event.tenantId,
+        'accounts_payable',
+      );
 
       if (event.movementType === 'OUT' && inventoryAccount && cogsAccount) {
         // Stock OUT: Debit COGS, Credit Inventory
-        const je = await this.accountingService.createJournalEntry({
-          entry_date: new Date().toISOString().split('T')[0],
-          entry_type: JournalEntryType.GENERAL,
-          description: `Inventory out: ${event.productName} x${event.quantity}`,
-          reference: event.reference,
-          lines: [
-            { account_id: cogsAccount.id, description: `COGS - ${event.productName}`, debit: event.totalCost, credit: 0 },
-            { account_id: inventoryAccount.id, description: `Inventory - ${event.productName}`, debit: 0, credit: event.totalCost },
-          ],
-        }, event.tenantId);
-        await this.accountingService.postJournalEntry(je.id, {}, event.tenantId);
-        this.logger.log(`[BRAIN] Auto-posted COGS JE for stock OUT: ${event.productName}`);
+        const je = await this.accountingService.createJournalEntry(
+          {
+            entry_date: new Date().toISOString().split('T')[0],
+            entry_type: JournalEntryType.GENERAL,
+            description: `Inventory out: ${event.productName} x${event.quantity}`,
+            reference: event.reference,
+            lines: [
+              {
+                account_id: cogsAccount.id,
+                description: `COGS - ${event.productName}`,
+                debit: event.totalCost,
+                credit: 0,
+              },
+              {
+                account_id: inventoryAccount.id,
+                description: `Inventory - ${event.productName}`,
+                debit: 0,
+                credit: event.totalCost,
+              },
+            ],
+          },
+          event.tenantId,
+        );
+        await this.accountingService.postJournalEntry(
+          je.id,
+          {},
+          event.tenantId,
+        );
+        this.logger.log(
+          `[BRAIN] Auto-posted COGS JE for stock OUT: ${event.productName}`,
+        );
       } else if (event.movementType === 'IN' && inventoryAccount) {
         // Opening balance → credit Owner Equity (not AP — no supplier involved)
         // Delivery / reorder receipt → credit AP (goods received from supplier)
         let creditAccount = apAccount;
         if (event.source === 'opening') {
-          creditAccount = await this.accountingService['findDefaultAccount'](event.tenantId, 'retained_earnings')
-            || await this.accountingService['findDefaultAccount'](event.tenantId, 'capital')
-            || apAccount;
+          creditAccount =
+            (await this.accountingService['findDefaultAccount'](
+              event.tenantId,
+              'retained_earnings',
+            )) ||
+            (await this.accountingService['findDefaultAccount'](
+              event.tenantId,
+              'capital',
+            )) ||
+            apAccount;
         }
         if (!creditAccount) {
-          this.logger.warn(`[BRAIN] Missing credit account for STOCK_MOVED IN — need accounts_payable or equity`);
+          this.logger.warn(
+            `[BRAIN] Missing credit account for STOCK_MOVED IN — need accounts_payable or equity`,
+          );
           return;
         }
-        const description = event.source === 'opening'
-          ? `Opening stock: ${event.productName} x${event.quantity}`
-          : `Inventory received: ${event.productName} x${event.quantity}`;
-        const je = await this.accountingService.createJournalEntry({
-          entry_date: new Date().toISOString().split('T')[0],
-          entry_type: event.source === 'opening' ? JournalEntryType.GENERAL : JournalEntryType.PURCHASE,
-          description,
-          reference: event.reference,
-          lines: [
-            { account_id: inventoryAccount.id, description: `Inventory IN - ${event.productName}`, debit: event.totalCost, credit: 0 },
-            { account_id: creditAccount.id, description: `${event.source === 'opening' ? 'Opening equity' : 'Payable'} - ${event.productName}`, debit: 0, credit: event.totalCost },
-          ],
-        }, event.tenantId);
-        await this.accountingService.postJournalEntry(je.id, {}, event.tenantId);
-        this.logger.log(`[BRAIN] Auto-posted Inventory IN JE (${event.source ?? 'manual'}): ${event.productName}`);
-      } else if (event.movementType === 'ADJUSTMENT' && inventoryAccount) {
-        // Adjustment: use equity/retained earnings as the other side if available, else AP
-        const equityAccount = await this.accountingService['findDefaultAccount'](event.tenantId, 'retained_earnings')
-          || await this.accountingService['findDefaultAccount'](event.tenantId, 'owner_equity')
-          || apAccount;
-        if (equityAccount) {
-          const je = await this.accountingService.createJournalEntry({
+        const description =
+          event.source === 'opening'
+            ? `Opening stock: ${event.productName} x${event.quantity}`
+            : `Inventory received: ${event.productName} x${event.quantity}`;
+        const je = await this.accountingService.createJournalEntry(
+          {
             entry_date: new Date().toISOString().split('T')[0],
-            entry_type: JournalEntryType.GENERAL,
-            description: `Inventory adjustment: ${event.productName} x${event.quantity}`,
+            entry_type:
+              event.source === 'opening'
+                ? JournalEntryType.GENERAL
+                : JournalEntryType.PURCHASE,
+            description,
             reference: event.reference,
             lines: [
-              { account_id: inventoryAccount.id, description: `Inventory adj - ${event.productName}`, debit: event.totalCost, credit: 0 },
-              { account_id: equityAccount.id, description: `Adjustment offset - ${event.productName}`, debit: 0, credit: event.totalCost },
+              {
+                account_id: inventoryAccount.id,
+                description: `Inventory IN - ${event.productName}`,
+                debit: event.totalCost,
+                credit: 0,
+              },
+              {
+                account_id: creditAccount.id,
+                description: `${event.source === 'opening' ? 'Opening equity' : 'Payable'} - ${event.productName}`,
+                debit: 0,
+                credit: event.totalCost,
+              },
             ],
-          }, event.tenantId);
-          await this.accountingService.postJournalEntry(je.id, {}, event.tenantId);
-          this.logger.log(`[BRAIN] Auto-posted Inventory ADJUSTMENT JE: ${event.productName}`);
+          },
+          event.tenantId,
+        );
+        await this.accountingService.postJournalEntry(
+          je.id,
+          {},
+          event.tenantId,
+        );
+        this.logger.log(
+          `[BRAIN] Auto-posted Inventory IN JE (${event.source ?? 'manual'}): ${event.productName}`,
+        );
+      } else if (event.movementType === 'ADJUSTMENT' && inventoryAccount) {
+        // Adjustment: use equity/retained earnings as the other side if available, else AP
+        const equityAccount =
+          (await this.accountingService['findDefaultAccount'](
+            event.tenantId,
+            'retained_earnings',
+          )) ||
+          (await this.accountingService['findDefaultAccount'](
+            event.tenantId,
+            'owner_equity',
+          )) ||
+          apAccount;
+        if (equityAccount) {
+          const je = await this.accountingService.createJournalEntry(
+            {
+              entry_date: new Date().toISOString().split('T')[0],
+              entry_type: JournalEntryType.GENERAL,
+              description: `Inventory adjustment: ${event.productName} x${event.quantity}`,
+              reference: event.reference,
+              lines: [
+                {
+                  account_id: inventoryAccount.id,
+                  description: `Inventory adj - ${event.productName}`,
+                  debit: event.totalCost,
+                  credit: 0,
+                },
+                {
+                  account_id: equityAccount.id,
+                  description: `Adjustment offset - ${event.productName}`,
+                  debit: 0,
+                  credit: event.totalCost,
+                },
+              ],
+            },
+            event.tenantId,
+          );
+          await this.accountingService.postJournalEntry(
+            je.id,
+            {},
+            event.tenantId,
+          );
+          this.logger.log(
+            `[BRAIN] Auto-posted Inventory ADJUSTMENT JE: ${event.productName}`,
+          );
         }
       } else {
         this.logger.warn(
@@ -217,7 +407,9 @@ export class FinancialBrainService {
         );
       }
     } catch (e) {
-      this.logger.error(`[BRAIN] Failed to create JE for stock movement: ${e.message}`);
+      this.logger.error(
+        `[BRAIN] Failed to create JE for stock movement: ${String(e)}`,
+      );
     }
   }
 
@@ -225,52 +417,105 @@ export class FinancialBrainService {
   @OnEvent(FinancialEventType.SHIPMENT_DELIVERED)
   async onShipmentDelivered(event: ShipmentDeliveredEvent) {
     if (event.shippingCost === 0) return;
-    this.logger.log(`[BRAIN] Shipment delivered: ${event.trackingNumber} cost=$${event.shippingCost}`);
+    this.logger.log(
+      `[BRAIN] Shipment delivered: ${event.trackingNumber} cost=$${event.shippingCost}`,
+    );
     try {
-      const expenseAccount = await this.accountingService['findDefaultAccount'](event.tenantId, 'operating_expense');
-      const apAccount = await this.accountingService['findDefaultAccount'](event.tenantId, 'accounts_payable');
+      const expenseAccount = await this.accountingService['findDefaultAccount'](
+        event.tenantId,
+        'operating_expense',
+      );
+      const apAccount = await this.accountingService['findDefaultAccount'](
+        event.tenantId,
+        'accounts_payable',
+      );
 
       if (expenseAccount && apAccount) {
-        const je = await this.accountingService.createJournalEntry({
-          entry_date: event.date,
-          entry_type: JournalEntryType.GENERAL,
-          description: `Shipping cost - ${event.trackingNumber}`,
-          reference: event.trackingNumber,
-          lines: [
-            { account_id: expenseAccount.id, description: `Shipping - ${event.trackingNumber}`, debit: event.shippingCost, credit: 0 },
-            { account_id: apAccount.id, description: `Shipping payable - ${event.trackingNumber}`, debit: 0, credit: event.shippingCost },
-          ],
-        }, event.tenantId);
-        await this.accountingService.postJournalEntry(je.id, {}, event.tenantId);
+        const je = await this.accountingService.createJournalEntry(
+          {
+            entry_date: event.date,
+            entry_type: JournalEntryType.GENERAL,
+            description: `Shipping cost - ${event.trackingNumber}`,
+            reference: event.trackingNumber,
+            lines: [
+              {
+                account_id: expenseAccount.id,
+                description: `Shipping - ${event.trackingNumber}`,
+                debit: event.shippingCost,
+                credit: 0,
+              },
+              {
+                account_id: apAccount.id,
+                description: `Shipping payable - ${event.trackingNumber}`,
+                debit: 0,
+                credit: event.shippingCost,
+              },
+            ],
+          },
+          event.tenantId,
+        );
+        await this.accountingService.postJournalEntry(
+          je.id,
+          {},
+          event.tenantId,
+        );
       }
     } catch (e) {
-      this.logger.error(`[BRAIN] Failed to create JE for shipment: ${e.message}`);
+      this.logger.error(
+        `[BRAIN] Failed to create JE for shipment: ${String(e)}`,
+      );
     }
   }
 
   // ── Procurement: PO Received → JE: Debit Inventory, Credit AP ───────────────
   @OnEvent(FinancialEventType.PURCHASE_ORDER_RECEIVED)
   async onPurchaseOrderReceived(event: PurchaseOrderReceivedEvent) {
-    this.logger.log(`[BRAIN] PO received: ${event.poNumber} total=$${event.totalAmount}`);
+    this.logger.log(
+      `[BRAIN] PO received: ${event.poNumber} total=$${event.totalAmount}`,
+    );
     try {
-      const inventoryAccount = await this.accountingService['findDefaultAccount'](event.tenantId, 'inventory');
-      const apAccount = await this.accountingService['findDefaultAccount'](event.tenantId, 'accounts_payable');
+      const inventoryAccount = await this.accountingService[
+        'findDefaultAccount'
+      ](event.tenantId, 'inventory');
+      const apAccount = await this.accountingService['findDefaultAccount'](
+        event.tenantId,
+        'accounts_payable',
+      );
 
       if (inventoryAccount && apAccount) {
-        const je = await this.accountingService.createJournalEntry({
-          entry_date: event.date,
-          entry_type: JournalEntryType.PURCHASE,
-          description: `Goods received - PO ${event.poNumber}`,
-          reference: event.poNumber,
-          lines: [
-            { account_id: inventoryAccount.id, description: `Inventory received - ${event.poNumber}`, debit: event.totalAmount, credit: 0 },
-            { account_id: apAccount.id, description: `AP - ${event.poNumber}`, debit: 0, credit: event.totalAmount },
-          ],
-        }, event.tenantId);
-        await this.accountingService.postJournalEntry(je.id, {}, event.tenantId);
+        const je = await this.accountingService.createJournalEntry(
+          {
+            entry_date: event.date,
+            entry_type: JournalEntryType.PURCHASE,
+            description: `Goods received - PO ${event.poNumber}`,
+            reference: event.poNumber,
+            lines: [
+              {
+                account_id: inventoryAccount.id,
+                description: `Inventory received - ${event.poNumber}`,
+                debit: event.totalAmount,
+                credit: 0,
+              },
+              {
+                account_id: apAccount.id,
+                description: `AP - ${event.poNumber}`,
+                debit: 0,
+                credit: event.totalAmount,
+              },
+            ],
+          },
+          event.tenantId,
+        );
+        await this.accountingService.postJournalEntry(
+          je.id,
+          {},
+          event.tenantId,
+        );
       }
     } catch (e) {
-      this.logger.error(`[BRAIN] Failed to create JE for PO receipt: ${e.message}`);
+      this.logger.error(
+        `[BRAIN] Failed to create JE for PO receipt: ${String(e)}`,
+      );
     }
   }
 
@@ -279,26 +524,59 @@ export class FinancialBrainService {
   async onPayrollProcessed(event: PayrollProcessedEvent) {
     this.logger.log(`[BRAIN] Payroll processed: $${event.netAmount}`);
     try {
-      const salaryExpense = await this.accountingService['findDefaultAccount'](event.tenantId, 'administrative_expense')
-        || await this.accountingService['findDefaultAccount'](event.tenantId, 'operating_expense');
-      const bankAccount = await this.accountingService['findDefaultAccount'](event.tenantId, 'bank')
-        || await this.accountingService['findDefaultAccount'](event.tenantId, 'cash');
+      const salaryExpense =
+        (await this.accountingService['findDefaultAccount'](
+          event.tenantId,
+          'administrative_expense',
+        )) ||
+        (await this.accountingService['findDefaultAccount'](
+          event.tenantId,
+          'operating_expense',
+        ));
+      const bankAccount =
+        (await this.accountingService['findDefaultAccount'](
+          event.tenantId,
+          'bank',
+        )) ||
+        (await this.accountingService['findDefaultAccount'](
+          event.tenantId,
+          'cash',
+        ));
 
       if (salaryExpense && bankAccount) {
-        const je = await this.accountingService.createJournalEntry({
-          entry_date: event.date,
-          entry_type: JournalEntryType.GENERAL,
-          description: `Payroll - employee ${event.employeeId}`,
-          reference: event.payslipId,
-          lines: [
-            { account_id: salaryExpense.id, description: 'Salary expense', debit: event.netAmount, credit: 0 },
-            { account_id: bankAccount.id, description: 'Salary payment', debit: 0, credit: event.netAmount },
-          ],
-        }, event.tenantId);
-        await this.accountingService.postJournalEntry(je.id, {}, event.tenantId);
+        const je = await this.accountingService.createJournalEntry(
+          {
+            entry_date: event.date,
+            entry_type: JournalEntryType.GENERAL,
+            description: `Payroll - employee ${event.employeeId}`,
+            reference: event.payslipId,
+            lines: [
+              {
+                account_id: salaryExpense.id,
+                description: 'Salary expense',
+                debit: event.netAmount,
+                credit: 0,
+              },
+              {
+                account_id: bankAccount.id,
+                description: 'Salary payment',
+                debit: 0,
+                credit: event.netAmount,
+              },
+            ],
+          },
+          event.tenantId,
+        );
+        await this.accountingService.postJournalEntry(
+          je.id,
+          {},
+          event.tenantId,
+        );
       }
     } catch (e) {
-      this.logger.error(`[BRAIN] Failed to create JE for payroll: ${e.message}`);
+      this.logger.error(
+        `[BRAIN] Failed to create JE for payroll: ${String(e)}`,
+      );
     }
   }
 }

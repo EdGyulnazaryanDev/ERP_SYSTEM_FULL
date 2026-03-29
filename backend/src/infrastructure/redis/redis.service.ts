@@ -69,4 +69,41 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     await this.set(key, value, ttlSeconds);
     return value;
   }
+
+  /** Push a string value to the right end of a Redis list (queue) */
+  async rpush(key: string, value: string): Promise<void> {
+    try {
+      await this.client.rpush(key, value);
+    } catch {
+      // non-fatal
+    }
+  }
+
+  /** Pop a string value from the left end of a Redis list (queue). Returns null if empty. */
+  async lpop(key: string): Promise<string | null> {
+    try {
+      return await this.client.lpop(key);
+    } catch {
+      return null;
+    }
+  }
+
+  /** Get the length of a Redis list */
+  async llen(key: string): Promise<number> {
+    try {
+      return await this.client.llen(key);
+    } catch {
+      return 0;
+    }
+  }
+
+  /** Set a key only if it does not exist (NX). Returns true if set, false if already existed. */
+  async setnx(key: string, value: string, ttlSeconds: number): Promise<boolean> {
+    try {
+      const result = await this.client.set(key, value, 'EX', ttlSeconds, 'NX');
+      return result === 'OK';
+    } catch {
+      return false;
+    }
+  }
 }

@@ -1,6 +1,6 @@
 import { Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, IsNull, Not } from 'typeorm';
+import { Repository, DataSource, IsNull, Not, MoreThan } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import * as os from 'os';
 import * as net from 'net';
@@ -10,8 +10,15 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { SystemAdminGuard } from '../../../common/guards/system-admin.guard';
 import { Tenant } from '../../tenants/tenant.entity';
 import { User } from '../../users/user.entity';
+import { KafkaService } from '../../../infrastructure/kafka/kafka.service';
+import { KafkaConsumerService } from '../../../infrastructure/kafka/kafka-consumer.service';
+import { RedisService } from '../../../infrastructure/redis/redis.service';
 
-type ServiceStatus = { status: 'ok' | 'error'; latencyMs: number; error?: string };
+type ServiceStatus = {
+  status: 'ok' | 'error';
+  latencyMs: number;
+  error?: string;
+};
 
 // In-memory request rate tracking
 let requestCount = 0;
@@ -39,30 +46,37 @@ export class AdminSystemHealthController {
     private readonly userRepo: Repository<User>,
     private readonly dataSource: DataSource,
     private readonly configService: ConfigService,
+    private readonly kafkaService: KafkaService,
+    private readonly kafkaConsumer: KafkaConsumerService,
+    private readonly redisService: RedisService,
   ) {}
 
   @Get('system-health')
   async systemHealth() {
-    const [dbStatus, redisStatus, minioStatus, kafkaStatus] = await Promise.all([
-      this.checkDb(),
-      this.checkRedis(),
-      this.checkMinio(),
-      this.checkKafka(),
-    ]);
+    const [dbStatus, redisStatus, minioStatus, kafkaStatus] = await Promise.all(
+      [this.checkDb(), this.checkRedis(), this.checkMinio(), this.checkKafka()],
+    );
 
-    const [totalTenants, activeTenants, totalUsers, activeUsers, newUsersToday] = await Promise.all([
+    const [
+      totalTenants,
+      activeTenants,
+      totalUsers,
+      activeUsers,
+      newUsersToday,
+    ] = await Promise.all([
       this.tenantRepo.count(),
       this.tenantRepo.count({ where: { isActive: true } }),
       this.userRepo.count(),
       this.userRepo.count({ where: { is_active: true } }),
       this.userRepo.count({
         where: {
-          created_at: (() => {
-            const { MoreThan } = require('typeorm');
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            return MoreThan(today);
-          })(),
+          created_at: MoreThan(
+            (() => {
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              return today;
+            })(),
+          ),
         },
       }),
     ]);
@@ -74,12 +88,25 @@ export class AdminSystemHealthController {
     const loadAvg = os.loadavg();
 
     // DB pool stats
-    const pool = (this.dataSource.driver as any).pool;
-    const dbPool = pool ? {
-      total: pool.totalCount ?? pool._allConnections?.length ?? 0,
-      idle: pool.idleCount ?? pool._freeConnections?.length ?? 0,
-      waiting: pool.waitingCount ?? pool._connectionQueue?.length ?? 0,
-    } : null;
+    const pool = (
+      this.dataSource.driver as {
+        pool?: {
+          totalCount?: number;
+          _allConnections?: unknown[];
+          idleCount?: number;
+          _freeConnections?: unknown[];
+          waitingCount?: number;
+          _connectionQueue?: unknown[];
+        };
+      }
+    ).pool;
+    const dbPool = pool
+      ? {
+          total: pool.totalCount ?? pool._allConnections?.length ?? 0,
+          idle: pool.idleCount ?? pool._freeConnections?.length ?? 0,
+          waiting: pool.waitingCount ?? pool._connectionQueue?.length ?? 0,
+        }
+      : null;
 
     // Disk usage
     const diskStats = this.getDiskStats();
@@ -104,11 +131,17 @@ export class AdminSystemHealthController {
           loadAvg1m: Math.round(loadAvg[0] * 100) / 100,
           loadAvg5m: Math.round(loadAvg[1] * 100) / 100,
           loadAvg15m: Math.round(loadAvg[2] * 100) / 100,
-          usagePercent: Math.min(Math.round((loadAvg[0] / cpus.length) * 100), 100),
+          usagePercent: Math.min(
+            Math.round((loadAvg[0] / cpus.length) * 100),
+            100,
+          ),
           perCore: cpus.map((cpu, i) => {
             const total = Object.values(cpu.times).reduce((a, b) => a + b, 0);
             const idle = cpu.times.idle;
-            return { core: i, usagePercent: Math.round(((total - idle) / total) * 100) };
+            return {
+              core: i,
+              usagePercent: Math.round(((total - idle) / total) * 100),
+            };
           }),
         },
         memory: {
@@ -125,7 +158,9 @@ export class AdminSystemHealthController {
           arch: process.arch,
           pid: process.pid,
           heapUsedMb: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
-          heapTotalMb: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
+          heapTotalMb: Math.round(
+            process.memoryUsage().heapTotal / 1024 / 1024,
+          ),
           rssM: Math.round(process.memoryUsage().rss / 1024 / 1024),
           externalMb: Math.round(process.memoryUsage().external / 1024 / 1024),
           eventLoopLagMs: eventLoopLag,
@@ -145,13 +180,16 @@ export class AdminSystemHealthController {
   }
 
   @Post('system-health/gc')
-  async runGc() {
+  runGc() {
     const before = process.memoryUsage();
-    if (typeof (global as any).gc === 'function') {
-      (global as any).gc();
+    const gcFn = (global as { gc?: () => void }).gc;
+    if (typeof gcFn === 'function') {
+      gcFn();
     }
     const after = process.memoryUsage();
-    const freedMb = Math.round((before.heapUsed - after.heapUsed) / 1024 / 1024);
+    const freedMb = Math.round(
+      (before.heapUsed - after.heapUsed) / 1024 / 1024,
+    );
     return {
       message: 'Garbage collection triggered',
       before: {
@@ -165,7 +203,7 @@ export class AdminSystemHealthController {
         rssMb: Math.round(after.rss / 1024 / 1024),
       },
       freedMb: Math.max(freedMb, 0),
-      gcAvailable: typeof (global as any).gc === 'function',
+      gcAvailable: typeof gcFn === 'function',
     };
   }
 
@@ -192,7 +230,11 @@ export class AdminSystemHealthController {
       await this.dataSource.query('SELECT 1');
       return { status: 'ok', latencyMs: Date.now() - start };
     } catch (e: unknown) {
-      return { status: 'error', latencyMs: Date.now() - start, error: e instanceof Error ? e.message : String(e) };
+      return {
+        status: 'error',
+        latencyMs: Date.now() - start,
+        error: e instanceof Error ? e.message : String(e),
+      };
     }
   }
 
@@ -204,7 +246,11 @@ export class AdminSystemHealthController {
       const socket = new net.Socket();
       const timeout = setTimeout(() => {
         socket.destroy();
-        resolve({ status: 'error', latencyMs: Date.now() - start, error: 'Connection timeout' });
+        resolve({
+          status: 'error',
+          latencyMs: Date.now() - start,
+          error: 'Connection timeout',
+        });
       }, 2000);
       socket.connect(port, host, () => {
         clearTimeout(timeout);
@@ -213,7 +259,11 @@ export class AdminSystemHealthController {
       });
       socket.on('error', (err) => {
         clearTimeout(timeout);
-        resolve({ status: 'error', latencyMs: Date.now() - start, error: err.message });
+        resolve({
+          status: 'error',
+          latencyMs: Date.now() - start,
+          error: err.message,
+        });
       });
     });
   }
@@ -223,42 +273,72 @@ export class AdminSystemHealthController {
       const start = Date.now();
       const host = this.configService.get<string>('MINIO_ENDPOINT', 'minio');
       const port = this.configService.get<number>('MINIO_PORT', 9000);
-      const req = http.request({ host, port, path: '/minio/health/live', method: 'GET', timeout: 2000 }, (res) => {
-        resolve({ status: res.statusCode === 200 ? 'ok' : 'error', latencyMs: Date.now() - start });
-      });
-      req.on('error', (err) => resolve({ status: 'error', latencyMs: Date.now() - start, error: err.message }));
+      const req = http.request(
+        {
+          host,
+          port,
+          path: '/minio/health/live',
+          method: 'GET',
+          timeout: 2000,
+        },
+        (res) => {
+          resolve({
+            status: res.statusCode === 200 ? 'ok' : 'error',
+            latencyMs: Date.now() - start,
+          });
+        },
+      );
+      req.on('error', (err) =>
+        resolve({
+          status: 'error',
+          latencyMs: Date.now() - start,
+          error: err.message,
+        }),
+      );
       req.on('timeout', () => {
         req.destroy();
-        resolve({ status: 'error', latencyMs: Date.now() - start, error: 'Connection timeout' });
+        resolve({
+          status: 'error',
+          latencyMs: Date.now() - start,
+          error: 'Connection timeout',
+        });
       });
       req.end();
     });
   }
 
-  private checkKafka(): Promise<ServiceStatus> {
-    return new Promise((resolve) => {
-      const start = Date.now();
-      const host = this.configService.get<string>('KAFKA_BROKER', 'kafka:9092');
-      const [kafkaHost, kafkaPort] = host.split(':');
-      const port = parseInt(kafkaPort ?? '9092', 10);
-      const socket = new net.Socket();
-      const timeout = setTimeout(() => {
-        socket.destroy();
-        resolve({ status: 'error', latencyMs: Date.now() - start, error: 'Connection timeout' });
-      }, 2000);
-      socket.connect(port, kafkaHost, () => {
-        clearTimeout(timeout);
-        socket.destroy();
-        resolve({ status: 'ok', latencyMs: Date.now() - start });
-      });
-      socket.on('error', (err) => {
-        clearTimeout(timeout);
-        resolve({ status: 'error', latencyMs: Date.now() - start, error: err.message });
-      });
-    });
+  private async checkKafka(): Promise<
+    ServiceStatus & { consumerRunning?: boolean; fallbackQueueDepth?: number }
+  > {
+    const start = Date.now();
+    const kafkaStatus = this.kafkaService.getStatus();
+    const fallbackQueueDepth = await this.redisService.llen(
+      KafkaConsumerService.FALLBACK_QUEUE,
+    );
+    if (kafkaStatus.connected) {
+      return {
+        status: 'ok',
+        latencyMs: Date.now() - start,
+        consumerRunning: this.kafkaConsumer.isRunning(),
+        fallbackQueueDepth,
+      };
+    }
+    return {
+      status: 'error',
+      latencyMs: Date.now() - start,
+      error: kafkaStatus.error ?? 'Producer not connected',
+      consumerRunning: this.kafkaConsumer.isRunning(),
+      fallbackQueueDepth,
+    };
   }
 
-  private getDiskStats(): { path: string; totalGb: number; usedGb: number; freeGb: number; usagePercent: number } | null {
+  private getDiskStats(): {
+    path: string;
+    totalGb: number;
+    usedGb: number;
+    freeGb: number;
+    usagePercent: number;
+  } | null {
     try {
       const stat = fs.statfsSync('/');
       const total = stat.blocks * stat.bsize;
@@ -266,9 +346,9 @@ export class AdminSystemHealthController {
       const used = total - free;
       return {
         path: '/',
-        totalGb: Math.round(total / 1024 / 1024 / 1024 * 10) / 10,
-        usedGb: Math.round(used / 1024 / 1024 / 1024 * 10) / 10,
-        freeGb: Math.round(free / 1024 / 1024 / 1024 * 10) / 10,
+        totalGb: Math.round((total / 1024 / 1024 / 1024) * 10) / 10,
+        usedGb: Math.round((used / 1024 / 1024 / 1024) * 10) / 10,
+        freeGb: Math.round((free / 1024 / 1024 / 1024) * 10) / 10,
         usagePercent: Math.round((used / total) * 100),
       };
     } catch {
@@ -276,14 +356,22 @@ export class AdminSystemHealthController {
     }
   }
 
-  private getNetworkInfo(): { interface: string; address: string; family: string }[] {
+  private getNetworkInfo(): {
+    interface: string;
+    address: string;
+    family: string;
+  }[] {
     const ifaces = os.networkInterfaces();
     const result: { interface: string; address: string; family: string }[] = [];
     for (const [name, addrs] of Object.entries(ifaces)) {
       if (!addrs) continue;
       for (const addr of addrs) {
         if (!addr.internal) {
-          result.push({ interface: name, address: addr.address, family: addr.family });
+          result.push({
+            interface: name,
+            address: addr.address,
+            family: addr.family,
+          });
         }
       }
     }

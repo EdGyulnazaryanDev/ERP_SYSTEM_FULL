@@ -36,12 +36,16 @@ export class TransportationController {
     @Query('courier_id') courierId?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
     return this.transportationService.findAllShipments(tenantId, {
       status,
       courier_id: courierId,
       startDate,
       endDate,
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
     });
   }
 

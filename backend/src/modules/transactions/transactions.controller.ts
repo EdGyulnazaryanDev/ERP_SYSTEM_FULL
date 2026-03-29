@@ -54,12 +54,16 @@ export class TransactionsController {
     @Query('status') status?: any,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
     return this.transactionsService.findAll(tenantId, {
       type,
       status,
       startDate,
       endDate,
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
     });
   }
 
@@ -81,11 +85,12 @@ export class TransactionsController {
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
   ) {
-    const transactions = await this.transactionsService.findAll(tenantId, {
+    const { data: transactions } = await this.transactionsService.findAll(tenantId, {
       type,
       status,
       startDate,
       endDate,
+      limit: 10000, // export all
     });
 
     const buffer = await this.excelService.exportTransactions(transactions);

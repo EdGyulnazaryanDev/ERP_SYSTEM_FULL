@@ -47,6 +47,9 @@ import type {
   UpdateBankAccountDto,
 } from './dto/create-bank-account.dto';
 import { CustomerEntity } from '../crm/entities/customer.entity';
+import { RedisService } from '../../infrastructure/redis/redis.service';
+
+const TTL_COA = 300; // 5 min
 
 @Injectable()
 export class AccountingService {
@@ -77,6 +80,7 @@ export class AccountingService {
     private fiscalYearRepo: Repository<FiscalYearEntity>,
     @InjectRepository(FiscalPeriodEntity)
     private fiscalPeriodRepo: Repository<FiscalPeriodEntity>,
+    private readonly redis: RedisService,
   ) {}
 
   // ==================== CHART OF ACCOUNTS METHODS ====================
@@ -99,18 +103,41 @@ export class AccountingService {
         tenant_id: tenantId,
       });
 
-      return await this.coaRepo.save(account);
+      const saved = await this.coaRepo.save(account);
+      await this.redis.delPattern(`coa:${tenantId}:*`);
+      await this.redis.del(`coa_all:${tenantId}`);
+      return saved;
     } catch (e) {
       console.error('SERVICE LEVEL ACCOUNT CREATION ERROR:', e);
       throw e;
     }
   }
 
-  async getAccounts(tenantId: string): Promise<ChartOfAccountEntity[]> {
-    return this.coaRepo.find({
-      where: { tenant_id: tenantId },
-      order: { account_code: 'ASC' },
+  async getAccounts(
+    tenantId: string,
+    page = 1,
+    limit = 200,
+  ): Promise<{ data: ChartOfAccountEntity[]; total: number; page: number; limit: number }> {
+    // For CoA, default limit is high (200) since it's used in dropdowns too
+    const p = Math.max(1, page);
+    const l = Math.min(500, Math.max(1, limit));
+    const cacheKey = `coa:${tenantId}:${p}:${l}`;
+    return this.redis.cached(cacheKey, TTL_COA, async () => {
+      const [data, total] = await this.coaRepo.findAndCount({
+        where: { tenant_id: tenantId },
+        order: { account_code: 'ASC' },
+        skip: (p - 1) * l,
+        take: l,
+      });
+      return { data, total, page: p, limit: l };
     });
+  }
+
+  /** Internal use only — returns all accounts as a flat array (no pagination) */
+  private async getAllAccountsRaw(tenantId: string): Promise<ChartOfAccountEntity[]> {
+    return this.redis.cached(`coa_all:${tenantId}`, TTL_COA, () =>
+      this.coaRepo.find({ where: { tenant_id: tenantId }, order: { account_code: 'ASC' } }),
+    );
   }
 
   async getAccount(
@@ -135,7 +162,9 @@ export class AccountingService {
   ): Promise<ChartOfAccountEntity> {
     const account = await this.getAccount(id, tenantId);
     Object.assign(account, data);
-    return this.coaRepo.save(account);
+    const saved = await this.coaRepo.save(account);
+    await this.redis.delPattern(`coa:${tenantId}:*`);
+    return saved;
   }
 
   async deleteAccount(id: string, tenantId: string): Promise<void> {
@@ -150,6 +179,8 @@ export class AccountingService {
     }
 
     await this.coaRepo.remove(account);
+    await this.redis.delPattern(`coa:${tenantId}:*`);
+    await this.redis.del(`coa_all:${tenantId}`);
   }
 
   // ==================== JOURNAL ENTRY METHODS ====================
@@ -289,7 +320,11 @@ export class AccountingService {
       await this.coaRepo.save(account);
     }
 
-    return this.journalEntryRepo.save(entry);
+    const saved = await this.journalEntryRepo.save(entry);
+    // Balances changed — invalidate CoA cache
+    await this.redis.delPattern(`coa:${tenantId}:*`);
+    await this.redis.del(`coa_all:${tenantId}`);
+    return saved;
   }
 
   async reverseJournalEntry(
@@ -1053,7 +1088,7 @@ export class AccountingService {
     startDate?: string,
     endDate?: string,
   ): Promise<any> {
-    const accounts = await this.getAccounts(tenantId);
+    const accounts = await this.getAllAccountsRaw(tenantId);
 
     const trialBalance = accounts.map((account) => ({
       account_code: account.account_code,
@@ -1084,7 +1119,7 @@ export class AccountingService {
   }
 
   async getBalanceSheet(tenantId: string, asOfDate?: string): Promise<any> {
-    const accounts = await this.getAccounts(tenantId);
+    const accounts = await this.getAllAccountsRaw(tenantId);
 
     const assets = accounts.filter((a) => a.account_type === 'asset');
     const liabilities = accounts.filter((a) => a.account_type === 'liability');
@@ -1138,7 +1173,7 @@ export class AccountingService {
     startDate: string,
     endDate: string,
   ): Promise<any> {
-    const accounts = await this.getAccounts(tenantId);
+    const accounts = await this.getAllAccountsRaw(tenantId);
 
     const revenue = accounts.filter((a) => a.account_type === 'revenue');
     const expenses = accounts.filter((a) => a.account_type === 'expense');

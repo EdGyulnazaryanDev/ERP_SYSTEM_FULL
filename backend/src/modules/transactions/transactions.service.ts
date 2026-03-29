@@ -197,30 +197,31 @@ export class TransactionsService {
       status?: TransactionStatus;
       startDate?: string;
       endDate?: string;
+      page?: number;
+      limit?: number;
     },
-  ): Promise<TransactionEntity[]> {
+  ): Promise<{ data: TransactionEntity[]; total: number; page: number; limit: number }> {
     const where: any = { tenant_id: tenantId };
 
-    if (filters?.type) {
-      where.type = filters.type;
-    }
-
-    if (filters?.status) {
-      where.status = filters.status;
-    }
-
+    if (filters?.type) where.type = filters.type;
+    if (filters?.status) where.status = filters.status;
     if (filters?.startDate && filters?.endDate) {
-      where.transaction_date = Between(
-        new Date(filters.startDate),
-        new Date(filters.endDate),
-      );
+      where.transaction_date = Between(new Date(filters.startDate), new Date(filters.endDate));
     }
 
-    return this.transactionRepo.find({
+    const page = Math.max(1, filters?.page ?? 1);
+    const limit = Math.min(500, Math.max(1, filters?.limit ?? 50));
+    const skip = (page - 1) * limit;
+
+    const [data, total] = await this.transactionRepo.findAndCount({
       where,
       relations: ['items'],
       order: { transaction_date: 'DESC', created_at: 'DESC' },
+      skip,
+      take: limit,
     });
+
+    return { data, total, page, limit };
   }
 
   async findOne(id: string, tenantId: string): Promise<TransactionEntity> {
@@ -346,9 +347,10 @@ export class TransactionsService {
     startDate: string,
     endDate: string,
   ): Promise<any> {
-    const transactions = await this.findAll(tenantId, {
+    const { data: transactions } = await this.findAll(tenantId, {
       startDate,
       endDate,
+      limit: 10000,
     });
 
     const analytics = {

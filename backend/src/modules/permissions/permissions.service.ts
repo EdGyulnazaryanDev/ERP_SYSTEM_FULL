@@ -5,6 +5,9 @@ import { Permission } from './permission.entity';
 import { RolePermission } from './role-permission.entity';
 import { CreatePermissionDto } from './dto/create-permission.dto';
 import { UpdatePermissionDto } from './dto/update-permission.dto';
+import { RedisService } from '../../infrastructure/redis/redis.service';
+
+const TTL_PERMISSION = 300; // 5 min
 
 @Injectable()
 export class PermissionsService {
@@ -13,6 +16,7 @@ export class PermissionsService {
     private readonly permissionRepo: Repository<Permission>,
     @InjectRepository(RolePermission)
     private readonly rolePermissionRepo: Repository<RolePermission>,
+    private readonly redis: RedisService,
   ) {}
 
   async create(
@@ -86,6 +90,8 @@ export class PermissionsService {
     );
 
     await this.rolePermissionRepo.save(rolePermissions);
+    // Invalidate all permission caches for this tenant
+    await this.redis.delPattern(`perm:${tenantId}:*`);
   }
 
   async getRolePermissions(
@@ -124,24 +130,20 @@ export class PermissionsService {
     action: string,
     tenantId: string,
   ): Promise<boolean> {
-    const query = `
-      SELECT COUNT(*) as count
-      FROM permissions p
-      INNER JOIN role_permissions rp ON p.id = rp.permission_id
-      INNER JOIN user_roles ur ON rp.role_id = ur.role_id
-      WHERE ur.user_id = $1 
-        AND p.resource = $2 
-        AND p.action = $3 
-        AND p.tenant_id = $4
-    `;
-
-    const result = await this.permissionRepo.query(query, [
-      userId,
-      resource,
-      action,
-      tenantId,
-    ]);
-
-    return parseInt(result[0].count) > 0;
+    const cacheKey = `perm:${tenantId}:${userId}:${resource}:${action}`;
+    return this.redis.cached(cacheKey, TTL_PERMISSION, async () => {
+      const query = `
+        SELECT COUNT(*) as count
+        FROM permissions p
+        INNER JOIN role_permissions rp ON p.id = rp.permission_id
+        INNER JOIN user_roles ur ON rp.role_id = ur.role_id
+        WHERE ur.user_id = $1 
+          AND p.resource = $2 
+          AND p.action = $3 
+          AND p.tenant_id = $4
+      `;
+      const result = await this.permissionRepo.query(query, [userId, resource, action, tenantId]);
+      return parseInt(result[0].count) > 0;
+    });
   }
 }

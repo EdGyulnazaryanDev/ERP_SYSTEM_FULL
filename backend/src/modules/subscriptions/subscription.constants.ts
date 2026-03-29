@@ -3,6 +3,7 @@ export enum PlanCode {
   BASIC = 'basic',
   PRO = 'pro',
   ENTERPRISE = 'enterprise',
+  FULL = 'full',
 }
 
 export enum BillingCycle {
@@ -83,6 +84,12 @@ export const DEFAULT_PLAN_DEFINITIONS: DefaultPlanDefinition[] = [
       PlanFeature.USERS,
       PlanFeature.RBAC,
       PlanFeature.SETTINGS,
+      PlanFeature.ACCOUNTING,
+      PlanFeature.HR,
+      PlanFeature.CRM,
+      PlanFeature.WAREHOUSE,
+      PlanFeature.TRANSPORTATION,
+      PlanFeature.PROCUREMENT,
     ],
     limits: [
       { key: PlanLimitKey.USERS, value: 3 },
@@ -115,7 +122,8 @@ export const DEFAULT_PLAN_DEFINITIONS: DefaultPlanDefinition[] = [
   {
     code: PlanCode.PRO,
     name: 'Pro',
-    description: 'Full warehouse, accounting, BI, HR, transportation, and more.',
+    description:
+      'Full warehouse, accounting, BI, HR, transportation, and more.',
     monthlyPrice: 99,
     yearlyPrice: 990,
     features: [
@@ -139,19 +147,25 @@ export const DEFAULT_PLAN_DEFINITIONS: DefaultPlanDefinition[] = [
   },
   {
     code: PlanCode.ENTERPRISE,
-    name: 'Enterprise',
+    name: 'Full Unlocked',
     description: 'Unlimited access across all modules.',
-    monthlyPrice: 249,
-    yearlyPrice: 2490,
+    monthlyPrice: 500,
+    yearlyPrice: 5600,
     features: [
-      PlanFeature.SUPPLIERS,
-      PlanFeature.PAYMENTS,
-      PlanFeature.PROCUREMENT,
-      PlanFeature.CRM,
-      PlanFeature.WAREHOUSE,
+      PlanFeature.DASHBOARD,
+      PlanFeature.PRODUCTS,
+      PlanFeature.CATEGORIES,
+      PlanFeature.INVENTORY,
+      PlanFeature.TRANSACTIONS,
+      PlanFeature.USERS,
+      PlanFeature.SETTINGS,
+      PlanFeature.RBAC,
       PlanFeature.ACCOUNTING,
-      PlanFeature.REPORTS,
+      PlanFeature.PAYMENTS,
+      PlanFeature.CRM,
       PlanFeature.HR,
+      PlanFeature.PROCUREMENT,
+      PlanFeature.WAREHOUSE,
       PlanFeature.TRANSPORTATION,
       PlanFeature.PROJECTS,
       PlanFeature.MANUFACTURING,
@@ -159,6 +173,8 @@ export const DEFAULT_PLAN_DEFINITIONS: DefaultPlanDefinition[] = [
       PlanFeature.SERVICES,
       PlanFeature.COMMUNICATION,
       PlanFeature.COMPLIANCE,
+      PlanFeature.REPORTS,
+      PlanFeature.SUPPLIERS,
     ],
     limits: [
       { key: PlanLimitKey.USERS, value: null },

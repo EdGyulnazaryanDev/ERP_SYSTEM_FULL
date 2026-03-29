@@ -71,15 +71,15 @@ A running list of bugs, improvements, and features to implement.
 
 ### Backend (highest impact first)
 
-- [ ] **Redis caching layer** — cache CoA accounts, roles/permissions, tenant settings on every request hit
+- [x] **Redis caching layer** — cache CoA accounts, roles/permissions, tenant settings on every request hit
   - These are queried on almost every API call but rarely change
   - TTL-based invalidation when data changes
-- [ ] **Database indexes** — add composite indexes on `(tenant_id, status)`, `(tenant_id, created_at)` across all major tables
+- [x] **Database indexes** — add composite indexes on `(tenant_id, status)`, `(tenant_id, created_at)` across all major tables
   - Currently doing full table scans filtered by tenant_id
-- [ ] **Pagination on all list endpoints** — all list APIs currently return full datasets
+- [x] **Pagination on all list endpoints** — all list APIs currently return full datasets
   - Add `page` / `limit` query params, return `{ data, total, page, limit }`
 - [ ] **Fix N+1 query problems** — audit TypeORM relations, replace lazy loads with proper JOINs / query builders
-- [ ] **Add Kafka to docker-compose** — Kafka module exists in code but not running in infrastructure
+- [x] **Add Kafka to docker-compose** — Kafka module exists in code but not running in infrastructure
   - Move JE creation, notifications, audit logs off the synchronous request thread
 - [ ] **Elasticsearch integration** — replace PostgreSQL `LIKE '%query%'` with Elasticsearch full-text search
   - Module folder exists (`infrastructure/elasticsearch`) but is empty

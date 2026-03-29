@@ -67,30 +67,31 @@ export class TransportationService {
       courier_id?: string;
       startDate?: string;
       endDate?: string;
+      page?: number;
+      limit?: number;
     },
-  ): Promise<ShipmentEntity[]> {
+  ): Promise<{ data: ShipmentEntity[]; total: number; page: number; limit: number }> {
     const where: any = { tenant_id: tenantId };
 
-    if (filters?.status) {
-      where.status = filters.status;
-    }
-
-    if (filters?.courier_id) {
-      where.courier_id = filters.courier_id;
-    }
-
+    if (filters?.status) where.status = filters.status;
+    if (filters?.courier_id) where.courier_id = filters.courier_id;
     if (filters?.startDate && filters?.endDate) {
-      where.created_at = Between(
-        new Date(filters.startDate),
-        new Date(filters.endDate),
-      );
+      where.created_at = Between(new Date(filters.startDate), new Date(filters.endDate));
     }
 
-    return this.shipmentRepo.find({
+    const page = Math.max(1, filters?.page ?? 1);
+    const limit = Math.min(500, Math.max(1, filters?.limit ?? 50));
+    const skip = (page - 1) * limit;
+
+    const [data, total] = await this.shipmentRepo.findAndCount({
       where,
       relations: ['courier', 'items'],
       order: { created_at: 'DESC' },
+      skip,
+      take: limit,
     });
+
+    return { data, total, page, limit };
   }
 
   async findOneShipment(id: string, tenantId: string): Promise<ShipmentEntity> {

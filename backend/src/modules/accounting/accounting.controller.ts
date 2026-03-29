@@ -71,8 +71,16 @@ export class AccountingController {
   }
 
   @Get('accounts')
-  getAccounts(@CurrentTenant() tenantId: string) {
-    return this.accountingService.getAccounts(tenantId);
+  getAccounts(
+    @CurrentTenant() tenantId: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.accountingService.getAccounts(
+      tenantId,
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 200,
+    );
   }
 
   @Get('accounts/:id')
