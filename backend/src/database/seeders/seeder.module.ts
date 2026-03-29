@@ -2,6 +2,9 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ComprehensiveSeeder } from './comprehensive.seeder';
 import { DefaultCoaSeeder } from './default-coa.seeder';
+import { WorkflowSeeder } from './workflow.seeder';
+import { ProductEntity } from '../../modules/products/entities/product.entity';
+import { ShipmentItemEntity } from '../../modules/transportation/entities/shipment-item.entity';
 import { Role } from '../../modules/roles/role.entity';
 import { Permission } from '../../modules/permissions/permission.entity';
 import { RolePermission } from '../../modules/permissions/role-permission.entity';
@@ -61,10 +64,12 @@ import { LeadEntity } from '../../modules/crm/entities/lead.entity';
       CustomerEntity,
       ContactEntity,
       LeadEntity,
+      ProductEntity,
+      ShipmentItemEntity,
     ]),
     SettingsModule,
   ],
-  providers: [ComprehensiveSeeder, DefaultCoaSeeder],
-  exports: [ComprehensiveSeeder, DefaultCoaSeeder],
+  providers: [ComprehensiveSeeder, DefaultCoaSeeder, WorkflowSeeder],
+  exports: [ComprehensiveSeeder, DefaultCoaSeeder, WorkflowSeeder],
 })
 export class SeederModule {}

@@ -71,6 +71,20 @@ export default function MainLayout() {
   const queryClient = useQueryClient();
   const [yearly, setYearly] = useState(false);
 
+  const selectMutation = useMutation({
+    mutationFn: (planCode: string) =>
+      subscriptionsApi.selectPlan({ planCode, billingCycle: yearly ? 'yearly' : 'monthly', autoRenew: true }),
+    onSuccess: (response) => {
+      notification.success({ message: 'Plan selected! Welcome aboard.' });
+      // Set subscription data immediately so needsPlanSelection flips to false right away
+      // (no gap between plan selection and app opening)
+      queryClient.setQueryData(['current-subscription'], response.data);
+      queryClient.invalidateQueries({ queryKey: ['page-catalog'] });
+      queryClient.invalidateQueries({ queryKey: ['my-page-access'] });
+    },
+    onError: () => notification.error({ message: 'Failed to select plan' }),
+  });
+
   // Force plan selection when tenant has no active subscription (only after loading completes)
   // ALL tenant users (including Admin role) must select a plan — only system admins bypass this
   const needsPlanSelection =
@@ -78,34 +92,10 @@ export default function MainLayout() {
     !user?.isSystemAdmin &&
     (subscription === null || subscription === undefined);
 
-  console.log('🔍 Plan Selection Debug:', {
-    isLoading,
-    isSystemAdmin: user?.isSystemAdmin,
-    subscription,
-    subscriptionIsNull: subscription === null,
-    subscriptionIsUndefined: subscription === undefined,
-    subscriptionType: typeof subscription,
-    needsPlanSelection,
-    userEmail: user?.email,
-  });
-
   const { data: plans = [], isLoading: plansLoading } = useQuery({
     queryKey: ['available-plans'],
     queryFn: async () => (await subscriptionsApi.getPlans()).data,
     enabled: needsPlanSelection,
-  });
-
-  const selectMutation = useMutation({
-    mutationFn: (planCode: string) =>
-      subscriptionsApi.selectPlan({ planCode, billingCycle: yearly ? 'yearly' : 'monthly', autoRenew: true }),
-    onSuccess: () => {
-      notification.success({ message: 'Plan selected! Welcome aboard.' });
-      // Invalidate all access-related caches so sidebar reflects the new plan immediately
-      queryClient.invalidateQueries({ queryKey: ['current-subscription'] });
-      queryClient.invalidateQueries({ queryKey: ['page-catalog'] });
-      queryClient.invalidateQueries({ queryKey: ['my-page-access'] });
-    },
-    onError: () => notification.error({ message: 'Failed to select plan' }),
   });
 
   useEffect(() => {
@@ -344,92 +334,8 @@ export default function MainLayout() {
     );
   }
 
-  // Tenant account suspended by platform admin
-  if (isSuspended) {
-    return (
-      <div
-        style={{
-          minHeight: '100vh',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: 32,
-          background: 'radial-gradient(ellipse at 30% 40%, rgba(239,68,68,0.07) 0%, transparent 60%), radial-gradient(ellipse at 70% 60%, rgba(14,165,233,0.05) 0%, transparent 55%)',
-        }}
-      >
-        <div
-          style={{
-            maxWidth: 480,
-            width: '100%',
-            textAlign: 'center',
-            padding: '48px 40px',
-            borderRadius: 24,
-            background: 'rgba(8, 25, 40, 0.82)',
-            border: '1px solid rgba(239, 68, 68, 0.25)',
-            boxShadow: '0 40px 80px rgba(2, 10, 19, 0.4)',
-            backdropFilter: 'blur(20px)',
-          }}
-        >
-          <div
-            style={{
-              width: 72,
-              height: 72,
-              borderRadius: '50%',
-              background: 'rgba(239, 68, 68, 0.12)',
-              border: '1px solid rgba(239, 68, 68, 0.3)',
-              display: 'grid',
-              placeItems: 'center',
-              margin: '0 auto 24px',
-            }}
-          >
-            <StopOutlined style={{ fontSize: 32, color: '#ef4444' }} />
-          </div>
-          <div style={{ color: '#f0f6ff', fontSize: 22, fontWeight: 700, marginBottom: 12 }}>
-            Account Suspended
-          </div>
-          <div style={{ color: '#8a9bb0', fontSize: 14, lineHeight: 1.7, marginBottom: 32 }}>
-            Your organization's access has been suspended by the platform administrator.
-            All data is preserved. Please contact support to restore access.
-          </div>
-          <div
-            style={{
-              padding: '12px 20px',
-              borderRadius: 12,
-              background: 'rgba(239, 68, 68, 0.08)',
-              border: '1px solid rgba(239, 68, 68, 0.15)',
-              color: '#fca5a5',
-              fontSize: 13,
-              marginBottom: 32,
-              textAlign: 'left',
-            }}
-          >
-            <span style={{ fontWeight: 600 }}>Account:</span> {user?.email ?? '—'}
-          </div>
-          <Button
-            size="large"
-            onClick={() => {
-              sessionStorage.removeItem('tenant_suspended');
-              logout();
-              navigate('/auth/login');
-            }}
-            style={{
-              width: '100%',
-              height: 46,
-              borderRadius: 12,
-              background: 'rgba(255,255,255,0.06)',
-              border: '1px solid rgba(255,255,255,0.12)',
-              color: '#e2e8f0',
-              fontWeight: 600,
-            }}
-          >
-            Sign out
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
+  // New tenant with no subscription — show plan selection BEFORE any suspended check
+  // (a brand-new tenant can never be suspended, they just haven't picked a plan yet)
   if (needsPlanSelection) {
     const popularIdx = plans.length >= 3 ? Math.floor(plans.length / 2) : 0;
     return (
@@ -560,6 +466,92 @@ export default function MainLayout() {
               Sign out of {user?.email}
             </Button>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Tenant account suspended by platform admin (only shown when no plan selection needed)
+  if (isSuspended) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 32,
+          background: 'radial-gradient(ellipse at 30% 40%, rgba(239,68,68,0.07) 0%, transparent 60%), radial-gradient(ellipse at 70% 60%, rgba(14,165,233,0.05) 0%, transparent 55%)',
+        }}
+      >
+        <div
+          style={{
+            maxWidth: 480,
+            width: '100%',
+            textAlign: 'center',
+            padding: '48px 40px',
+            borderRadius: 24,
+            background: 'rgba(8, 25, 40, 0.82)',
+            border: '1px solid rgba(239, 68, 68, 0.25)',
+            boxShadow: '0 40px 80px rgba(2, 10, 19, 0.4)',
+            backdropFilter: 'blur(20px)',
+          }}
+        >
+          <div
+            style={{
+              width: 72,
+              height: 72,
+              borderRadius: '50%',
+              background: 'rgba(239, 68, 68, 0.12)',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              display: 'grid',
+              placeItems: 'center',
+              margin: '0 auto 24px',
+            }}
+          >
+            <StopOutlined style={{ fontSize: 32, color: '#ef4444' }} />
+          </div>
+          <div style={{ color: '#f0f6ff', fontSize: 22, fontWeight: 700, marginBottom: 12 }}>
+            Account Suspended
+          </div>
+          <div style={{ color: '#8a9bb0', fontSize: 14, lineHeight: 1.7, marginBottom: 32 }}>
+            Your organization's access has been suspended by the platform administrator.
+            All data is preserved. Please contact support to restore access.
+          </div>
+          <div
+            style={{
+              padding: '12px 20px',
+              borderRadius: 12,
+              background: 'rgba(239, 68, 68, 0.08)',
+              border: '1px solid rgba(239, 68, 68, 0.15)',
+              color: '#fca5a5',
+              fontSize: 13,
+              marginBottom: 32,
+              textAlign: 'left',
+            }}
+          >
+            <span style={{ fontWeight: 600 }}>Account:</span> {user?.email ?? '—'}
+          </div>
+          <Button
+            size="large"
+            onClick={() => {
+              sessionStorage.removeItem('tenant_suspended');
+              logout();
+              navigate('/auth/login');
+            }}
+            style={{
+              width: '100%',
+              height: 46,
+              borderRadius: 12,
+              background: 'rgba(255,255,255,0.06)',
+              border: '1px solid rgba(255,255,255,0.12)',
+              color: '#e2e8f0',
+              fontWeight: 600,
+            }}
+          >
+            Sign out
+          </Button>
         </div>
       </div>
     );

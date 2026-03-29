@@ -20,7 +20,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: JwtPayload): Promise<JwtPayload & { userId: string }> {
+  async validate(
+    payload: JwtPayload,
+  ): Promise<JwtPayload & { userId: string }> {
     // System admins have no tenant — always allow
     if (payload.isSystemAdmin || !payload.tenantId) {
       return { ...payload, userId: payload.sub };
@@ -29,10 +31,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     // Check tenant is still active
     const tenant = await this.tenantRepo.findOne({
       where: { id: payload.tenantId },
-      select: ['id', 'isActive'],
     });
 
-    if (!tenant || !tenant.isActive) {
+    if (!tenant || tenant.isActive === false) {
       throw new UnauthorizedException('TENANT_DEACTIVATED');
     }
 

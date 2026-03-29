@@ -20,6 +20,8 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       isSystemAdmin: false,
       setAuth: (user, token) => {
+        // Clear any stale suspension flag on fresh login
+        sessionStorage.removeItem('tenant_suspended');
         // Always re-decode from token to get correct UTF-8 name (jwtDecode handles multi-byte chars)
         try {
           const payload = jwtDecode<{ name?: string; isSystemAdmin?: boolean }>(token);
