@@ -29,6 +29,10 @@ export class ShipmentItemDto {
 
   @IsNumber()
   @IsOptional()
+  unit_price?: number;
+
+  @IsNumber()
+  @IsOptional()
   weight?: number;
 
   @IsString()

@@ -120,6 +120,16 @@ export class EmployeeEntity {
   @Column({ type: 'text', nullable: true })
   notes: string;
 
+  // ── Employment contract / e-signature ──────────────────────────────────────
+  @Column({ type: 'varchar', length: 20, default: 'pending' })
+  contract_status: 'pending' | 'sent' | 'signed';
+
+  @Column({ type: 'text', nullable: true })
+  contract_signature: string;
+
+  @Column({ type: 'timestamp', nullable: true })
+  contract_signed_at: Date;
+
   @OneToMany(() => AttendanceEntity, (attendance) => attendance.employee)
   attendances: AttendanceEntity[];
 

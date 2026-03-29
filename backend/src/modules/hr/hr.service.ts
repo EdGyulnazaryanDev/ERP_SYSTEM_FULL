@@ -9,6 +9,7 @@ import { Repository, Between } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { FinancialEventType, PayrollProcessedEvent } from '../accounting/events/financial.events';
 import { EmployeeEntity } from './entities/employee.entity';
+import { EmploymentContractService } from './employment-contract.service';
 import { AttendanceEntity, AttendanceStatus } from './entities/attendance.entity';
 import { LeaveTypeEntity } from './entities/leave-type.entity';
 import { LeaveBalanceEntity } from './entities/leave-balance.entity';
@@ -44,6 +45,7 @@ export class HrService {
     @InjectRepository(PayslipEntity)
     private payslipRepo: Repository<PayslipEntity>,
     private eventEmitter: EventEmitter2,
+    private contractService: EmploymentContractService,
   ) {}
 
   // ==================== EMPLOYEE METHODS ====================
@@ -82,6 +84,7 @@ export class HrService {
     const employee = this.employeeRepo.create({
       ...data,
       tenant_id: tenantId,
+      contract_status: 'sent',
     });
 
     return this.employeeRepo.save(employee);
@@ -107,6 +110,15 @@ export class HrService {
   async deleteEmployee(id: string, tenantId: string): Promise<void> {
     const employee = await this.findOneEmployee(id, tenantId);
     await this.employeeRepo.remove(employee);
+  }
+
+  async getContractPdf(id: string, tenantId: string): Promise<Buffer> {
+    const employee = await this.findOneEmployee(id, tenantId);
+    return this.contractService.generateContractPdf(employee);
+  }
+
+  async signContract(id: string, tenantId: string, signature: string): Promise<EmployeeEntity> {
+    return this.contractService.signContract(id, tenantId, signature);
   }
 
   async getEmployeesByDepartment(department: string, tenantId: string): Promise<EmployeeEntity[]> {

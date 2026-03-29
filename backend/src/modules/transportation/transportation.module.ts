@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { TransportationController } from './transportation.controller';
 import { TransportationService } from './transportation.service';
+import { ShipmentDocumentService } from './shipment-document.service';
 import { ShipmentEntity } from './entities/shipment.entity';
 import { ShipmentItemEntity } from './entities/shipment-item.entity';
 import { CourierEntity } from './entities/courier.entity';
@@ -23,7 +24,7 @@ import { AccountingModule } from '../accounting/accounting.module';
     ]),
   ],
   controllers: [TransportationController],
-  providers: [TransportationService],
-  exports: [TransportationService, TypeOrmModule],
+  providers: [TransportationService, ShipmentDocumentService],
+  exports: [TransportationService, ShipmentDocumentService, TypeOrmModule],
 })
 export class TransportationModule {}

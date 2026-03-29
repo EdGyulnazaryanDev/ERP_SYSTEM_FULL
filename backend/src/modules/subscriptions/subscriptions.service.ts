@@ -25,6 +25,10 @@ import { CompanySubscription } from './entities/company-subscription.entity';
 import { SubscriptionPlanFeature } from './entities/subscription-plan-feature.entity';
 import { SubscriptionPlanLimit } from './entities/subscription-plan-limit.entity';
 import { SubscriptionPlan } from './entities/subscription-plan.entity';
+import { RedisService } from '../../infrastructure/redis/redis.service';
+
+const TTL_SUBSCRIPTION = 60;  // 1 min
+const TTL_ROLES = 120;        // 2 min
 
 type HydratedPlan = SubscriptionPlan & {
   features: SubscriptionPlanFeature[];
@@ -54,6 +58,7 @@ export class SubscriptionsService implements OnModuleInit {
     private readonly roleRepository: Repository<Role>,
     @InjectDataSource()
     private readonly dataSource: DataSource,
+    private readonly redis: RedisService,
   ) {}
 
   async onModuleInit() {
@@ -71,9 +76,12 @@ export class SubscriptionsService implements OnModuleInit {
   }
 
   async getCurrentSubscriptionForTenant(tenantId: string) {
-    const subscription = await this.getActiveSubscriptionRecord(tenantId);
-    if (!subscription) return null;
-    return this.mapSubscription(subscription);
+    const cacheKey = `subscription:${tenantId}`;
+    return this.redis.cached(cacheKey, TTL_SUBSCRIPTION, async () => {
+      const subscription = await this.getActiveSubscriptionRecord(tenantId);
+      if (!subscription) return null;
+      return this.mapSubscription(subscription);
+    });
   }
 
   async selectPlan(tenantId: string, dto: SelectPlanDto) {
@@ -121,6 +129,9 @@ export class SubscriptionsService implements OnModuleInit {
     if (!hydrated) {
       throw new NotFoundException('Subscription could not be loaded');
     }
+
+    // Invalidate subscription cache on plan change
+    await this.redis.del(`subscription:${tenantId}`);
 
     return this.mapSubscription(hydrated as ActiveSubscription);
   }
@@ -445,37 +456,35 @@ export class SubscriptionsService implements OnModuleInit {
   }
 
   async isSuperAdminUser(userId: string, tenantId: string): Promise<boolean> {
-    const user = await this.userRepository.findOne({ where: { id: userId, tenantId } });
-    // Global system admin always qualifies
-    if (user?.isSystemAdmin) return true;
-
-    // Check if user has a "superadmin" role within this tenant
-    const userRoles = await this.userRoleRepository.find({ where: { user_id: userId } });
-    if (userRoles.length === 0) return false;
-
-    const roleIds = userRoles.map((ur) => ur.role_id);
-    const roles = await this.roleRepository.find({
-      where: roleIds.map((id) => ({ id, tenant_id: tenantId })),
+    const cacheKey = `is_superadmin:${tenantId}:${userId}`;
+    return this.redis.cached(cacheKey, TTL_ROLES, async () => {
+      const user = await this.userRepository.findOne({ where: { id: userId, tenantId } });
+      if (user?.isSystemAdmin) return true;
+      const userRoles = await this.userRoleRepository.find({ where: { user_id: userId } });
+      if (userRoles.length === 0) return false;
+      const roleIds = userRoles.map((ur) => ur.role_id);
+      const roles = await this.roleRepository.find({
+        where: roleIds.map((id) => ({ id, tenant_id: tenantId })),
+      });
+      return roles.some((r) => this.normalizeRoleName(r.name) === 'superadmin');
     });
-
-    return roles.some((r) => this.normalizeRoleName(r.name) === 'superadmin');
   }
 
   async isAdminOrSuperAdminUser(userId: string, tenantId: string): Promise<boolean> {
-    const user = await this.userRepository.findOne({ where: { id: userId, tenantId } });
-    if (user?.isSystemAdmin) return true;
-
-    const userRoles = await this.userRoleRepository.find({ where: { user_id: userId } });
-    if (userRoles.length === 0) return false;
-
-    const roleIds = userRoles.map((ur) => ur.role_id);
-    const roles = await this.roleRepository.find({
-      where: roleIds.map((id) => ({ id, tenant_id: tenantId })),
-    });
-
-    return roles.some((r) => {
-      const n = this.normalizeRoleName(r.name);
-      return n === 'superadmin' || n === 'admin';
+    const cacheKey = `is_admin:${tenantId}:${userId}`;
+    return this.redis.cached(cacheKey, TTL_ROLES, async () => {
+      const user = await this.userRepository.findOne({ where: { id: userId, tenantId } });
+      if (user?.isSystemAdmin) return true;
+      const userRoles = await this.userRoleRepository.find({ where: { user_id: userId } });
+      if (userRoles.length === 0) return false;
+      const roleIds = userRoles.map((ur) => ur.role_id);
+      const roles = await this.roleRepository.find({
+        where: roleIds.map((id) => ({ id, tenant_id: tenantId })),
+      });
+      return roles.some((r) => {
+        const n = this.normalizeRoleName(r.name);
+        return n === 'superadmin' || n === 'admin';
+      });
     });
   }
 

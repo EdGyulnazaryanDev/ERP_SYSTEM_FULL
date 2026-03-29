@@ -35,6 +35,9 @@ export class ShipmentItemEntity {
   quantity: number;
 
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  unit_price: number;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
   weight: number;
 
   @Column({ type: 'text', nullable: true })

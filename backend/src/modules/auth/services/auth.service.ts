@@ -414,6 +414,7 @@ export class AuthService {
           user.id,
           await this.getPrimaryRoleName(user.id, user.tenantId),
           payload.name,
+          user.isSystemAdmin,
         );
 
         await this.updateRefreshToken('staff', user.id, tokens.refreshToken);

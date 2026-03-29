@@ -8,7 +8,9 @@ import {
   Param,
   Query,
   UseGuards,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { HrService } from './hr.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentTenant } from '../../common/decorators/current-tenant.decorator';
@@ -73,6 +75,32 @@ export class HrController {
   async deleteEmployee(@Param('id') id: string, @CurrentTenant() tenantId: string) {
     await this.hrService.deleteEmployee(id, tenantId);
     return { message: 'Employee deleted successfully' };
+  }
+
+  /** GET /hr/employees/:id/contract — download employment contract PDF */
+  @Get('employees/:id/contract')
+  async downloadContract(
+    @Param('id') id: string,
+    @CurrentTenant() tenantId: string,
+    @Res() res: Response,
+  ) {
+    const pdf = await this.hrService.getContractPdf(id, tenantId);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="employment-contract-${id}.pdf"`,
+      'Content-Length': pdf.length,
+    });
+    res.end(pdf);
+  }
+
+  /** POST /hr/employees/:id/sign-contract — employee e-signs the contract */
+  @Post('employees/:id/sign-contract')
+  signContract(
+    @Param('id') id: string,
+    @CurrentTenant() tenantId: string,
+    @Body('signature') signature: string,
+  ) {
+    return this.hrService.signContract(id, tenantId, signature);
   }
 
   // ==================== ATTENDANCE ENDPOINTS ====================

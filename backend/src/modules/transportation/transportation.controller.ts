@@ -8,8 +8,11 @@ import {
   Param,
   Query,
   UseGuards,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { TransportationService } from './transportation.service';
+import { ShipmentDocumentService } from './shipment-document.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentTenant } from '../../common/decorators/current-tenant.decorator';
 import { CreateShipmentDto } from './dto/create-shipment.dto';
@@ -22,6 +25,7 @@ import type { CourierEntity } from './entities/courier.entity';
 export class TransportationController {
   constructor(
     private readonly transportationService: TransportationService,
+    private readonly shipmentDocumentService: ShipmentDocumentService,
   ) {}
 
   // Shipments
@@ -65,10 +69,7 @@ export class TransportationController {
   }
 
   @Get('shipments/:id')
-  findOneShipment(
-    @Param('id') id: string,
-    @CurrentTenant() tenantId: string,
-  ) {
+  findOneShipment(@Param('id') id: string, @CurrentTenant() tenantId: string) {
     return this.transportationService.findOneShipment(id, tenantId);
   }
 
@@ -116,6 +117,84 @@ export class TransportationController {
     },
   ) {
     return this.transportationService.addProofOfDelivery(id, tenantId, body);
+  }
+
+  /** GET /transportation/shipments/:id/packing-slip — download packing slip PDF (staff) */
+  @Get('shipments/:id/packing-slip')
+  async downloadPackingSlip(
+    @Param('id') id: string,
+    @CurrentTenant() tenantId: string,
+    @Res() res: Response,
+  ) {
+    const shipment = await this.transportationService.findOneShipment(
+      id,
+      tenantId,
+    );
+    const pdf =
+      await this.shipmentDocumentService.generatePackingSlip(shipment);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="packing-slip-${shipment.tracking_number}.pdf"`,
+      'Content-Length': pdf.length,
+    });
+    res.end(pdf);
+  }
+
+  /** GET /transportation/shipments/:id/delivery-confirmation — download delivery confirmation PDF (staff) */
+  @Get('shipments/:id/delivery-confirmation')
+  async downloadDeliveryConfirmation(
+    @Param('id') id: string,
+    @CurrentTenant() tenantId: string,
+    @Res() res: Response,
+  ) {
+    const shipment = await this.transportationService.findOneShipment(
+      id,
+      tenantId,
+    );
+    const pdf =
+      await this.shipmentDocumentService.generateDeliveryConfirmation(shipment);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="delivery-confirmation-${shipment.tracking_number}.pdf"`,
+      'Content-Length': pdf.length,
+    });
+    res.end(pdf);
+  }
+
+  /** GET /transportation/shipments/track/:trackingNumber/packing-slip — portal packing slip */
+  @Get('shipments/track/:trackingNumber/packing-slip')
+  async portalPackingSlip(
+    @Param('trackingNumber') trackingNumber: string,
+    @Res() res: Response,
+  ) {
+    const shipment =
+      await this.transportationService.findShipmentByTracking(trackingNumber);
+    const pdf =
+      await this.shipmentDocumentService.generatePackingSlip(shipment);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="packing-slip-${shipment.tracking_number}.pdf"`,
+      'Content-Length': pdf.length,
+    });
+    res.end(pdf);
+  }
+
+  /** GET /transportation/shipments/track/:trackingNumber/delivery-confirmation — portal delivery confirmation */
+  @Get('shipments/track/:trackingNumber/delivery-confirmation')
+  async portalDeliveryConfirmation(
+    @Param('trackingNumber') trackingNumber: string,
+    @Res() res: Response,
+  ) {
+    const shipment =
+      await this.transportationService.findShipmentByTracking(trackingNumber);
+    const pdf =
+      await this.shipmentDocumentService.generateDeliveryConfirmation(shipment);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="delivery-confirmation-${shipment.tracking_number}.pdf"`,
+      'Content-Length': pdf.length,
+    });
+    res.end(pdf);
   }
 
   // Couriers

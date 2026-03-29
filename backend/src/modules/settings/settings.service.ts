@@ -6,6 +6,10 @@ import { UserRole } from '../roles/user-role.entity';
 import { Role } from '../roles/role.entity';
 import { PlanFeature } from '../subscriptions/subscription.constants';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
+import { RedisService } from '../../infrastructure/redis/redis.service';
+
+const TTL_PAGE_ACCESS = 120;  // 2 min
+const TTL_PAGE_CATALOG = 300; // 5 min
 
 export const DEFAULT_PAGES = [
   { key: 'dashboard', name: 'Dashboard', path: '/', category: 'Core', requiredFeature: PlanFeature.DASHBOARD },
@@ -44,6 +48,7 @@ export class SettingsService {
     @InjectRepository(Role)
     private roleRepo: Repository<Role>,
     private readonly subscriptionsService: SubscriptionsService,
+    private readonly redis: RedisService,
   ) {}
 
   async getPageAccessForRole(
@@ -109,59 +114,54 @@ export class SettingsService {
     tenantId: string,
     jwtRole?: string,
   ): Promise<any> {
-    const normalizedJwt = jwtRole?.trim().toLowerCase().replace(/[\s_-]+/g, '') ?? '';
-    const isJwtPrivileged = normalizedJwt === 'admin' || normalizedJwt === 'superadmin';
-    const isSysAdmin = isJwtPrivileged
-      || await this.subscriptionsService.isAdminOrSuperAdminUser(userId, tenantId);
+    const cacheKey = `page_access:${tenantId}:${userId}`;
+    return this.redis.cached(cacheKey, TTL_PAGE_ACCESS, async () => {
+      const normalizedJwt = jwtRole?.trim().toLowerCase().replace(/[\s_-]+/g, '') ?? '';
+      const isJwtPrivileged = normalizedJwt === 'admin' || normalizedJwt === 'superadmin';
+      const isSysAdmin = isJwtPrivileged
+        || await this.subscriptionsService.isAdminOrSuperAdminUser(userId, tenantId);
 
-    // Admin / superadmin gets full access to all pages — no RBAC rows needed
-    if (isSysAdmin) {
-      return DEFAULT_PAGES.map((page) => ({
-        page_key: page.key,
-        page_name: page.name,
-        page_path: page.path,
-        can_view: true,
-        can_create: true,
-        can_edit: true,
-        can_delete: true,
-        can_export: true,
-      }));
-    }
-
-    const userRoles = await this.userRoleRepo.find({
-      where: { user_id: userId },
-    });
-
-    if (userRoles.length === 0) {
-      // No roles assigned — deny everything
-      return [];
-    }
-
-    const roleIds = userRoles.map((ur) => ur.role_id);
-
-    // Auto-initialize default access rows for any role that has none yet
-    for (const roleId of roleIds) {
-      const existingCount = await this.pageAccessRepo.count({
-        where: { role_id: roleId, tenant_id: tenantId },
-      });
-      if (existingCount === 0) {
-        // Initialize with view-only defaults (no create/edit/delete/export)
-        await this.initializeDefaultAccess(roleId, tenantId, false);
+      if (isSysAdmin) {
+        return DEFAULT_PAGES.map((page) => ({
+          page_key: page.key,
+          page_name: page.name,
+          page_path: page.path,
+          can_view: true,
+          can_create: true,
+          can_edit: true,
+          can_delete: true,
+          can_export: true,
+        }));
       }
-    }
 
-    return this.getPageAccessForUser(roleIds, tenantId, { bypassSubscription: false });
+      const userRoles = await this.userRoleRepo.find({ where: { user_id: userId } });
+      if (userRoles.length === 0) return [];
+
+      const roleIds = userRoles.map((ur) => ur.role_id);
+      for (const roleId of roleIds) {
+        const existingCount = await this.pageAccessRepo.count({
+          where: { role_id: roleId, tenant_id: tenantId },
+        });
+        if (existingCount === 0) {
+          await this.initializeDefaultAccess(roleId, tenantId, false);
+        }
+      }
+
+      return this.getPageAccessForUser(roleIds, tenantId, { bypassSubscription: false });
+    });
   }
 
   async getPageCatalog(tenantId: string, userId: string, jwtRole?: string) {
-    const normalizedJwt = jwtRole?.trim().toLowerCase().replace(/[\s_-]+/g, '') ?? '';
-    const isPrivileged = normalizedJwt === 'admin' || normalizedJwt === 'superadmin'
-      || await this.subscriptionsService.isAdminOrSuperAdminUser(userId, tenantId);
-    const allowedPageKeys = isPrivileged
-      ? new Set(DEFAULT_PAGES.map((page) => page.key))
-      : await this.getPlanAllowedPageKeys(tenantId);
-
-    return DEFAULT_PAGES.filter((page) => allowedPageKeys.has(page.key));
+    const cacheKey = `page_catalog:${tenantId}:${userId}`;
+    return this.redis.cached(cacheKey, TTL_PAGE_CATALOG, async () => {
+      const normalizedJwt = jwtRole?.trim().toLowerCase().replace(/[\s_-]+/g, '') ?? '';
+      const isPrivileged = normalizedJwt === 'admin' || normalizedJwt === 'superadmin'
+        || await this.subscriptionsService.isAdminOrSuperAdminUser(userId, tenantId);
+      const allowedPageKeys = isPrivileged
+        ? new Set(DEFAULT_PAGES.map((page) => page.key))
+        : await this.getPlanAllowedPageKeys(tenantId);
+      return DEFAULT_PAGES.filter((page) => allowedPageKeys.has(page.key));
+    });
   }
 
   async getPageAccessMatrixForRole(
@@ -246,7 +246,11 @@ export class SettingsService {
       Object.assign(access, sanitizedPermissions);
     }
 
-    return this.pageAccessRepo.save(access);
+    const saved = await this.pageAccessRepo.save(access);
+    // Invalidate all page-access caches for this tenant
+    await this.redis.delPattern(`page_access:${tenantId}:*`);
+    await this.redis.delPattern(`page_catalog:${tenantId}:*`);
+    return saved;
   }
 
   async initializeDefaultAccess(

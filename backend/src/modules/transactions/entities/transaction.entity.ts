@@ -5,6 +5,7 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   OneToMany,
+  Index,
 } from 'typeorm';
 import { TransactionItemEntity } from './transaction-item.entity';
 
@@ -32,6 +33,9 @@ export enum PaymentMethod {
 }
 
 @Entity('transactions')
+@Index(['tenant_id', 'status'])
+@Index(['tenant_id', 'created_at'])
+@Index(['tenant_id', 'type'])
 export class TransactionEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
