@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
-import MiniChat from '@/components/MiniChat';
 import { Layout, Menu, Avatar, Dropdown, Spin, Drawer, Grid, theme, Button, Row, Col, Tag, Switch, Modal, notification, Divider, Typography } from 'antd';
+import MiniChat from '@/components/MiniChat';
+import AppFooter from '@/components/AppFooter';
 import {
   DashboardOutlined,
   UserOutlined,
@@ -35,8 +36,8 @@ import {
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/authStore';
 import { useAccessControl } from '@/hooks/useAccessControl';
-import { useMyProfile } from '@/hooks/useMyProfile';
 import { subscriptionsApi, type SubscriptionPlan } from '@/api/subscriptions';
+import { usePendingCounts } from '@/hooks/usePendingCounts';
 
 const { Header, Sider, Content } = Layout;
 const { Text } = Typography;
@@ -59,6 +60,7 @@ export default function MainLayout() {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
   const { canAccessPage, isLockedBySubscription, isPrivilegedUser, isLoading, userRoles, subscription } = useAccessControl();
+  const { procurementPending, shipmentsPending } = usePendingCounts();
   const screens = Grid.useBreakpoint();
   const isMobile = !screens.lg;
   const {
@@ -68,7 +70,6 @@ export default function MainLayout() {
   // Plan selection hooks - MUST be declared before any conditional returns
   const queryClient = useQueryClient();
   const [yearly, setYearly] = useState(false);
-  const { avatarUrl } = useMyProfile();
 
   // Force plan selection when tenant has no active subscription (only after loading completes)
   // ALL tenant users (including Admin role) must select a plan — only system admins bypass this
@@ -182,7 +183,19 @@ export default function MainLayout() {
       key: 'procurement-menu',
       pageKey: 'procurement',
       icon: <ShoppingOutlined />,
-      label: 'Procurement',
+      label: (
+        <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+          Procurement
+          {procurementPending > 0 && (
+            <span style={{
+              background: '#ff4d4f', color: '#fff', borderRadius: 10,
+              fontSize: 10, fontWeight: 700, padding: '1px 6px', minWidth: 18, textAlign: 'center',
+            }}>
+              {procurementPending > 99 ? '99+' : procurementPending}
+            </span>
+          )}
+        </span>
+      ),
       children: [
         {
           key: '/procurement',
@@ -208,7 +221,19 @@ export default function MainLayout() {
         },
         {
           key: '/transportation/shipments',
-          label: 'Shipments',
+          label: (
+            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+              Shipments
+              {shipmentsPending > 0 && (
+                <span style={{
+                  background: '#fa8c16', color: '#fff', borderRadius: 10,
+                  fontSize: 10, fontWeight: 700, padding: '1px 6px', minWidth: 18, textAlign: 'center',
+                }}>
+                  {shipmentsPending > 99 ? '99+' : shipmentsPending}
+                </span>
+              )}
+            </span>
+          ),
         },
         {
           key: '/transportation/couriers',
@@ -552,8 +577,7 @@ export default function MainLayout() {
     {
       key: 'profile',
       icon: <UserOutlined />,
-      label: 'My Profile',
-      onClick: () => navigate('/profile'),
+      label: 'Profile',
     },
     {
       type: 'divider' as const,
@@ -562,12 +586,13 @@ export default function MainLayout() {
       key: 'logout',
       icon: <LogoutOutlined />,
       label: 'Logout',
-      onClick: () => {
-        logout();
-        navigate('/auth/login');
-      },
     },
   ];
+
+  const handleUserMenuClick = ({ key }: { key: string }) => {
+    if (key === 'profile') navigate('/profile');
+    if (key === 'logout') { logout(); navigate('/auth/login'); }
+  };
 
   const handleMenuNavigate = (key: string) => {
     navigate(key);
@@ -754,7 +779,7 @@ export default function MainLayout() {
                 )}
               </div>
             </div>
-            <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
+            <Dropdown menu={{ items: userMenuItems, onClick: handleUserMenuClick }} placement="bottomRight">
               <div
                 className="flex items-center gap-3 cursor-pointer"
                 style={{
@@ -786,7 +811,6 @@ export default function MainLayout() {
                   />
                   <Avatar
                     size={30}
-                    src={avatarUrl}
                     style={{
                       position: 'relative',
                       background: 'linear-gradient(135deg, #14b8a6 0%, #38bdf8 100%)',
@@ -797,7 +821,7 @@ export default function MainLayout() {
                       boxShadow: '0 6px 14px rgba(20, 184, 166, 0.22)',
                     }}
                   >
-                    {!avatarUrl && userInitials}
+                    {userInitials}
                   </Avatar>
                   <span
                     style={{
@@ -884,9 +908,8 @@ export default function MainLayout() {
           }}
         >
           <Outlet />
-        </Content>
+        </Content>{/*  */}
       </Layout>
-      <MiniChat />
     </Layout>
   );
 }

@@ -43,6 +43,7 @@ export interface ShipmentItem {
   product_name: string;
   sku?: string;
   quantity: number;
+  unit_price?: number;
   weight?: number;
   description?: string;
 }
@@ -230,6 +231,29 @@ export const transportationApi = {
     apiClient.get<ShipmentAnalytics>('/transportation/shipments/analytics', {
       params: { startDate, endDate },
     }),
+
+  // Document downloads (staff — by shipment ID)
+  getPackingSlipUrl: (id: string) =>
+    `${apiClient.defaults.baseURL}/transportation/shipments/${id}/packing-slip`,
+
+  getDeliveryConfirmationUrl: (id: string) =>
+    `${apiClient.defaults.baseURL}/transportation/shipments/${id}/delivery-confirmation`,
+
+  // Document downloads (portal — by tracking number, requires portal JWT)
+  getPortalPackingSlipUrl: (trackingNumber: string) =>
+    `${apiClient.defaults.baseURL}/transportation/shipments/track/${trackingNumber}/packing-slip`,
+
+  getPortalDeliveryConfirmationUrl: (trackingNumber: string) =>
+    `${apiClient.defaults.baseURL}/transportation/shipments/track/${trackingNumber}/delivery-confirmation`,
+
+  downloadDocument: async (url: string): Promise<Blob> => {
+    const token = (await import('@/store/authStore')).useAuthStore.getState().token;
+    const response = await fetch(url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!response.ok) throw new Error('Failed to download document');
+    return response.blob();
+  },
 
   // Couriers
   getCouriers: () => apiClient.get<Courier[]>('/transportation/couriers'),

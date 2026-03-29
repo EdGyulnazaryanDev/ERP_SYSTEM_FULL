@@ -23,17 +23,17 @@ A running list of bugs, improvements, and features to implement.
 
 ## Features
 
-- [ ] **Shipment document generation + vendor/customer notification**
+- [x] **Shipment document generation + vendor/customer notification**
   - When admin confirms/signs a shipment, generate a PDF document (packing slip / delivery order) with item details, quantities, and prices
   - Both the supplier and the customer receive their respective document in their portal (HTML view + PDF download button)
   - Triggered on shipment sign-off, before delivery
 
-- [ ] **Delivery confirmation document**
+- [x] **Delivery confirmation document**
   - When a shipment is marked as delivered, generate a delivery confirmation / proof of delivery PDF
   - Before delivery: supplier and customer portals show only shipment status tracking
   - After delivery: both portals show the delivery confirmation document with PDF download
 
-- [ ] **Employment contract with e-signature**
+- [x] **Employment contract with e-signature**
   - When a new employee is created, auto-generate an employment contract / offer letter PDF (job title, salary, start date, terms)
   - Employee receives it in their portal and signs digitally (e-signature) in the app
   - Signed document is stored and visible to HR/admin

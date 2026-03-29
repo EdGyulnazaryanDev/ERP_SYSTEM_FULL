@@ -11,12 +11,15 @@ import {
   Space,
   Empty,
   Spin,
+  message,
 } from 'antd';
 import {
   SearchOutlined,
   EnvironmentOutlined,
   ClockCircleOutlined,
   CheckCircleOutlined,
+  FilePdfOutlined,
+  FileTextOutlined,
 } from '@ant-design/icons';
 import { transportationApi, ShipmentStatus } from '@/api/transportation';
 import dayjs from 'dayjs';
@@ -49,6 +52,23 @@ export default function ShipmentTrackingPage() {
   const { trackingNumber: urlTrackingNumber, id: urlId } = useParams();
   const [trackingNumber, setTrackingNumber] = useState(urlTrackingNumber || '');
   const [searchedNumber, setSearchedNumber] = useState(urlTrackingNumber || '');
+  const [downloading, setDownloading] = useState<string | null>(null);
+
+  const downloadDoc = async (url: string, filename: string) => {
+    setDownloading(filename);
+    try {
+      const blob = await transportationApi.downloadDocument(url);
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    } catch {
+      message.error('Failed to download document');
+    } finally {
+      setDownloading(null);
+    }
+  };
 
   // When accessed via /transportation/shipments/:id, fetch by UUID directly
   const { data: shipmentById } = useQuery({
@@ -123,6 +143,37 @@ export default function ShipmentTrackingPage() {
                     <Tag color={statusColors[shipment.status]} icon={statusIcons[shipment.status]}>
                       {shipment.status.replace('_', ' ').toUpperCase()}
                     </Tag>
+                  </Space>
+                }
+                extra={
+                  <Space>
+                    {/* Packing slip — available once shipment is picked up */}
+                    {shipment.status !== ShipmentStatus.PENDING && shipment.status !== ShipmentStatus.CANCELLED && (
+                      <Button
+                        icon={<FileTextOutlined />}
+                        loading={downloading === `packing-slip-${shipment.tracking_number}.pdf`}
+                        onClick={() => downloadDoc(
+                          transportationApi.getPortalPackingSlipUrl(shipment.tracking_number),
+                          `packing-slip-${shipment.tracking_number}.pdf`,
+                        )}
+                      >
+                        Packing Slip
+                      </Button>
+                    )}
+                    {/* Delivery confirmation — only available after delivery */}
+                    {shipment.status === ShipmentStatus.DELIVERED && (
+                      <Button
+                        type="primary"
+                        icon={<FilePdfOutlined />}
+                        loading={downloading === `delivery-confirmation-${shipment.tracking_number}.pdf`}
+                        onClick={() => downloadDoc(
+                          transportationApi.getPortalDeliveryConfirmationUrl(shipment.tracking_number),
+                          `delivery-confirmation-${shipment.tracking_number}.pdf`,
+                        )}
+                      >
+                        Delivery Confirmation
+                      </Button>
+                    )}
                   </Space>
                 }
               >

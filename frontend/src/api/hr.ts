@@ -10,6 +10,21 @@ export const hrApi = {
   updateEmployee: (id: string, data: any) => apiClient.put(`/hr/employees/${id}`, data),
   deleteEmployee: (id: string) => apiClient.delete(`/hr/employees/${id}`),
 
+  // Employment contract
+  getContractPdfUrl: (id: string) =>
+    `${apiClient.defaults.baseURL}/hr/employees/${id}/contract`,
+  signContract: (id: string, signature: string) =>
+    apiClient.post(`/hr/employees/${id}/sign-contract`, { signature }),
+  downloadContractPdf: async (id: string): Promise<Blob> => {
+    const token = (await import('@/store/authStore')).useAuthStore.getState().token;
+    const url = `${apiClient.defaults.baseURL}/hr/employees/${id}/contract`;
+    const res = await fetch(url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error('Failed to download contract');
+    return res.blob();
+  },
+
   // Attendance
   clockIn: (data: any) => apiClient.post('/hr/attendance/clock-in', data),
   clockOut: (data: any) => apiClient.post('/hr/attendance/clock-out', data),

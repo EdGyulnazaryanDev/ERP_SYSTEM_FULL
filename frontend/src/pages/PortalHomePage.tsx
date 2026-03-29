@@ -1,10 +1,12 @@
-import { Alert, Button, Card, Col, Empty, Row, Skeleton, Space, Tag } from 'antd';
+import { Alert, Button, Card, Col, Empty, Row, Skeleton, Space, Tag, message } from 'antd';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   CheckCircleOutlined,
   ClockCircleOutlined,
   CreditCardOutlined,
   DollarOutlined,
+  FilePdfOutlined,
   FileTextOutlined,
   LogoutOutlined,
   NotificationOutlined,
@@ -15,6 +17,7 @@ import {
 } from '@ant-design/icons';
 import { Link } from 'react-router-dom';
 import { authApi, type PortalMetric, type PortalSummary } from '@/api/auth';
+import { transportationApi } from '@/api/transportation';
 import { useAuthStore } from '@/store/authStore';
 import styles from './PortalHomePage.module.css';
 
@@ -116,6 +119,23 @@ function buildKpiIcons(summary: PortalSummary, isSupplier: boolean) {
 export default function PortalHomePage() {
   const { user, logout } = useAuthStore();
   const isSupplier = user?.actorType === 'supplier';
+  const [downloadingDoc, setDownloadingDoc] = useState<string | null>(null);
+
+  const downloadDoc = async (url: string, filename: string) => {
+    setDownloadingDoc(filename);
+    try {
+      const blob = await transportationApi.downloadDocument(url);
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    } catch {
+      message.error('Failed to download document');
+    } finally {
+      setDownloadingDoc(null);
+    }
+  };
   const { data: summary, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ['portal-summary', user?.principalId, user?.actorType],
     queryFn: () => authApi.getPortalSummary().then((res) => res.data),
@@ -269,6 +289,37 @@ export default function PortalHomePage() {
                             <div className={styles.recordTitle}>{shipment.trackingNumber}</div>
                             <div className={styles.recordMeta}>
                               {toTitleCase(shipment.status)} • {shipment.destinationCity || shipment.destinationName}
+                            </div>
+                            <div style={{ marginTop: 4, display: 'flex', gap: 6 }}>
+                              {shipment.status !== 'pending' && shipment.status !== 'cancelled' && (
+                                <Button
+                                  size="small"
+                                  icon={<FileTextOutlined />}
+                                  loading={downloadingDoc === `packing-slip-${shipment.trackingNumber}.pdf`}
+                                  onClick={() => downloadDoc(
+                                    transportationApi.getPortalPackingSlipUrl(shipment.trackingNumber),
+                                    `packing-slip-${shipment.trackingNumber}.pdf`,
+                                  )}
+                                  style={{ fontSize: 11 }}
+                                >
+                                  Packing Slip
+                                </Button>
+                              )}
+                              {shipment.status === 'delivered' && (
+                                <Button
+                                  size="small"
+                                  type="primary"
+                                  icon={<FilePdfOutlined />}
+                                  loading={downloadingDoc === `delivery-confirmation-${shipment.trackingNumber}.pdf`}
+                                  onClick={() => downloadDoc(
+                                    transportationApi.getPortalDeliveryConfirmationUrl(shipment.trackingNumber),
+                                    `delivery-confirmation-${shipment.trackingNumber}.pdf`,
+                                  )}
+                                  style={{ fontSize: 11, background: '#16a34a', borderColor: '#16a34a' }}
+                                >
+                                  Delivery Confirmation
+                                </Button>
+                              )}
                             </div>
                           </div>
                           <div className={styles.recordValue}>

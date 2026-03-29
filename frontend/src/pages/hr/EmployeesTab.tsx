@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Table, Button, Tag, Modal, Form, Input, Select, DatePicker, Space, Popconfirm, message, Tabs, InputNumber } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, DollarOutlined } from '@ant-design/icons';
+import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, DollarOutlined, FilePdfOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { hrApi } from '@/api/hr';
 import dayjs from 'dayjs';
@@ -37,10 +37,13 @@ function StatusPill({ status }: { status: string }) {
 export default function EmployeesTab() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSalaryModalOpen, setIsSalaryModalOpen] = useState(false);
+  const [signModal, setSignModal] = useState<{ id: string; name: string } | null>(null);
   const [editingEmployee, setEditingEmployee] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [downloadingContract, setDownloadingContract] = useState<string | null>(null);
   const [form] = Form.useForm();
   const [salaryForm] = Form.useForm();
+  const [signForm] = Form.useForm();
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
@@ -73,7 +76,36 @@ export default function EmployeesTab() {
     onError: (e: any) => { const msg = e.response?.data?.message || 'Failed'; message.error(typeof msg === 'string' ? msg : msg.join(', ')); },
   });
 
-  const handleOpenModal = (employee?: any) => {
+  const signMutation = useMutation({
+    mutationFn: ({ id, signature }: { id: string; signature: string }) =>
+      hrApi.signContract(id, signature),
+    onSuccess: () => {
+      message.success('Contract signed successfully');
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+      setSignModal(null);
+      signForm.resetFields();
+    },
+    onError: (e: any) => {
+      const msg = e.response?.data?.message || 'Failed to sign contract';
+      message.error(typeof msg === 'string' ? msg : msg.join(', '));
+    },
+  });
+
+  const downloadContract = async (id: string, name: string) => {
+    setDownloadingContract(id);
+    try {
+      const blob = await hrApi.downloadContractPdf(id);
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `employment-contract-${name.replace(/\s+/g, '-')}.pdf`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    } catch {
+      message.error('Failed to download contract');
+    } finally {
+      setDownloadingContract(null);
+    }
+  };  const handleOpenModal = (employee?: any) => {
     if (employee) {
       setEditingEmployee(employee); setIsModalOpen(true);
       setTimeout(() => form.setFieldsValue({ ...employee, date_of_birth: employee.date_of_birth ? dayjs(employee.date_of_birth) : null, hire_date: employee.hire_date ? dayjs(employee.hire_date) : null }), 0);
@@ -116,10 +148,36 @@ export default function EmployeesTab() {
     { title: 'Status', dataIndex: 'status', key: 'status', width: 120,
       render: (status: string) => status ? <StatusPill status={status} /> : null },
     {
-      title: 'Actions', key: 'actions', width: 100,
+      title: 'Contract', dataIndex: 'contract_status', key: 'contract_status', width: 110,
+      render: (cs: string) => {
+        const cfg: Record<string, { color: string; label: string }> = {
+          pending: { color: 'default', label: 'Pending' },
+          sent:    { color: 'orange', label: 'Sent' },
+          signed:  { color: 'green',  label: 'Signed' },
+        };
+        const c = cfg[cs] ?? { color: 'default', label: cs ?? 'Pending' };
+        return <Tag color={c.color} style={{ fontSize: 11 }}>{c.label}</Tag>;
+      },
+    },
+    {
+      title: 'Actions', key: 'actions', width: 140,
       render: (_: any, record: any) => (
         <Space size={4}>
           <Button type="link" size="small" icon={<EditOutlined />} onClick={() => handleOpenModal(record)} />
+          <Button
+            type="link" size="small" icon={<FilePdfOutlined />}
+            loading={downloadingContract === record.id}
+            onClick={() => downloadContract(record.id, `${record.first_name}-${record.last_name}`)}
+            title="Download Contract"
+          />
+          {record.contract_status !== 'signed' && (
+            <Button
+              type="link" size="small" icon={<SafetyCertificateOutlined />}
+              style={{ color: '#52c41a' }}
+              onClick={() => setSignModal({ id: record.id, name: `${record.first_name} ${record.last_name}` })}
+              title="Sign Contract"
+            />
+          )}
           <Popconfirm title="Delete employee?" description="Are you sure?" onConfirm={() => deleteMutation.mutate(record.id)} okText="Yes" cancelText="No">
             <Button type="link" size="small" danger icon={<DeleteOutlined />} />
           </Popconfirm>
@@ -238,6 +296,41 @@ export default function EmployeesTab() {
             <InputNumber className="w-full" min={0} precision={2} prefix="$" />
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* E-signature modal */}
+      <Modal
+        title={
+          <Space>
+            <SafetyCertificateOutlined style={{ color: '#52c41a' }} />
+            <span>Sign Employment Contract</span>
+          </Space>
+        }
+        open={!!signModal}
+        onCancel={() => { setSignModal(null); signForm.resetFields(); }}
+        onOk={async () => {
+          const values = await signForm.validateFields();
+          if (signModal) signMutation.mutate({ id: signModal.id, signature: values.signature });
+        }}
+        confirmLoading={signMutation.isPending}
+        okText="Sign Contract"
+        okButtonProps={{ style: { background: '#52c41a', borderColor: '#52c41a' } }}
+      >
+        <p style={{ color: 'var(--app-text-muted)', marginBottom: 16 }}>
+          Signing as: <strong>{signModal?.name}</strong>
+        </p>
+        <Form form={signForm} layout="vertical">
+          <Form.Item
+            name="signature"
+            label="Full Name (as digital signature)"
+            rules={[{ required: true, message: 'Please enter your full name to sign' }]}
+          >
+            <Input placeholder="Type your full name to confirm" />
+          </Form.Item>
+        </Form>
+        <p style={{ fontSize: 12, color: '#888', marginTop: 8 }}>
+          By signing, you confirm you have read and agree to the terms of the employment contract.
+        </p>
       </Modal>
 
       <style>{`

@@ -11,6 +11,7 @@ import {
   CheckCircleOutlined, CloseCircleOutlined, CarOutlined,
   MoreOutlined, SendOutlined, ClockCircleOutlined,
   TruckOutlined, InboxOutlined, StopOutlined,
+  FilePdfOutlined, FileTextOutlined,
 } from '@ant-design/icons';
 import { transportationApi, ShipmentStatus, type Shipment } from '@/api/transportation';
 import apiClient from '@/api/client';
@@ -107,11 +108,28 @@ export default function ShipmentsPage() {
   const [statusFilter, setStatusFilter] = useState<ShipmentStatus>();
   const [activeStatFilter, setActiveStatFilter] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs] | null>(null);
+  const [downloadingDoc, setDownloadingDoc] = useState<string | null>(null);
   const [statusModal, setStatusModal] = useState<{
     shipment: Shipment;
     next: { label: string; status: ShipmentStatus; color: string };
   } | null>(null);
   const [form] = Form.useForm();
+
+  const downloadDoc = async (url: string, filename: string) => {
+    setDownloadingDoc(filename);
+    try {
+      const blob = await transportationApi.downloadDocument(url);
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    } catch {
+      message.error('Failed to download document');
+    } finally {
+      setDownloadingDoc(null);
+    }
+  };
 
   const { data: shipments = [], isLoading } = useQuery({
     queryKey: ['shipments', statusFilter, dateRange],
@@ -347,6 +365,24 @@ export default function ShipmentsPage() {
             icon: <EnvironmentOutlined />,
             onClick: () => window.open(`/track/${record.tracking_number}`, '_blank'),
           },
+          {
+            key: 'packing-slip',
+            label: downloadingDoc === `packing-slip-${record.tracking_number}.pdf` ? 'Downloading...' : 'Download Packing Slip',
+            icon: <FileTextOutlined />,
+            onClick: () => downloadDoc(
+              transportationApi.getPackingSlipUrl(record.id),
+              `packing-slip-${record.tracking_number}.pdf`,
+            ),
+          },
+          ...(record.status === ShipmentStatus.DELIVERED ? [{
+            key: 'delivery-confirmation',
+            label: downloadingDoc === `delivery-confirmation-${record.tracking_number}.pdf` ? 'Downloading...' : 'Delivery Confirmation',
+            icon: <FilePdfOutlined />,
+            onClick: () => downloadDoc(
+              transportationApi.getDeliveryConfirmationUrl(record.id),
+              `delivery-confirmation-${record.tracking_number}.pdf`,
+            ),
+          }] : []),
         ];
         return (
           <Space size={4}>

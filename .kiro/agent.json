@@ -1,0 +1,16 @@
+{
+  "name": "MinimalTaskAgent",
+  "instructions": [
+    "Read ../TASKS.md",
+    "Find first unchecked task",
+    "Return that task only",
+    "Do not explain",
+    "Stop"
+  ],
+  "tools": ["filesystem"],
+  "file_access": {
+    "read": ["../TASKS.md"],
+    "write": ["../TASKS.md"]
+  },
+  "stop_after": "one_task"
+}

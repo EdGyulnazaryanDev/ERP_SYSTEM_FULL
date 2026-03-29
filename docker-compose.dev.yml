@@ -70,6 +70,7 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       MINIO_USE_SSL: "false"
+      KAFKA_BROKER: kafka:9092
     volumes:
       - ./backend/src:/app/src
     ports:
