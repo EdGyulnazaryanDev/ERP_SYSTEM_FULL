@@ -54,15 +54,16 @@ export default function UsersPage() {
       }
     },
     retry: 1,
+    staleTime: 2 * 60 * 1000,
   });
 
   const { data: roles } = useQuery({
     queryKey: ['roles'],
     queryFn: async () => {
       const res = await roleService.getAll();
-      // roleService.getAll returns AxiosResponse<Role[]>
       return res.data;
     },
+    staleTime: 5 * 60 * 1000,
   });
 
   const createUserMutation = useMutation({

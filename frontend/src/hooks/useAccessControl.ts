@@ -21,6 +21,7 @@ export function useAccessControl() {
       return response.data;
     },
     enabled: isAuthenticated,
+    staleTime: 5 * 60 * 1000,
   });
 
   const { data: pageCatalog = [], isLoading: isCatalogLoading } = useQuery({
@@ -30,14 +31,13 @@ export function useAccessControl() {
       return response.data;
     },
     enabled: isAuthenticated,
+    staleTime: Infinity, // catalog never changes at runtime
   });
 
   const { data: subscription, isLoading: isSubscriptionLoading } = useQuery({
     queryKey: ['current-subscription'],
     queryFn: async () => {
       const response = await subscriptionsApi.getCurrentSubscription();
-      console.log('📦 Subscription API Response:', response.data);
-      // Handle null, undefined, empty string, or empty object
       const data = response.data;
       if (!data || data === '' || (typeof data === 'object' && Object.keys(data).length === 0)) {
         return null;
@@ -45,6 +45,7 @@ export function useAccessControl() {
       return data;
     },
     enabled: isAuthenticated,
+    staleTime: 5 * 60 * 1000,
   });
 
   const { data: userRoles = [], isLoading: isRolesLoading } = useQuery({
@@ -54,6 +55,7 @@ export function useAccessControl() {
       return response.data;
     },
     enabled: isAuthenticated && !!user?.id,
+    staleTime: 5 * 60 * 1000,
   });
 
   const pageAccessMap = useMemo(

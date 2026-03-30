@@ -16,6 +16,7 @@ import { categoriesApi } from '@/api/categories';
 import { ProductService } from '@/services/ProductService';
 import { useAccessControl } from '@/hooks/useAccessControl';
 import { usePlanLimits } from '@/hooks/usePlanLimits';
+import { useDebounce } from '@/hooks/useDebounce';
 
 // ── Stat Card ────────────────────────────────────────────────────────────────
 function StatCard({
@@ -80,6 +81,8 @@ export default function ProductsPage() {
     is_active: undefined as boolean | undefined,
     search: undefined as string | undefined,
   });
+  const [searchInput, setSearchInput] = useState('');
+  const debouncedSearch = useDebounce(searchInput, 350);
   const [recentProducts, setRecentProducts] = useState<Product[]>(() => {
     try {
       const raw = sessionStorage.getItem('recent_products');
@@ -89,8 +92,8 @@ export default function ProductsPage() {
 
   // ── Queries ────────────────────────────────────────────────────────────────
   const { data: productsData, isLoading: productsLoading, isFetching: productsFetching } = useQuery({
-    queryKey: ['products', filters],
-    queryFn: () => productsApi.getProducts(filters),
+    queryKey: ['products', { ...filters, search: debouncedSearch || undefined }],
+    queryFn: () => productsApi.getProducts({ ...filters, search: debouncedSearch || undefined }),
     select: (response) => {
       const data = response.data;
       if (Array.isArray(data?.data)) {
@@ -347,6 +350,7 @@ export default function ProductsPage() {
   const resetWorkspace = () => {
     setProductLens('all');
     setActiveStatFilter(null);
+    setSearchInput('');
     setFilters({
       page: 1,
       limit: 50,
@@ -758,9 +762,10 @@ export default function ProductsPage() {
             <Col xs={24} md={8}>
               <Input
                 placeholder="Search by name, SKU, or description…"
-                value={filters.search}
-                onChange={(e) => setFilters({ ...filters, search: e.target.value || undefined, page: 1 })}
+                value={searchInput}
+                onChange={(e) => { setSearchInput(e.target.value); setFilters(f => ({ ...f, page: 1 })); }}
                 allowClear
+                onClear={() => setSearchInput('')}
                 style={{ borderRadius: 8 }}
               />
             </Col>

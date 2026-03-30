@@ -318,10 +318,17 @@ export default function MainLayout() {
   const visibleMenuItems = menuItems
     .filter((item) => {
       if (!item.pageKey) return true;
-      // Subscription gating applies to everyone — only system admin bypasses
       return canAccessPage(item.pageKey) && !isLockedBySubscription(item.pageKey);
     })
-    .map(({ pageKey: _pageKey, ...item }) => item);
+    .map(({ pageKey: _pageKey, ...item }) => ({
+      ...item,
+      // Wrap label to capture hover per item
+      label: (
+        <span onMouseEnter={() => handleMenuHover(item.key)}>
+          {item.label}
+        </span>
+      ),
+    }));
 
   // Inject admin plan builder for system admins — now handled by AdminLayout
   // (system admins are redirected to /admin before reaching MainLayout)
@@ -589,6 +596,29 @@ export default function MainLayout() {
   const handleMenuNavigate = (key: string) => {
     navigate(key);
     setMobileNavOpen(false);
+  };
+
+  // Prefetch data when hovering menu items so pages load instantly on click
+  const PREFETCH_MAP: Record<string, { queryKey: string[]; queryFn: () => Promise<any> }> = {
+    '/products': { queryKey: ['products', { page: 1, limit: 50 }], queryFn: () => import('@/api/products').then(m => m.productsApi.getProducts({ page: 1, limit: 50 })) },
+    '/categories': { queryKey: ['categories'], queryFn: () => import('@/api/categories').then(m => m.categoriesApi.getAll()) },
+    '/users': { queryKey: ['users', { page: 1, pageSize: 10, search: '' }], queryFn: () => import('@/services').then(m => m.userService.getAll({ page: 1, pageSize: 10, search: '' })) },
+    '/inventory': { queryKey: ['inventory'], queryFn: () => import('@/api/client').then(m => m.default.get('/inventory')) },
+    '/transactions': { queryKey: ['transactions'], queryFn: () => import('@/api/client').then(m => m.default.get('/transactions?page=1&limit=20')) },
+  };
+
+  const handleMenuHover = (key: string) => {
+    const prefetch = PREFETCH_MAP[key];
+    if (!prefetch) return;
+    const cached = queryClient.getQueryData(prefetch.queryKey);
+    if (!cached) {
+      console.log(`[Prefetch] 🚀 Fetching "${key}"`, prefetch.queryKey);
+      queryClient.prefetchQuery({ queryKey: prefetch.queryKey, queryFn: prefetch.queryFn, staleTime: 2 * 60 * 1000 })
+        .then(() => console.log(`[Prefetch] ✅ Done "${key}"`))
+        .catch((e) => console.warn(`[Prefetch] ❌ Failed "${key}"`, e));
+    } else {
+      console.log(`[Prefetch] 💾 Cache hit "${key}" — skipping fetch`);
+    }
   };
 
   const menuNode = (

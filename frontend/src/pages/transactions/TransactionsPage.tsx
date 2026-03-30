@@ -97,6 +97,7 @@ export default function TransactionsPage() {
       });
       return res.data?.data || res.data || [];
     },
+    staleTime: 30 * 1000, // transactions change frequently
   });
 
   const { data: analytics = {} as AnalyticsData, isLoading: analyticsLoading } = useQuery({
@@ -110,6 +111,7 @@ export default function TransactionsPage() {
       });
       return res.data || {};
     },
+    staleTime: 60 * 1000,
   });
 
   const { data: inventory = [] } = useQuery({
@@ -119,6 +121,7 @@ export default function TransactionsPage() {
       const d = res.data?.data || res.data || [];
       return Array.isArray(d) ? d : [];
     },
+    staleTime: 5 * 60 * 1000,
   });
 
   const { data: customers = [] } = useQuery({
@@ -128,6 +131,7 @@ export default function TransactionsPage() {
       const d = res.data?.data || res.data || [];
       return Array.isArray(d) ? d : [];
     },
+    staleTime: 5 * 60 * 1000,
   });
 
   const { data: suppliers = [] } = useQuery({
@@ -137,6 +141,7 @@ export default function TransactionsPage() {
       const d = res.data?.data || res.data || [];
       return Array.isArray(d) ? d : [];
     },
+    staleTime: 5 * 60 * 1000,
   });
 
   // ── mutations ─────────────────────────────────────────────────────────────

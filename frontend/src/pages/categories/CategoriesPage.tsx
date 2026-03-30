@@ -54,6 +54,7 @@ export default function CategoriesPage() {
       const response = await categoriesApi.getAll();
       return response.data;
     },
+    staleTime: 5 * 60 * 1000,
   });
 
   const { data: categoryTree } = useQuery({
@@ -63,6 +64,7 @@ export default function CategoriesPage() {
       return response.data;
     },
     enabled: viewMode === 'tree',
+    staleTime: 5 * 60 * 1000,
   });
 
   const createMutation = useMutation({

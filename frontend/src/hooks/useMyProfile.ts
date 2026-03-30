@@ -23,6 +23,7 @@ export function useMyProfile() {
     queryFn: async () => (await apiClient.get<MyProfile>('/users/me')).data,
     enabled: isAuthenticated && user?.actorType === 'staff' && !user?.isSystemAdmin,
     staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
   });
 
   return {

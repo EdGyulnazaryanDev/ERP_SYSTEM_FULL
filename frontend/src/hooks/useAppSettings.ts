@@ -16,8 +16,9 @@ export function useAppSettings() {
   const { data: settings = {} } = useQuery<AppSettings>({
     queryKey: ['app-public-settings'],
     queryFn: async () => (await apiClient.get('/admin/settings/public')).data,
-    staleTime: 5 * 60 * 1000,
-    retry: false, // don't retry — backend may not have settings yet
+    staleTime: 10 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    retry: false,
   });
 
   // Apply dark/light mode
