@@ -250,12 +250,6 @@ export default function MainLayout() {
       label: 'Assets',
     },
     {
-      key: '/services',
-      pageKey: 'services',
-      icon: <CustomerServiceOutlined />,
-      label: 'Services',
-    },
-    {
       key: '/communication',
       pageKey: 'communication',
       icon: <MessageOutlined />,
@@ -314,21 +308,6 @@ export default function MainLayout() {
         ]
       : []),
   ];
-
-  const visibleMenuItems = menuItems
-    .filter((item) => {
-      if (!item.pageKey) return true;
-      return canAccessPage(item.pageKey) && !isLockedBySubscription(item.pageKey);
-    })
-    .map(({ pageKey: _pageKey, ...item }) => ({
-      ...item,
-      // Wrap label to capture hover per item
-      label: (
-        <span onMouseEnter={() => handleMenuHover(item.key)}>
-          {item.label}
-        </span>
-      ),
-    }));
 
   // Inject admin plan builder for system admins — now handled by AdminLayout
   // (system admins are redirected to /admin before reaching MainLayout)
@@ -620,6 +599,20 @@ export default function MainLayout() {
       console.log(`[Prefetch] 💾 Cache hit "${key}" — skipping fetch`);
     }
   };
+
+  const visibleMenuItems = menuItems
+    .filter((item) => {
+      if (!item.pageKey) return true;
+      return canAccessPage(item.pageKey) && !isLockedBySubscription(item.pageKey);
+    })
+    .map(({ pageKey: _pageKey, ...item }) => ({
+      ...item,
+      label: (
+        <span onMouseEnter={() => handleMenuHover(item.key)}>
+          {item.label}
+        </span>
+      ),
+    }));
 
   const menuNode = (
     <Menu

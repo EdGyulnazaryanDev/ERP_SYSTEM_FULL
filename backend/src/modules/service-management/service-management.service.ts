@@ -31,11 +31,10 @@ export class ServiceManagementService {
   ) { }
 
   // Ticket Management
-  async findAllTickets(tenantId: string, status?: TicketStatus): Promise<ServiceTicketEntity[]> {
-    const where: any = { tenant_id: tenantId };
-    if (status) {
-      where.status = status;
-    }
+  async findAllTickets(tenantId: string | null, status?: TicketStatus): Promise<ServiceTicketEntity[]> {
+    const where: any = {};
+    if (tenantId) where.tenant_id = tenantId; // null = system admin, sees all
+    if (status) where.status = status;
 
     return this.ticketRepository.find({
       where,
@@ -44,9 +43,11 @@ export class ServiceManagementService {
     });
   }
 
-  async findOneTicket(id: string, tenantId: string): Promise<ServiceTicketEntity> {
+  async findOneTicket(id: string, tenantId: string | null): Promise<ServiceTicketEntity> {
+    const where: any = { id };
+    if (tenantId) where.tenant_id = tenantId;
     const ticket = await this.ticketRepository.findOne({
-      where: { id, tenant_id: tenantId },
+      where,
       relations: ['category'],
     });
 
@@ -57,15 +58,14 @@ export class ServiceManagementService {
     return ticket;
   }
 
-  async createTicket(data: CreateTicketDto, tenantId: string): Promise<ServiceTicketEntity> {
-    // Generate ticket number
-    const count = await this.ticketRepository.count({ where: { tenant_id: tenantId } });
+  async createTicket(data: CreateTicketDto, tenantId: string | null): Promise<ServiceTicketEntity> {
+    const effectiveTenantId = tenantId ?? 'system';
+    const count = await this.ticketRepository.count({ where: { tenant_id: effectiveTenantId } });
     const ticketNumber = `TKT-${String(count + 1).padStart(6, '0')}`;
 
-    // Get category to check for default SLA
-    const category = await this.categoryRepository.findOne({
+    const category = tenantId ? await this.categoryRepository.findOne({
       where: { id: data.category_id, tenant_id: tenantId },
-    });
+    }) : null;
 
     let slaPolicyId: string | undefined = undefined;
     let dueDate: Date | undefined = undefined;
@@ -73,7 +73,7 @@ export class ServiceManagementService {
     if (category?.default_sla_policy_id) {
       slaPolicyId = category.default_sla_policy_id;
       const slaPolicy = await this.slaPolicyRepository.findOne({
-        where: { id: slaPolicyId, tenant_id: tenantId },
+        where: { id: slaPolicyId, ...(tenantId ? { tenant_id: tenantId } : {}) },
       });
 
       if (slaPolicy) {
@@ -86,16 +86,15 @@ export class ServiceManagementService {
     const ticket = this.ticketRepository.create({
       ...data,
       ticket_number: ticketNumber,
-      // Pass conditionally to avoid saving a literal undefined
       ...(slaPolicyId ? { sla_policy_id: slaPolicyId } : {}),
       ...(dueDate ? { due_date: dueDate } : {}),
-      tenant_id: tenantId,
+      tenant_id: effectiveTenantId,
     });
 
     return await this.ticketRepository.save(ticket);
   }
 
-  async updateTicket(id: string, data: UpdateTicketDto, tenantId: string): Promise<ServiceTicketEntity> {
+  async updateTicket(id: string, data: UpdateTicketDto, tenantId: string | null): Promise<ServiceTicketEntity> {
     const ticket = await this.findOneTicket(id, tenantId);
 
     Object.assign(ticket, data);

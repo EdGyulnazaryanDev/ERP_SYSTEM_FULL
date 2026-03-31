@@ -21,7 +21,8 @@ export class CreateTicketDto {
   channel?: TicketChannel;
 
   @IsUUID()
-  category_id: string;
+  @IsOptional()
+  category_id?: string;
 
   @IsOptional()
   @IsUUID()
@@ -90,6 +91,14 @@ export class UpdateTicketDto {
   @IsOptional()
   @IsString()
   resolution_notes?: string;
+
+  @IsOptional()
+  @IsString()
+  trello_card_id?: string;
+
+  @IsOptional()
+  @IsString()
+  trello_card_url?: string;
 }
 
 export class RateTicketDto {

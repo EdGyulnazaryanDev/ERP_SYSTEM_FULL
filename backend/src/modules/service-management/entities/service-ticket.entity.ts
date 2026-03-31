@@ -74,7 +74,7 @@ export class ServiceTicketEntity {
   })
   channel: TicketChannel;
 
-  @Column({ type: 'uuid' })
+  @Column({ type: 'uuid', nullable: true })
   category_id: string;
 
   @ManyToOne(() => TicketCategoryEntity)
@@ -131,6 +131,12 @@ export class ServiceTicketEntity {
 
   @Column({ type: 'text', nullable: true })
   satisfaction_feedback: string;
+
+  @Column({ type: 'text', nullable: true })
+  trello_card_id: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  trello_card_url: string | null;
 
   @CreateDateColumn()
   created_at: Date;
