@@ -971,7 +971,7 @@ export class ComprehensiveSeeder {
         await this.bankRepo.save({
           ...b,
           tenant_id: tenantId,
-          is_active: true,
+          is_active: false,
         });
         console.log(`  ✓ Created bank account: ${b.account_name}`);
       }

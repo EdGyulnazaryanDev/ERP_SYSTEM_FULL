@@ -50,11 +50,11 @@ export default function ProjectsTab() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['projects'],
-    queryFn: () => apiClient.get('/project-management/projects').then(res => res.data),
+    queryFn: () => apiClient.get('/project-management/projects').then(res => Array.isArray(res.data) ? res.data : (res.data?.data ?? [])),
   });
   const { data: employees } = useQuery({
     queryKey: ['employees'],
-    queryFn: () => apiClient.get('/hr/employees').then(res => res.data),
+    queryFn: () => apiClient.get('/hr/employees').then(res => Array.isArray(res.data) ? res.data : (res.data?.data ?? [])),
   });
 
   const createMutation = useMutation({

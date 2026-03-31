@@ -70,6 +70,21 @@ export interface DefaultPlanDefinition {
 
 export const DEFAULT_PLAN_DEFINITIONS: DefaultPlanDefinition[] = [
   {
+    code: PlanCode.FULL,
+    name: 'Full Access',
+    description: 'Complete access to all modules, features, and unlimited usage.',
+    monthlyPrice: 0,
+    yearlyPrice: 0,
+    features: Object.values(PlanFeature),
+    limits: [
+      { key: PlanLimitKey.USERS, value: null },
+      { key: PlanLimitKey.PRODUCTS, value: null },
+      { key: PlanLimitKey.CATEGORIES, value: null },
+      { key: PlanLimitKey.TRANSACTIONS_PER_MONTH, value: null },
+      { key: PlanLimitKey.STORAGE_GB, value: null },
+    ],
+  },
+  {
     code: PlanCode.STARTER,
     name: 'Starter',
     description: 'Essential ERP access for small teams.',

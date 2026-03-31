@@ -75,7 +75,8 @@ export default function TransportationPage() {
     queryKey: ['shipments'],
     queryFn: async () => {
       const res = await apiClient.get('/transportation/shipments');
-      return res.data || [];
+      const d = res.data;
+      return Array.isArray(d) ? d : (Array.isArray(d?.data) ? d.data : []);
     },
   });
 
@@ -84,7 +85,8 @@ export default function TransportationPage() {
     queryKey: ['couriers'],
     queryFn: async () => {
       const res = await apiClient.get('/transportation/couriers');
-      return res.data || [];
+      const d = res.data;
+      return Array.isArray(d) ? d : (Array.isArray(d?.data) ? d.data : []);
     },
   });
 

@@ -39,9 +39,9 @@ export default function ResourcesTab() {
   const canEditResources = canPerform('projects', 'edit');
   const canDeleteResources = canPerform('projects', 'delete');
 
-  const { data, isLoading } = useQuery({ queryKey: ['project-resources'], queryFn: () => apiClient.get('/project-management/resources').then(res => res.data) });
-  const { data: projects } = useQuery({ queryKey: ['projects'], queryFn: () => apiClient.get('/project-management/projects').then(res => res.data) });
-  const { data: employees } = useQuery({ queryKey: ['employees'], queryFn: () => apiClient.get('/hr/employees').then(res => res.data) });
+  const { data, isLoading } = useQuery({ queryKey: ['project-resources'], queryFn: () => apiClient.get('/project-management/resources').then(res => Array.isArray(res.data) ? res.data : (res.data?.data ?? [])) });
+  const { data: projects } = useQuery({ queryKey: ['projects'], queryFn: () => apiClient.get('/project-management/projects').then(res => Array.isArray(res.data) ? res.data : (res.data?.data ?? [])) });
+  const { data: employees } = useQuery({ queryKey: ['employees'], queryFn: () => apiClient.get('/hr/employees').then(res => Array.isArray(res.data) ? res.data : (res.data?.data ?? [])) });
 
   const createMutation = useMutation({
     mutationFn: (data: any) => apiClient.post('/project-management/resources', data),

@@ -98,7 +98,7 @@ export default function StockMovementsTab() {
   });
 
   const { data: inventoryItems = [] } = useQuery({
-    queryKey: ['inventory'], queryFn: fetchInventory, enabled: isModalOpen,
+    queryKey: ['inventory-items-list'], queryFn: fetchInventory, enabled: isModalOpen,
   });
 
   const { data: couriers = [] } = useQuery({
