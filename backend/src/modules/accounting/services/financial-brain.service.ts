@@ -1,5 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { OnEvent } from '@nestjs/event-emitter';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { KafkaConsumerService } from '../../../infrastructure/kafka/kafka-consumer.service';
 import { AccountingService } from '../accounting.service';
 import { ARApprovalStatus } from '../entities/account-receivable.entity';
 import { JournalEntryType } from '../entities/journal-entry.entity';
@@ -14,23 +14,77 @@ import {
   PurchaseOrderReceivedEvent,
   PayrollProcessedEvent,
 } from '../events/financial.events';
+import type { KafkaFinancialMessage } from '../../../infrastructure/kafka/kafka-consumer.service';
 
 /**
- * FinancialBrainService — the central intelligence layer.
- * Listens to events from all modules and automatically creates
- * journal entries, updates balances, and triggers suggestions.
+ * FinancialBrainService — async accounting processor.
+ *
+ * Registers as a Kafka consumer for all financial event types.
+ * All heavy DB work (journal entries, AR/AP creation, balance updates)
+ * runs off the HTTP request thread — API calls return immediately.
+ *
+ * Redis idempotency in KafkaConsumerService ensures no double-processing
+ * even if Kafka redelivers a message after a crash.
  */
 @Injectable()
-export class FinancialBrainService {
+export class FinancialBrainService implements OnModuleInit {
   private readonly logger = new Logger(FinancialBrainService.name);
 
-  constructor(private readonly accountingService: AccountingService) {}
+  constructor(
+    private readonly accountingService: AccountingService,
+    private readonly kafkaConsumer: KafkaConsumerService,
+  ) {}
 
-  // ── AR: Invoice Created → JE: Debit AR, Credit Revenue ──────────────────────
-  @OnEvent(FinancialEventType.INVOICE_CREATED)
-  async onInvoiceCreated(event: InvoiceCreatedEvent) {
+  onModuleInit() {
+    this.kafkaConsumer.register(FinancialEventType.INVOICE_CREATED, (m) =>
+      this.onInvoiceCreated(
+        m as unknown as InvoiceCreatedEvent & KafkaFinancialMessage,
+      ),
+    );
+    this.kafkaConsumer.register(FinancialEventType.PAYMENT_RECEIVED, (m) =>
+      this.onPaymentReceived(
+        m as unknown as PaymentReceivedEvent & KafkaFinancialMessage,
+      ),
+    );
+    this.kafkaConsumer.register(FinancialEventType.BILL_CREATED, (m) =>
+      this.onBillCreated(
+        m as unknown as BillCreatedEvent & KafkaFinancialMessage,
+      ),
+    );
+    this.kafkaConsumer.register(FinancialEventType.PAYMENT_MADE, (m) =>
+      this.onPaymentMade(
+        m as unknown as PaymentMadeEvent & KafkaFinancialMessage,
+      ),
+    );
+    this.kafkaConsumer.register(FinancialEventType.STOCK_MOVED, (m) =>
+      this.onStockMoved(
+        m as unknown as StockMovedEvent & KafkaFinancialMessage,
+      ),
+    );
+    this.kafkaConsumer.register(FinancialEventType.SHIPMENT_DELIVERED, (m) =>
+      this.onShipmentDelivered(
+        m as unknown as ShipmentDeliveredEvent & KafkaFinancialMessage,
+      ),
+    );
+    this.kafkaConsumer.register(
+      FinancialEventType.PURCHASE_ORDER_RECEIVED,
+      (m) =>
+        this.onPurchaseOrderReceived(
+          m as unknown as PurchaseOrderReceivedEvent & KafkaFinancialMessage,
+        ),
+    );
+    this.kafkaConsumer.register(FinancialEventType.PAYROLL_PROCESSED, (m) =>
+      this.onPayrollProcessed(
+        m as unknown as PayrollProcessedEvent & KafkaFinancialMessage,
+      ),
+    );
+  }
+
+  private async onInvoiceCreated(
+    event: InvoiceCreatedEvent & KafkaFinancialMessage,
+  ) {
     this.logger.log(
-      `[BRAIN] Invoice created: ${event.invoiceNumber} for $${event.amount}`,
+      `[BRAIN] Invoice created: ${event.invoiceNumber} for ${event.amount}`,
     );
     try {
       await this.accountingService.createAR(
@@ -45,28 +99,25 @@ export class FinancialBrainService {
         },
         event.tenantId,
       );
-      this.logger.log(
-        `[BRAIN] Created invoice workflow record ${event.invoiceNumber} in pending approval state`,
-      );
-    } catch (e) {
+    } catch (e: unknown) {
       this.logger.error(
-        `[BRAIN] Failed to create invoice workflow for ${event.invoiceNumber}: ${String(e)}`,
+        `[BRAIN] Failed invoice workflow for ${event.invoiceNumber}: ${e instanceof Error ? e.message : String(e)}`,
       );
     }
   }
 
-  // ── AR: Payment Received → JE: Debit Bank, Credit AR ────────────────────────
-  @OnEvent(FinancialEventType.PAYMENT_RECEIVED)
-  async onPaymentReceived(event: PaymentReceivedEvent) {
+  private async onPaymentReceived(
+    event: PaymentReceivedEvent & KafkaFinancialMessage,
+  ) {
     this.logger.log(
-      `[BRAIN] Payment received: $${event.amount} for invoice ${event.invoiceNumber}`,
+      `[BRAIN] Payment received: ${event.amount} for invoice ${event.invoiceNumber}`,
     );
     try {
       const bankAccount =
         (await this.accountingService['findDefaultAccount'](
           event.tenantId,
           'bank',
-        )) ||
+        )) ??
         (await this.accountingService['findDefaultAccount'](
           event.tenantId,
           'cash',
@@ -75,14 +126,13 @@ export class FinancialBrainService {
         event.tenantId,
         'accounts_receivable',
       );
-
       if (bankAccount && arAccount) {
         const je = await this.accountingService.createJournalEntry(
           {
             entry_date: event.date,
             entry_type: JournalEntryType.RECEIPT,
             description: `Payment received for invoice ${event.invoiceNumber}`,
-            reference: event.reference || event.invoiceNumber,
+            reference: event.reference ?? event.invoiceNumber,
             lines: [
               {
                 account_id: bankAccount.id,
@@ -109,25 +159,23 @@ export class FinancialBrainService {
           `[BRAIN] Auto-posted JE ${je.entry_number} for payment on ${event.invoiceNumber}`,
         );
       }
-    } catch (e) {
+    } catch (e: unknown) {
       this.logger.error(
-        `[BRAIN] Failed to create JE for payment: ${String(e)}`,
+        `[BRAIN] Failed JE for payment: ${e instanceof Error ? e.message : String(e)}`,
       );
     }
   }
 
-  // ── AP: Bill Created → JE: Debit Expense, Credit AP ─────────────────────────
-  @OnEvent(FinancialEventType.BILL_CREATED)
-  async onBillCreated(event: BillCreatedEvent) {
+  private async onBillCreated(event: BillCreatedEvent & KafkaFinancialMessage) {
     this.logger.log(
-      `[BRAIN] Bill created: ${event.billNumber} for $${event.amount}`,
+      `[BRAIN] Bill created: ${event.billNumber} for ${event.amount}`,
     );
     try {
       const expenseAccount =
         (await this.accountingService['findDefaultAccount'](
           event.tenantId,
           'operating_expense',
-        )) ||
+        )) ??
         (await this.accountingService['findDefaultAccount'](
           event.tenantId,
           'administrative_expense',
@@ -136,7 +184,6 @@ export class FinancialBrainService {
         event.tenantId,
         'accounts_payable',
       );
-
       if (expenseAccount && apAccount) {
         const je = await this.accountingService.createJournalEntry(
           {
@@ -170,18 +217,16 @@ export class FinancialBrainService {
           `[BRAIN] Auto-posted JE ${je.entry_number} for bill ${event.billNumber}`,
         );
       }
-    } catch (e) {
+    } catch (e: unknown) {
       this.logger.error(
-        `[BRAIN] Failed to create JE for bill ${event.billNumber}: ${String(e)}`,
+        `[BRAIN] Failed JE for bill: ${e instanceof Error ? e.message : String(e)}`,
       );
     }
   }
 
-  // ── AP: Payment Made → JE: Debit AP, Credit Bank ────────────────────────────
-  @OnEvent(FinancialEventType.PAYMENT_MADE)
-  async onPaymentMade(event: PaymentMadeEvent) {
+  private async onPaymentMade(event: PaymentMadeEvent & KafkaFinancialMessage) {
     this.logger.log(
-      `[BRAIN] Payment made: $${event.amount} for bill ${event.billNumber}`,
+      `[BRAIN] Payment made: ${event.amount} for bill ${event.billNumber}`,
     );
     try {
       const apAccount = await this.accountingService['findDefaultAccount'](
@@ -192,19 +237,18 @@ export class FinancialBrainService {
         (await this.accountingService['findDefaultAccount'](
           event.tenantId,
           'bank',
-        )) ||
+        )) ??
         (await this.accountingService['findDefaultAccount'](
           event.tenantId,
           'cash',
         ));
-
       if (apAccount && bankAccount) {
         const je = await this.accountingService.createJournalEntry(
           {
             entry_date: event.date,
             entry_type: JournalEntryType.PAYMENT,
             description: `Payment for bill ${event.billNumber}`,
-            reference: event.reference || event.billNumber,
+            reference: event.reference ?? event.billNumber,
             lines: [
               {
                 account_id: apAccount.id,
@@ -228,22 +272,18 @@ export class FinancialBrainService {
           event.tenantId,
         );
       }
-    } catch (e) {
+    } catch (e: unknown) {
       this.logger.error(
-        `[BRAIN] Failed to create JE for AP payment: ${String(e)}`,
+        `[BRAIN] Failed JE for AP payment: ${e instanceof Error ? e.message : String(e)}`,
       );
     }
   }
 
-  // ── Inventory: Stock Moved → JE: Inventory adjustment ───────────────────────
-  @OnEvent(FinancialEventType.STOCK_MOVED)
-  async onStockMoved(event: StockMovedEvent) {
-    // Skip if no quantity
+  private async onStockMoved(event: StockMovedEvent & KafkaFinancialMessage) {
     if (!event.quantity || event.quantity === 0) return;
-    // Skip if no cost — can't create a valid double-entry JE with zero amounts
     if (!event.totalCost || event.totalCost === 0) {
       this.logger.warn(
-        `[BRAIN] STOCK_MOVED skipped for ${event.productName}: totalCost is 0. Set unit_cost on the inventory item to enable auto JE.`,
+        `[BRAIN] STOCK_MOVED skipped for ${event.productName}: totalCost is 0`,
       );
       return;
     }
@@ -262,12 +302,12 @@ export class FinancialBrainService {
         event.tenantId,
         'accounts_payable',
       );
+      const today = new Date().toISOString().split('T')[0];
 
       if (event.movementType === 'OUT' && inventoryAccount && cogsAccount) {
-        // Stock OUT: Debit COGS, Credit Inventory
         const je = await this.accountingService.createJournalEntry(
           {
-            entry_date: new Date().toISOString().split('T')[0],
+            entry_date: today,
             entry_type: JournalEntryType.GENERAL,
             description: `Inventory out: ${event.productName} x${event.quantity}`,
             reference: event.reference,
@@ -293,43 +333,31 @@ export class FinancialBrainService {
           {},
           event.tenantId,
         );
-        this.logger.log(
-          `[BRAIN] Auto-posted COGS JE for stock OUT: ${event.productName}`,
-        );
       } else if (event.movementType === 'IN' && inventoryAccount) {
-        // Opening balance → credit Owner Equity (not AP — no supplier involved)
-        // Delivery / reorder receipt → credit AP (goods received from supplier)
-        let creditAccount = apAccount;
-        if (event.source === 'opening') {
-          creditAccount =
-            (await this.accountingService['findDefaultAccount'](
-              event.tenantId,
-              'retained_earnings',
-            )) ||
-            (await this.accountingService['findDefaultAccount'](
-              event.tenantId,
-              'capital',
-            )) ||
-            apAccount;
-        }
-        if (!creditAccount) {
-          this.logger.warn(
-            `[BRAIN] Missing credit account for STOCK_MOVED IN — need accounts_payable or equity`,
-          );
-          return;
-        }
-        const description =
+        const creditAccount =
           event.source === 'opening'
-            ? `Opening stock: ${event.productName} x${event.quantity}`
-            : `Inventory received: ${event.productName} x${event.quantity}`;
+            ? ((await this.accountingService['findDefaultAccount'](
+                event.tenantId,
+                'retained_earnings',
+              )) ??
+              (await this.accountingService['findDefaultAccount'](
+                event.tenantId,
+                'capital',
+              )) ??
+              apAccount)
+            : apAccount;
+        if (!creditAccount) return;
         const je = await this.accountingService.createJournalEntry(
           {
-            entry_date: new Date().toISOString().split('T')[0],
+            entry_date: today,
             entry_type:
               event.source === 'opening'
                 ? JournalEntryType.GENERAL
                 : JournalEntryType.PURCHASE,
-            description,
+            description:
+              event.source === 'opening'
+                ? `Opening stock: ${event.productName} x${event.quantity}`
+                : `Inventory received: ${event.productName} x${event.quantity}`,
             reference: event.reference,
             lines: [
               {
@@ -353,72 +381,60 @@ export class FinancialBrainService {
           {},
           event.tenantId,
         );
-        this.logger.log(
-          `[BRAIN] Auto-posted Inventory IN JE (${event.source ?? 'manual'}): ${event.productName}`,
-        );
       } else if (event.movementType === 'ADJUSTMENT' && inventoryAccount) {
-        // Adjustment: use equity/retained earnings as the other side if available, else AP
         const equityAccount =
           (await this.accountingService['findDefaultAccount'](
             event.tenantId,
             'retained_earnings',
-          )) ||
+          )) ??
           (await this.accountingService['findDefaultAccount'](
             event.tenantId,
             'owner_equity',
-          )) ||
+          )) ??
           apAccount;
-        if (equityAccount) {
-          const je = await this.accountingService.createJournalEntry(
-            {
-              entry_date: new Date().toISOString().split('T')[0],
-              entry_type: JournalEntryType.GENERAL,
-              description: `Inventory adjustment: ${event.productName} x${event.quantity}`,
-              reference: event.reference,
-              lines: [
-                {
-                  account_id: inventoryAccount.id,
-                  description: `Inventory adj - ${event.productName}`,
-                  debit: event.totalCost,
-                  credit: 0,
-                },
-                {
-                  account_id: equityAccount.id,
-                  description: `Adjustment offset - ${event.productName}`,
-                  debit: 0,
-                  credit: event.totalCost,
-                },
-              ],
-            },
-            event.tenantId,
-          );
-          await this.accountingService.postJournalEntry(
-            je.id,
-            {},
-            event.tenantId,
-          );
-          this.logger.log(
-            `[BRAIN] Auto-posted Inventory ADJUSTMENT JE: ${event.productName}`,
-          );
-        }
-      } else {
-        this.logger.warn(
-          `[BRAIN] Missing CoA accounts for STOCK_MOVED ${event.movementType}. Need: inventory${event.movementType === 'OUT' ? ', cost_of_goods_sold' : ', accounts_payable'}`,
+        if (!equityAccount) return;
+        const je = await this.accountingService.createJournalEntry(
+          {
+            entry_date: today,
+            entry_type: JournalEntryType.GENERAL,
+            description: `Inventory adjustment: ${event.productName} x${event.quantity}`,
+            reference: event.reference,
+            lines: [
+              {
+                account_id: inventoryAccount.id,
+                description: `Inventory adj - ${event.productName}`,
+                debit: event.totalCost,
+                credit: 0,
+              },
+              {
+                account_id: equityAccount.id,
+                description: `Adjustment offset - ${event.productName}`,
+                debit: 0,
+                credit: event.totalCost,
+              },
+            ],
+          },
+          event.tenantId,
+        );
+        await this.accountingService.postJournalEntry(
+          je.id,
+          {},
+          event.tenantId,
         );
       }
-    } catch (e) {
+    } catch (e: unknown) {
       this.logger.error(
-        `[BRAIN] Failed to create JE for stock movement: ${String(e)}`,
+        `[BRAIN] Failed JE for stock movement: ${e instanceof Error ? e.message : String(e)}`,
       );
     }
   }
 
-  // ── Logistics: Shipment Delivered → JE: Debit Shipping Expense, Credit AP ───
-  @OnEvent(FinancialEventType.SHIPMENT_DELIVERED)
-  async onShipmentDelivered(event: ShipmentDeliveredEvent) {
-    if (event.shippingCost === 0) return;
+  private async onShipmentDelivered(
+    event: ShipmentDeliveredEvent & KafkaFinancialMessage,
+  ) {
+    if (!event.shippingCost || event.shippingCost === 0) return;
     this.logger.log(
-      `[BRAIN] Shipment delivered: ${event.trackingNumber} cost=$${event.shippingCost}`,
+      `[BRAIN] Shipment delivered: ${event.trackingNumber} cost=${event.shippingCost}`,
     );
     try {
       const expenseAccount = await this.accountingService['findDefaultAccount'](
@@ -429,7 +445,6 @@ export class FinancialBrainService {
         event.tenantId,
         'accounts_payable',
       );
-
       if (expenseAccount && apAccount) {
         const je = await this.accountingService.createJournalEntry(
           {
@@ -460,18 +475,18 @@ export class FinancialBrainService {
           event.tenantId,
         );
       }
-    } catch (e) {
+    } catch (e: unknown) {
       this.logger.error(
-        `[BRAIN] Failed to create JE for shipment: ${String(e)}`,
+        `[BRAIN] Failed JE for shipment: ${e instanceof Error ? e.message : String(e)}`,
       );
     }
   }
 
-  // ── Procurement: PO Received → JE: Debit Inventory, Credit AP ───────────────
-  @OnEvent(FinancialEventType.PURCHASE_ORDER_RECEIVED)
-  async onPurchaseOrderReceived(event: PurchaseOrderReceivedEvent) {
+  private async onPurchaseOrderReceived(
+    event: PurchaseOrderReceivedEvent & KafkaFinancialMessage,
+  ) {
     this.logger.log(
-      `[BRAIN] PO received: ${event.poNumber} total=$${event.totalAmount}`,
+      `[BRAIN] PO received: ${event.poNumber} total=${event.totalAmount}`,
     );
     try {
       const inventoryAccount = await this.accountingService[
@@ -481,7 +496,6 @@ export class FinancialBrainService {
         event.tenantId,
         'accounts_payable',
       );
-
       if (inventoryAccount && apAccount) {
         const je = await this.accountingService.createJournalEntry(
           {
@@ -512,23 +526,23 @@ export class FinancialBrainService {
           event.tenantId,
         );
       }
-    } catch (e) {
+    } catch (e: unknown) {
       this.logger.error(
-        `[BRAIN] Failed to create JE for PO receipt: ${String(e)}`,
+        `[BRAIN] Failed JE for PO receipt: ${e instanceof Error ? e.message : String(e)}`,
       );
     }
   }
 
-  // ── HR: Payroll Processed → JE: Debit Salary Expense, Credit Bank ───────────
-  @OnEvent(FinancialEventType.PAYROLL_PROCESSED)
-  async onPayrollProcessed(event: PayrollProcessedEvent) {
-    this.logger.log(`[BRAIN] Payroll processed: $${event.netAmount}`);
+  private async onPayrollProcessed(
+    event: PayrollProcessedEvent & KafkaFinancialMessage,
+  ) {
+    this.logger.log(`[BRAIN] Payroll processed: ${event.netAmount}`);
     try {
       const salaryExpense =
         (await this.accountingService['findDefaultAccount'](
           event.tenantId,
           'administrative_expense',
-        )) ||
+        )) ??
         (await this.accountingService['findDefaultAccount'](
           event.tenantId,
           'operating_expense',
@@ -537,12 +551,11 @@ export class FinancialBrainService {
         (await this.accountingService['findDefaultAccount'](
           event.tenantId,
           'bank',
-        )) ||
+        )) ??
         (await this.accountingService['findDefaultAccount'](
           event.tenantId,
           'cash',
         ));
-
       if (salaryExpense && bankAccount) {
         const je = await this.accountingService.createJournalEntry(
           {
@@ -573,9 +586,9 @@ export class FinancialBrainService {
           event.tenantId,
         );
       }
-    } catch (e) {
+    } catch (e: unknown) {
       this.logger.error(
-        `[BRAIN] Failed to create JE for payroll: ${String(e)}`,
+        `[BRAIN] Failed JE for payroll: ${e instanceof Error ? e.message : String(e)}`,
       );
     }
   }

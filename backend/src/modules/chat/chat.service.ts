@@ -1,4 +1,9 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { MoreThan, Repository } from 'typeorm';
 import { ChatMessage, ChatPresence, ChatReadReceipt } from './chat.entity';
@@ -19,18 +24,28 @@ export class ChatService {
   async getMessages(tenantId: string, since?: string, limit = 80) {
     const where: any = { tenant_id: tenantId, is_deleted: false };
     if (since) where.created_at = MoreThan(new Date(since));
-    return this.msgRepo.find({ where, order: { created_at: 'ASC' }, take: limit });
+    return this.msgRepo.find({
+      where,
+      order: { created_at: 'ASC' },
+      take: limit,
+    });
   }
 
   async sendMessage(
-    tenantId: string, userId: string, userName: string,
-    content: string, replyToId?: string,
+    tenantId: string,
+    userId: string,
+    userName: string,
+    content: string,
+    replyToId?: string,
   ) {
-    if (!content?.trim()) throw new BadRequestException('Message cannot be empty');
+    if (!content?.trim())
+      throw new BadRequestException('Message cannot be empty');
 
     let replyPreview: string | undefined;
     if (replyToId) {
-      const parent = await this.msgRepo.findOne({ where: { id: replyToId, tenant_id: tenantId } });
+      const parent = await this.msgRepo.findOne({
+        where: { id: replyToId, tenant_id: tenantId },
+      });
       if (parent) replyPreview = parent.content.slice(0, 80);
     }
 
@@ -46,26 +61,44 @@ export class ChatService {
     return this.msgRepo.save(msg);
   }
 
-  async editMessage(id: string, tenantId: string, userId: string, content: string) {
-    const msg = await this.msgRepo.findOne({ where: { id, tenant_id: tenantId } });
+  async editMessage(
+    id: string,
+    tenantId: string,
+    userId: string,
+    content: string,
+  ) {
+    const msg = await this.msgRepo.findOne({
+      where: { id, tenant_id: tenantId },
+    });
     if (!msg) throw new NotFoundException('Message not found');
-    if (msg.user_id !== userId) throw new ForbiddenException('Cannot edit others messages');
+    if (msg.user_id !== userId)
+      throw new ForbiddenException('Cannot edit others messages');
     msg.content = content.trim();
     msg.is_edited = true;
     return this.msgRepo.save(msg);
   }
 
   async deleteMessage(id: string, tenantId: string, userId: string) {
-    const msg = await this.msgRepo.findOne({ where: { id, tenant_id: tenantId } });
+    const msg = await this.msgRepo.findOne({
+      where: { id, tenant_id: tenantId },
+    });
     if (!msg) throw new NotFoundException('Message not found');
-    if (msg.user_id !== userId) throw new ForbiddenException('Cannot delete others messages');
+    if (msg.user_id !== userId)
+      throw new ForbiddenException('Cannot delete others messages');
     msg.is_deleted = true;
     msg.content = 'This message was deleted';
     return this.msgRepo.save(msg);
   }
 
-  async toggleReaction(id: string, tenantId: string, userId: string, emoji: string) {
-    const msg = await this.msgRepo.findOne({ where: { id, tenant_id: tenantId } });
+  async toggleReaction(
+    id: string,
+    tenantId: string,
+    userId: string,
+    emoji: string,
+  ) {
+    const msg = await this.msgRepo.findOne({
+      where: { id, tenant_id: tenantId },
+    });
     if (!msg) throw new NotFoundException('Message not found');
 
     const reactions = { ...msg.reactions };
@@ -83,9 +116,15 @@ export class ChatService {
   // ── Read receipts ─────────────────────────────────────────────────────────
 
   async markRead(tenantId: string, userId: string) {
-    let receipt = await this.receiptRepo.findOne({ where: { tenant_id: tenantId, user_id: userId } });
+    let receipt = await this.receiptRepo.findOne({
+      where: { tenant_id: tenantId, user_id: userId },
+    });
     if (!receipt) {
-      receipt = this.receiptRepo.create({ tenant_id: tenantId, user_id: userId, last_read_at: new Date() });
+      receipt = this.receiptRepo.create({
+        tenant_id: tenantId,
+        user_id: userId,
+        last_read_at: new Date(),
+      });
     } else {
       receipt.last_read_at = new Date();
     }
@@ -93,21 +132,40 @@ export class ChatService {
   }
 
   async getUnreadCount(tenantId: string, userId: string): Promise<number> {
-    const receipt = await this.receiptRepo.findOne({ where: { tenant_id: tenantId, user_id: userId } });
+    const receipt = await this.receiptRepo.findOne({
+      where: { tenant_id: tenantId, user_id: userId },
+    });
     if (!receipt) {
-      return this.msgRepo.count({ where: { tenant_id: tenantId, is_deleted: false } });
+      return this.msgRepo.count({
+        where: { tenant_id: tenantId, is_deleted: false },
+      });
     }
     return this.msgRepo.count({
-      where: { tenant_id: tenantId, is_deleted: false, created_at: MoreThan(receipt.last_read_at) },
+      where: {
+        tenant_id: tenantId,
+        is_deleted: false,
+        created_at: MoreThan(receipt.last_read_at),
+      },
     });
   }
 
   // ── Presence & typing ─────────────────────────────────────────────────────
 
-  async heartbeat(tenantId: string, userId: string, userName: string, isTyping = false) {
-    let p = await this.presenceRepo.findOne({ where: { tenant_id: tenantId, user_id: userId } });
+  async heartbeat(
+    tenantId: string,
+    userId: string,
+    userName: string,
+    isTyping = false,
+  ) {
+    let p = await this.presenceRepo.findOne({
+      where: { tenant_id: tenantId, user_id: userId },
+    });
     if (!p) {
-      p = this.presenceRepo.create({ tenant_id: tenantId, user_id: userId, user_name: userName });
+      p = this.presenceRepo.create({
+        tenant_id: tenantId,
+        user_id: userId,
+        user_name: userName,
+      });
     }
     p.last_seen_at = new Date();
     p.user_name = userName;
@@ -118,7 +176,9 @@ export class ChatService {
 
   async getPresence(tenantId: string) {
     const cutoff = new Date(Date.now() - 30_000); // online = seen in last 30s
-    const rows = await this.presenceRepo.find({ where: { tenant_id: tenantId } });
+    const rows = await this.presenceRepo.find({
+      where: { tenant_id: tenantId },
+    });
     const typingCutoff = new Date(Date.now() - 5_000);
     return rows
       .filter((p) => p.last_seen_at > cutoff)
