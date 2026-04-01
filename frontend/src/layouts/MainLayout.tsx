@@ -250,12 +250,6 @@ export default function MainLayout() {
       label: 'Assets',
     },
     {
-      key: '/services',
-      pageKey: 'services',
-      icon: <CustomerServiceOutlined />,
-      label: 'Services',
-    },
-    {
       key: '/communication',
       pageKey: 'communication',
       icon: <MessageOutlined />,
@@ -314,21 +308,6 @@ export default function MainLayout() {
         ]
       : []),
   ];
-
-  const visibleMenuItems = menuItems
-    .filter((item) => {
-      if (!item.pageKey) return true;
-      return canAccessPage(item.pageKey) && !isLockedBySubscription(item.pageKey);
-    })
-    .map(({ pageKey: _pageKey, ...item }) => ({
-      ...item,
-      // Wrap label to capture hover per item
-      label: (
-        <span onMouseEnter={() => handleMenuHover(item.key)}>
-          {item.label}
-        </span>
-      ),
-    }));
 
   // Inject admin plan builder for system admins — now handled by AdminLayout
   // (system admins are redirected to /admin before reaching MainLayout)
@@ -603,8 +582,8 @@ export default function MainLayout() {
     '/products': { queryKey: ['products', { page: 1, limit: 50 }], queryFn: () => import('@/api/products').then(m => m.productsApi.getProducts({ page: 1, limit: 50 })) },
     '/categories': { queryKey: ['categories'], queryFn: () => import('@/api/categories').then(m => m.categoriesApi.getAll()) },
     '/users': { queryKey: ['users', { page: 1, pageSize: 10, search: '' }], queryFn: () => import('@/services').then(m => m.userService.getAll({ page: 1, pageSize: 10, search: '' })) },
-    '/inventory': { queryKey: ['inventory'], queryFn: () => import('@/api/client').then(m => m.default.get('/inventory')) },
-    '/transactions': { queryKey: ['transactions'], queryFn: () => import('@/api/client').then(m => m.default.get('/transactions?page=1&limit=20')) },
+    '/inventory': { queryKey: ['inventory-prefetch'], queryFn: () => import('@/api/client').then(m => m.default.get('/inventory')) },
+    '/transactions': { queryKey: ['transactions-prefetch'], queryFn: () => import('@/api/client').then(m => m.default.get('/transactions?page=1&limit=20')) },
   };
 
   const handleMenuHover = (key: string) => {
@@ -620,6 +599,20 @@ export default function MainLayout() {
       console.log(`[Prefetch] 💾 Cache hit "${key}" — skipping fetch`);
     }
   };
+
+  const visibleMenuItems = menuItems
+    .filter((item) => {
+      if (!item.pageKey) return true;
+      return canAccessPage(item.pageKey) && !isLockedBySubscription(item.pageKey);
+    })
+    .map(({ pageKey: _pageKey, ...item }) => ({
+      ...item,
+      label: (
+        <span onMouseEnter={() => handleMenuHover(item.key)}>
+          {item.label}
+        </span>
+      ),
+    }));
 
   const menuNode = (
     <Menu

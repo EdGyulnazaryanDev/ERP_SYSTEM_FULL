@@ -1,17 +1,29 @@
 import { Tabs } from 'antd';
+import { AppstoreOutlined, UnorderedListOutlined, FileTextOutlined, ApiOutlined, RocketOutlined } from '@ant-design/icons';
+import TicketKanbanTab from './TicketKanbanTab';
 import ServiceRequestsTab from './ServiceRequestsTab';
 import ServiceContractsTab from './ServiceContractsTab';
+import IntegrationsTab from './IntegrationsTab';
+import RoadmapTab from './RoadmapTab';
 
 export default function ServicesPage() {
   const items = [
-    { key: 'requests', label: 'Service Requests', children: <ServiceRequestsTab /> },
-    { key: 'contracts', label: 'Service Contracts', children: <ServiceContractsTab /> },
+    { key: 'kanban',       label: <span><AppstoreOutlined /> Kanban Board</span>,     children: <TicketKanbanTab /> },
+    { key: 'requests',     label: <span><UnorderedListOutlined /> All Tickets</span>,  children: <ServiceRequestsTab /> },
+    { key: 'roadmap',      label: <span><RocketOutlined /> Roadmap</span>,             children: <RoadmapTab /> },
+    { key: 'contracts',    label: <span><FileTextOutlined /> Contracts</span>,         children: <ServiceContractsTab /> },
+    { key: 'integrations', label: <span><ApiOutlined /> Integrations</span>,           children: <IntegrationsTab /> },
   ];
 
   return (
-    <div className="p-4">
-      <h1 className="text-2xl font-bold mb-4">Service Management</h1>
-      <Tabs items={items} />
+    <div style={{ padding: '0 4px' }}>
+      <div style={{ marginBottom: 20 }}>
+        <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: 'var(--app-text)' }}>Service Management</h1>
+        <p style={{ margin: '4px 0 0', color: 'var(--app-text-muted)', fontSize: 13 }}>
+          Tickets, Kanban board, Slack & Trello integrations
+        </p>
+      </div>
+      <Tabs items={items} defaultActiveKey="kanban" />
     </div>
   );
 }

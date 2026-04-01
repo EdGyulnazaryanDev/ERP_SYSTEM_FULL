@@ -46,7 +46,6 @@ const PaymentsPage = lazy(() => import('@/pages/payments/PaymentsPage'));
 const CommunicationPage = lazy(() => import('@/pages/communication/CommunicationPage'));
 const CompliancePage = lazy(() => import('@/pages/compliance/CompliancePage'));
 const BiReportingPage = lazy(() => import('@/pages/bi/BiReportingPage'));
-const ServicesPage = lazy(() => import('@/pages/services/ServicesPage'));
 const PortalHomePage = lazy(() => import('@/pages/PortalHomePage'));
 const SubscriptionPlansPage = lazy(() => import('@/pages/admin/SubscriptionPlansPage'));
 const TenantsPage = lazy(() => import('@/pages/admin/TenantsPage'));
@@ -56,6 +55,7 @@ const SystemHealthPage = lazy(() => import('@/pages/admin/SystemHealthPage'));
 const SubscriptionPage = lazy(() => import('@/pages/settings/SubscriptionPage'));
 const ProfilePage = lazy(() => import('@/pages/profile/ProfilePage'));
 const MyProfilePage = lazy(() => import('@/pages/profile/MyProfilePage'));
+const AdminServicesPage = lazy(() => import('@/pages/services/ServicesPage'));
 
 const PageLoader = () => (
   <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
@@ -107,6 +107,7 @@ function App() {
           <Route path="plan-assignment" element={<PlanAssignmentPage />} />
           <Route path="settings" element={<GlobalSettingsPage />} />
           <Route path="system-health" element={<SystemHealthPage />} />
+          <Route path="services" element={<AdminServicesPage />} />
           <Route path="profile" element={<MyProfilePage />} />
           <Route index element={<Navigate to="tenants" replace />} />
         </Route>
@@ -156,7 +157,6 @@ function App() {
           <Route path="communication" element={guarded('communication', <CommunicationPage />)} />
           <Route path="compliance" element={guarded('compliance', <CompliancePage />)} />
           <Route path="bi" element={guarded('bi', <BiReportingPage />)} />
-          <Route path="services" element={guarded('services', <ServicesPage />)} />
           <Route element={<TenantAdminRoute />}>
             <Route path="settings/subscription" element={<SubscriptionPage />} />
           </Route>

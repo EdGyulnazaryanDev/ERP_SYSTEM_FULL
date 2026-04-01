@@ -1,8 +1,12 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Patch } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentTenant } from '../../common/decorators/current-tenant.decorator';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import { ServiceManagementService } from './service-management.service';
+import { IntegrationsService } from './integrations.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { TicketIntegrationEntity } from './entities/ticket-integration.entity';
 import { CreateTicketDto, UpdateTicketDto, RateTicketDto } from './dto/create-ticket.dto';
 import { CreateFieldServiceOrderDto, UpdateFieldServiceOrderDto } from './dto/create-field-service-order.dto';
 import { TicketStatus } from './entities/service-ticket.entity';
@@ -11,7 +15,12 @@ import { ServiceOrderStatus } from './entities/field-service-order.entity';
 @Controller('service-management')
 @UseGuards(JwtAuthGuard)
 export class ServiceManagementController {
-  constructor(private readonly serviceManagementService: ServiceManagementService) { }
+  constructor(
+    private readonly serviceManagementService: ServiceManagementService,
+    private readonly integrationsService: IntegrationsService,
+    @InjectRepository(TicketIntegrationEntity)
+    private readonly integrationRepo: Repository<TicketIntegrationEntity>,
+  ) { }
 
   // Tickets
   @Get('tickets')
@@ -156,5 +165,85 @@ export class ServiceManagementController {
   @RequirePermission('knowledge_base', 'read')
   async searchKnowledgeBase(@Param('query') query: string, @CurrentTenant() tenantId: string) {
     return this.serviceManagementService.searchKnowledgeBase(query, tenantId);
+  }
+
+  // ── Integrations ──────────────────────────────────────────────────────────
+
+  @Get('integrations/config')
+  async getIntegrationConfig(@CurrentTenant() tenantId: string) {
+    const config = await this.integrationRepo.findOne({ where: { tenant_id: tenantId } });
+    if (!config) return {};
+    // Mask secrets
+    return {
+      ...config,
+      trello_api_key: config.trello_api_key ? '••••' + config.trello_api_key.slice(-4) : null,
+      trello_token: config.trello_token ? '••••' + config.trello_token.slice(-4) : null,
+    };
+  }
+
+  @Put('integrations/config')
+  async saveIntegrationConfig(@Body() body: Partial<TicketIntegrationEntity>, @CurrentTenant() tenantId: string) {
+    let config = await this.integrationRepo.findOne({ where: { tenant_id: tenantId } });
+    if (!config) {
+      config = this.integrationRepo.create({ tenant_id: tenantId });
+    }
+    // Only update non-masked values
+    if (body.slack_webhook_url !== undefined) config.slack_webhook_url = body.slack_webhook_url;
+    if (body.slack_on_create !== undefined) config.slack_on_create = body.slack_on_create;
+    if (body.slack_on_update !== undefined) config.slack_on_update = body.slack_on_update;
+    if (body.slack_on_resolve !== undefined) config.slack_on_resolve = body.slack_on_resolve;
+    if (body.trello_list_id !== undefined) config.trello_list_id = body.trello_list_id;
+    if (body.trello_auto_push !== undefined) config.trello_auto_push = body.trello_auto_push;
+    // Only update secrets if not masked
+    if (body.trello_api_key && !body.trello_api_key.startsWith('••••')) config.trello_api_key = body.trello_api_key;
+    if (body.trello_token && !body.trello_token.startsWith('••••')) config.trello_token = body.trello_token;
+    return this.integrationRepo.save(config);
+  }
+
+  @Post('integrations/slack/test')
+  async testSlack(@CurrentTenant() tenantId: string) {
+    const config = await this.integrationRepo.findOne({ where: { tenant_id: tenantId } });
+    if (!config?.slack_webhook_url) return { success: false, message: 'No Slack webhook configured' };
+    const testTicket = { ticket_number: 'TEST-001', subject: 'Slack integration test', priority: 'medium', status: 'new', customer_name: 'Test User' } as any;
+    await this.integrationsService.sendSlackNotification(config.slack_webhook_url, testTicket, 'created');
+    return { success: true, message: 'Test notification sent' };
+  }
+
+  @Post('tickets/:id/push-trello')
+  async pushTicketToTrello(@Param('id') id: string, @CurrentTenant() tenantId: string) {
+    const [ticket, config] = await Promise.all([
+      this.serviceManagementService.findOneTicket(id, tenantId),
+      this.integrationRepo.findOne({ where: { tenant_id: tenantId } }),
+    ]);
+    if (!config?.trello_api_key || !config?.trello_token || !config?.trello_list_id) {
+      return { success: false, message: 'Trello not configured' };
+    }
+    const result = await this.integrationsService.pushToTrello(
+      config.trello_api_key, config.trello_token, config.trello_list_id, ticket,
+    );
+    if (result) {
+      await this.serviceManagementService.updateTicket(id, { trello_card_id: result.id, trello_card_url: result.url } as any, tenantId);
+    }
+    return result ?? { success: false, message: 'Trello push failed' };
+  }
+
+  // Kanban: move ticket to new status column
+  @Patch('tickets/:id/move')
+  async moveTicket(
+    @Param('id') id: string,
+    @Body('status') status: TicketStatus,
+    @CurrentTenant() tenantId: string,
+  ) {
+    const ticket = await this.serviceManagementService.updateTicket(id, { status } as any, tenantId);
+    // Fire Slack notification on status change
+    const config = await this.integrationRepo.findOne({ where: { tenant_id: tenantId } });
+    if (config?.slack_webhook_url && config.slack_on_update) {
+      await this.integrationsService.sendSlackNotification(config.slack_webhook_url, ticket, 'updated');
+    }
+    // Sync Trello card if linked
+    if (ticket.trello_card_id && config?.trello_api_key && config?.trello_token) {
+      await this.integrationsService.updateTrelloCard(config.trello_api_key, config.trello_token, ticket.trello_card_id, ticket);
+    }
+    return ticket;
   }
 }

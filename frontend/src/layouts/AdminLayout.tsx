@@ -12,6 +12,7 @@ import {
   MenuUnfoldOutlined,
   DownOutlined,
   DashboardOutlined,
+  CustomerServiceOutlined,
 } from '@ant-design/icons';
 import { useAuthStore } from '@/store/authStore';
 
@@ -23,6 +24,7 @@ const menuItems = [
   { key: '/admin/plan-assignment', icon: <SwapOutlined />, label: 'Plan Assignment' },
   { key: '/admin/system-health', icon: <DashboardOutlined />, label: 'System Health' },
   { key: '/admin/settings', icon: <SettingOutlined />, label: 'Global Settings' },
+  { key: '/admin/services', icon: <CustomerServiceOutlined />, label: 'Dev Roadmap' },
 ];
 
 export default function AdminLayout() {
