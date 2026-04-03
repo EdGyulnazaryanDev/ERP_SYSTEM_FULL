@@ -16,7 +16,13 @@ export default function TenantsPage() {
     queryKey: ['admin-tenants'],
     queryFn: async () => {
       const res = await adminTenantsApi.list({ limit: 100 });
-      return res.data;
+      // Add integration status to each tenant
+      const tenants = res.data.data.map((tenant: any) => ({
+        ...tenant,
+        slackConfigured: Math.random() > 0.5, // Mock data - replace with real API call
+        trelloConfigured: Math.random() > 0.5, // Mock data - replace with real API call
+      }));
+      return { ...res.data, data: tenants };
     },
   });
 
@@ -84,6 +90,16 @@ export default function TenantsPage() {
       dataIndex: 'planName',
       key: 'planName',
       render: (p: string | null) => p ? <Tag color="blue">{p}</Tag> : <Tag>No plan</Tag>,
+    },
+    {
+      title: 'Integrations',
+      key: 'integrations',
+      render: (_: unknown, record: any) => {
+        const integrations = [];
+        if (record.slackConfigured) integrations.push(<Tag key="slack" color="purple">Slack</Tag>);
+        if (record.trelloConfigured) integrations.push(<Tag key="trello" color="blue">Trello</Tag>);
+        return integrations.length > 0 ? <Space size={4}>{integrations}</Space> : <Text type="secondary">—</Text>;
+      },
     },
     {
       title: 'Status',

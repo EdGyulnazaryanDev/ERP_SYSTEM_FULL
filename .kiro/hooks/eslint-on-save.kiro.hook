@@ -1,0 +1,19 @@
+{
+  "enabled": true,
+  "name": "ESLint on Save",
+  "description": "Runs ESLint on saved TypeScript/JavaScript files and auto-fixes lint issues.",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "**/*.ts",
+      "**/*.tsx",
+      "**/*.js",
+      "**/*.jsx"
+    ]
+  },
+  "then": {
+    "type": "runCommand",
+    "command": "cd backend && npx eslint --fix \"${file}\""
+  }
+}

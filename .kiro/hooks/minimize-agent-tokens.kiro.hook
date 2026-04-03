@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "Minimize Agent Token Usage",
+  "description": "Minimizes token usage by prompting the agent to be concise, avoid repetition, and strip unnecessary context before responding.",
+  "version": "1",
+  "when": {
+    "type": "promptSubmit"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Before responding, optimize your approach to minimize token usage: be concise, avoid repeating information already in context, skip unnecessary explanations, don't re-read files you've already seen, and avoid verbose summaries. Focus only on what's essential to complete the task."
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "Test Feature After Task",
+  "description": "After a spec task completes, runs an end-to-end or integration test to verify the feature works as expected.",
+  "version": "1",
+  "when": {
+    "type": "postTaskExecution"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "A spec task just completed. Test the implemented feature by: 1) identifying the relevant module and endpoints, 2) running the related test suite, 3) verifying the feature behaves as described in the task requirements, 4) reporting any failures or unexpected behavior with suggested fixes."
+  }
+}

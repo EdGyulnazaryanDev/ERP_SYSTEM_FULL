@@ -1,12 +1,15 @@
 import { Tabs, Alert } from 'antd';
-import { TeamOutlined, SafetyOutlined, SettingOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
+import { TeamOutlined, SafetyOutlined, SettingOutlined, SafetyCertificateOutlined, LinkOutlined } from '@ant-design/icons';
 import RolesTab from './tabs/RolesTab';
 import PermissionsTab from './tabs/PermissionsTab';
 import UsersTab from './tabs/UsersTab';
+import IntegrationsTab from '../services/IntegrationsTab';
 import { useNavigate } from 'react-router-dom';
 
 export default function SettingsPage() {
   const navigate = useNavigate();
+  
+  console.log('🔍 Settings: Rendering Settings page');
 
   const items = [
     {
@@ -23,6 +26,11 @@ export default function SettingsPage() {
       key: 'users',
       label: <span><SettingOutlined /> User Management</span>,
       children: <UsersTab />,
+    },
+    {
+      key: 'integrations',
+      label: <span><LinkOutlined /> Integrations</span>,
+      children: <IntegrationsTab />,
     },
   ];
 

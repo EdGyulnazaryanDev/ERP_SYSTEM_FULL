@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "Seed Database",
+  "description": "Triggers database seeding after a task completes or on demand, useful for populating dev/test environments.",
+  "version": "1",
+  "when": {
+    "type": "userTriggered"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Run the database seeder for this project. Check the available seeder commands in package.json or the seeders directory (backend/src/database/seeders). Run the appropriate seed command (e.g. npm run seed or the nest CLI seeder command). Report the result and any errors encountered."
+  }
+}

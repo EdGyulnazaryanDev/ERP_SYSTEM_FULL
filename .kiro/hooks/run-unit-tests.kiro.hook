@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "name": "Run Unit Tests",
+  "description": "Runs unit tests related to the file that was just edited to catch regressions immediately.",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "**/*.ts",
+      "**/*.tsx"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "A TypeScript file was just saved. Identify the corresponding unit test file (*.spec.ts) for the changed file. Run the relevant tests using the project's test command (e.g. npm run test -- --testPathPattern=<filename> --run). Report any failures and suggest fixes if tests are broken."
+  }
+}

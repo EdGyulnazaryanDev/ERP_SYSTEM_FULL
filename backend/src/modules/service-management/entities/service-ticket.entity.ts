@@ -41,8 +41,8 @@ export class ServiceTicketEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'uuid' })
-  tenant_id: string;
+  @Column({ type: 'uuid', nullable: true })
+  tenant_id: string | null;
 
   @Column({ type: 'varchar', length: 50, unique: true })
   ticket_number: string;

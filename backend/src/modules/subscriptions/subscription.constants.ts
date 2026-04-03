@@ -53,6 +53,7 @@ export enum PlanLimitKey {
   TRANSACTIONS_PER_MONTH = 'transactions_per_month',
   PRODUCTS = 'products',
   CATEGORIES = 'categories',
+  INTEGRATIONS = 'integrations',
 }
 
 export interface DefaultPlanDefinition {
@@ -82,6 +83,7 @@ export const DEFAULT_PLAN_DEFINITIONS: DefaultPlanDefinition[] = [
       { key: PlanLimitKey.CATEGORIES, value: null },
       { key: PlanLimitKey.TRANSACTIONS_PER_MONTH, value: null },
       { key: PlanLimitKey.STORAGE_GB, value: null },
+      { key: PlanLimitKey.INTEGRATIONS, value: null },
     ],
   },
   {
@@ -112,6 +114,7 @@ export const DEFAULT_PLAN_DEFINITIONS: DefaultPlanDefinition[] = [
       { key: PlanLimitKey.CATEGORIES, value: 2 },
       { key: PlanLimitKey.TRANSACTIONS_PER_MONTH, value: 500 },
       { key: PlanLimitKey.STORAGE_GB, value: 5 },
+      { key: PlanLimitKey.INTEGRATIONS, value: 2 },
     ],
   },
   {
@@ -132,6 +135,7 @@ export const DEFAULT_PLAN_DEFINITIONS: DefaultPlanDefinition[] = [
       { key: PlanLimitKey.CATEGORIES, value: 10 },
       { key: PlanLimitKey.TRANSACTIONS_PER_MONTH, value: 5000 },
       { key: PlanLimitKey.STORAGE_GB, value: 25 },
+      { key: PlanLimitKey.INTEGRATIONS, value: 5 },
     ],
   },
   {
@@ -158,6 +162,7 @@ export const DEFAULT_PLAN_DEFINITIONS: DefaultPlanDefinition[] = [
       { key: PlanLimitKey.CATEGORIES, value: null },
       { key: PlanLimitKey.TRANSACTIONS_PER_MONTH, value: 50000 },
       { key: PlanLimitKey.STORAGE_GB, value: 250 },
+      { key: PlanLimitKey.INTEGRATIONS, value: 15 },
     ],
   },
   {
@@ -197,6 +202,7 @@ export const DEFAULT_PLAN_DEFINITIONS: DefaultPlanDefinition[] = [
       { key: PlanLimitKey.CATEGORIES, value: null },
       { key: PlanLimitKey.TRANSACTIONS_PER_MONTH, value: null },
       { key: PlanLimitKey.STORAGE_GB, value: null },
+      { key: PlanLimitKey.INTEGRATIONS, value: null },
     ],
   },
 ];

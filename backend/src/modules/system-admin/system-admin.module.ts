@@ -12,6 +12,7 @@ import { AdminSubscriptionsController } from './controllers/admin-subscriptions.
 import { AdminSettingsController } from './controllers/admin-settings.controller';
 import { AdminTenantStatsController } from './controllers/admin-tenant-stats.controller';
 import { AdminSystemHealthController } from './controllers/admin-system-health.controller';
+import { AdminIntegrationsController } from '../admin/admin-integrations.controller';
 import { ComplianceAuditModule } from '../compliance-audit/compliance-audit.module';
 import { SystemAdminSeedService } from './system-admin-seed.service';
 import { DefaultCoaSeeder } from '../../database/seeders/default-coa.seeder';
@@ -28,6 +29,7 @@ import { DefaultCoaSeeder } from '../../database/seeders/default-coa.seeder';
     AdminSettingsController,
     AdminTenantStatsController,
     AdminSystemHealthController,
+    AdminIntegrationsController,
   ],
   providers: [SystemAdminSeedService, DefaultCoaSeeder],
   exports: [SystemAdminSeedService],

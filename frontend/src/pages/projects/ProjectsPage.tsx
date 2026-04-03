@@ -7,6 +7,10 @@ import ProjectsTab from './ProjectsTab';
 import TasksTab from './TasksTab';
 import MilestonesTab from './MilestonesTab';
 import ResourcesTab from './ResourcesTab';
+import TicketKanbanTab from '../services/TicketKanbanTab';
+import ServiceRequestsTab from '../services/ServiceRequestsTab';
+import RoadmapTab from '../services/RoadmapTab';
+import { useAuthStore } from '@/store/authStore';
 
 function StatCard({ label, value, color, icon, active, onClick }: {
   label: string; value: number | string; color: string; icon: React.ReactNode;
@@ -47,6 +51,8 @@ function StatCard({ label, value, color, icon, active, onClick }: {
 
 export default function ProjectsPage() {
   const [activeTab, setActiveTab] = useState('projects');
+  const { user } = useAuthStore();
+  const isSystemAdmin = user?.isSystemAdmin === true;
 
   const { data: projectsData } = useQuery({
     queryKey: ['projects'],
@@ -63,6 +69,15 @@ export default function ProjectsPage() {
   const { data: resourcesData } = useQuery({
     queryKey: ['project-resources'],
     queryFn: () => apiClient.get('/project-management/resources').then(res => res.data),
+  });
+
+  const { data: config } = useQuery({
+    queryKey: ['ticket-integrations'],
+    queryFn: async () => {
+      const res = await apiClient.get('/service-management/integrations/config');
+      return res.data;
+    },
+    staleTime: 5 * 60 * 1000,
   });
 
   const projects = Array.isArray(projectsData) ? projectsData : [];
@@ -83,6 +98,14 @@ export default function ProjectsPage() {
     { key: 'milestones', label: 'Milestones', children: <MilestonesTab /> },
     { key: 'resources', label: 'Resources', children: <ResourcesTab /> },
   ];
+
+  if (config?.trello_api_key || config?.trello_list_id) {
+    items.push({ key: 'kanban', label: 'Kanban Board', children: <TicketKanbanTab /> });
+    items.push({ key: 'all-tickets', label: 'All Tickets', children: <ServiceRequestsTab /> });
+    if (isSystemAdmin) {
+      items.push({ key: 'roadmap', label: 'Roadmap', children: <RoadmapTab /> });
+    }
+  }
 
   return (
     <div style={{ padding: 24, minHeight: '100vh' }}>

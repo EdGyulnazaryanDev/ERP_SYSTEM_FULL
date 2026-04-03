@@ -1,6 +1,6 @@
 import { useAccessControl } from './useAccessControl';
 
-export type PlanLimitKey = 'users' | 'products' | 'categories' | 'transactions_per_month' | 'storage_gb';
+export type PlanLimitKey = 'users' | 'products' | 'categories' | 'transactions_per_month' | 'storage_gb' | 'integrations';
 
 /**
  * Provides access to the current subscription plan's resource limits.

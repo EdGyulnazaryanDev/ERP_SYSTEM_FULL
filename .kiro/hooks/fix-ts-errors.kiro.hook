@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "name": "Fix TypeScript Errors",
+  "description": "Automatically detects and fixes TypeScript errors when a .ts or .tsx file is saved.",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "**/*.ts",
+      "**/*.tsx"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "A TypeScript file was just saved. Check it for TypeScript errors using getDiagnostics. If there are any type errors, fix them while preserving the original logic and intent. Do not refactor or change anything that isn't broken."
+  }
+}

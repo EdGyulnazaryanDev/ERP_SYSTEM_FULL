@@ -1,6 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, IsNull } from 'typeorm';
 import { ServiceTicketEntity, TicketStatus } from './entities/service-ticket.entity';
 import { TicketCategoryEntity } from './entities/ticket-category.entity';
 import { SLAPolicyEntity } from './entities/sla-policy.entity';
@@ -8,11 +8,14 @@ import { SLAViolationEntity, ViolationType } from './entities/sla-violation.enti
 import { FieldServiceOrderEntity, ServiceOrderStatus } from './entities/field-service-order.entity';
 import { ServiceContractEntity } from './entities/service-contract.entity';
 import { KnowledgeBaseArticleEntity } from './entities/knowledge-base-article.entity';
+import { TicketIntegrationEntity } from './entities/ticket-integration.entity';
 import type { CreateTicketDto, UpdateTicketDto, RateTicketDto } from './dto/create-ticket.dto';
 import type { CreateFieldServiceOrderDto, UpdateFieldServiceOrderDto } from './dto/create-field-service-order.dto';
 
 @Injectable()
 export class ServiceManagementService {
+  private readonly logger = new Logger(ServiceManagementService.name);
+
   constructor(
     @InjectRepository(ServiceTicketEntity)
     private ticketRepository: Repository<ServiceTicketEntity>,
@@ -28,12 +31,23 @@ export class ServiceManagementService {
     private serviceContractRepository: Repository<ServiceContractEntity>,
     @InjectRepository(KnowledgeBaseArticleEntity)
     private knowledgeBaseRepository: Repository<KnowledgeBaseArticleEntity>,
-  ) { }
+    @InjectRepository(TicketIntegrationEntity)
+    private integrationRepository: Repository<TicketIntegrationEntity>,
+  ) {}
+
+  async getIntegrationConfig(tenantId: string | null): Promise<TicketIntegrationEntity | null> {
+    if (!tenantId) return null;
+    return this.integrationRepository.findOne({ where: { tenant_id: tenantId } });
+  }
 
   // Ticket Management
   async findAllTickets(tenantId: string | null, status?: TicketStatus): Promise<ServiceTicketEntity[]> {
     const where: any = {};
-    if (tenantId) where.tenant_id = tenantId; // null = system admin, sees all
+    if (tenantId) {
+      where.tenant_id = tenantId;
+    } else {
+      where.tenant_id = IsNull(); // null = system admin platform tickets
+    }
     if (status) where.status = status;
 
     return this.ticketRepository.find({
@@ -45,7 +59,11 @@ export class ServiceManagementService {
 
   async findOneTicket(id: string, tenantId: string | null): Promise<ServiceTicketEntity> {
     const where: any = { id };
-    if (tenantId) where.tenant_id = tenantId;
+    if (tenantId) {
+      where.tenant_id = tenantId;
+    } else {
+      where.tenant_id = IsNull();
+    }
     const ticket = await this.ticketRepository.findOne({
       where,
       relations: ['category'],
@@ -59,38 +77,20 @@ export class ServiceManagementService {
   }
 
   async createTicket(data: CreateTicketDto, tenantId: string | null): Promise<ServiceTicketEntity> {
-    const effectiveTenantId = tenantId ?? 'system';
-    const count = await this.ticketRepository.count({ where: { tenant_id: effectiveTenantId } });
-    const ticketNumber = `TKT-${String(count + 1).padStart(6, '0')}`;
-
-    const category = tenantId ? await this.categoryRepository.findOne({
-      where: { id: data.category_id, tenant_id: tenantId },
-    }) : null;
-
-    let slaPolicyId: string | undefined = undefined;
-    let dueDate: Date | undefined = undefined;
-
-    if (category?.default_sla_policy_id) {
-      slaPolicyId = category.default_sla_policy_id;
-      const slaPolicy = await this.slaPolicyRepository.findOne({
-        where: { id: slaPolicyId, ...(tenantId ? { tenant_id: tenantId } : {}) },
-      });
-
-      if (slaPolicy) {
-        // Calculate due date based on SLA
-        const now = new Date();
-        dueDate = new Date(now.getTime() + slaPolicy.resolution_time_minutes * 60000);
-      }
-    }
+    console.log('🔍 Backend: Creating ticket with tenantId:', tenantId);
+    const count = await this.ticketRepository.count(
+      tenantId ? { where: { tenant_id: tenantId } } : undefined,
+    );
+    const ticketNumber = `TK-${String(count + 1).padStart(5, '0')}`;
+    console.log('🔍 Backend: Generated ticket number:', ticketNumber);
 
     const ticket = this.ticketRepository.create({
       ...data,
       ticket_number: ticketNumber,
-      ...(slaPolicyId ? { sla_policy_id: slaPolicyId } : {}),
-      ...(dueDate ? { due_date: dueDate } : {}),
-      tenant_id: effectiveTenantId,
+      tenant_id: tenantId,
+      status: TicketStatus.NEW,
     });
-
+    console.log('🔍 Backend: Created ticket with tenant_id:', ticket.tenant_id);
     return await this.ticketRepository.save(ticket);
   }
 
@@ -98,7 +98,6 @@ export class ServiceManagementService {
     const ticket = await this.findOneTicket(id, tenantId);
 
     Object.assign(ticket, data);
-
     return this.ticketRepository.save(ticket);
   }
 
@@ -151,29 +150,9 @@ export class ServiceManagementService {
     const ticket = await this.findOneTicket(id, tenantId);
 
     ticket.status = TicketStatus.RESOLVED;
-    ticket.resolved_at = new Date();
     ticket.resolution_notes = resolutionNotes;
-
-    const resolutionTime = Math.floor((ticket.resolved_at.getTime() - ticket.created_at.getTime()) / 60000);
-    ticket.resolution_time_minutes = resolutionTime;
-
-    // Check for SLA violation
-    if (ticket.sla_policy_id) {
-      const slaPolicy = await this.slaPolicyRepository.findOne({
-        where: { id: ticket.sla_policy_id, tenant_id: tenantId },
-      });
-
-      if (slaPolicy && resolutionTime > slaPolicy.resolution_time_minutes) {
-        await this.createSLAViolation(
-          ticket.id,
-          ticket.sla_policy_id,
-          ViolationType.RESOLUTION,
-          resolutionTime - slaPolicy.resolution_time_minutes,
-          tenantId,
-        );
-      }
-    }
-
+    ticket.resolved_at = new Date();
+    
     return this.ticketRepository.save(ticket);
   }
 
@@ -312,6 +291,25 @@ export class ServiceManagementService {
     }
 
     return contract;
+  }
+
+  async createServiceContract(data: any, tenantId: string): Promise<ServiceContractEntity> {
+    const contract = this.serviceContractRepository.create({
+      ...data,
+      tenant_id: tenantId,
+    });
+    return this.serviceContractRepository.save(contract as unknown as ServiceContractEntity);
+  }
+
+  async updateServiceContract(id: string, data: any, tenantId: string): Promise<ServiceContractEntity> {
+    const contract = await this.findOneServiceContract(id, tenantId);
+    Object.assign(contract, data);
+    return this.serviceContractRepository.save(contract);
+  }
+
+  async deleteServiceContract(id: string, tenantId: string): Promise<void> {
+    const contract = await this.findOneServiceContract(id, tenantId);
+    await this.serviceContractRepository.remove(contract);
   }
 
   // Knowledge Base

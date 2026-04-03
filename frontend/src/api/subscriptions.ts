@@ -8,7 +8,7 @@ export type PlanFeature =
   | 'communication' | 'compliance' | 'reports' | 'suppliers';
 
 export type BillingCycle = 'monthly' | 'yearly';
-export type PlanLimitKey = 'users' | 'products' | 'categories' | 'transactions_per_month' | 'storage_gb';
+export type PlanLimitKey = 'users' | 'products' | 'categories' | 'transactions_per_month' | 'storage_gb' | 'integrations';
 
 export interface PlanLimit {
   key: PlanLimitKey;

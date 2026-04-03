@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "Sync Trello Card",
+  "description": "Creates or updates a Trello card when a spec task starts or completes, keeping the board in sync with development progress.",
+  "version": "1",
+  "when": {
+    "type": "postTaskExecution"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "A spec task just changed status. Using the Trello MCP server, do the following: 1) Check if a Trello card already exists for this task by searching the relevant board. 2) If it exists, update the card status, description, and add a comment summarizing what was done. 3) If it doesn't exist, create a new card with the task name, description, and current status in the appropriate list (To Do, In Progress, or Done). Keep the card concise and developer-friendly."
+  }
+}

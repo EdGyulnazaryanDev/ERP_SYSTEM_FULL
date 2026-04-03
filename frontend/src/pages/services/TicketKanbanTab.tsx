@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Card, Tag, Tooltip, Button, Badge, Modal, Form, Input, Select, message, Spin } from 'antd';
+import { Card, Tag, Tooltip, Button, Badge, Modal, Form, Input, Select, message, Spin, Space } from 'antd';
 import { PlusOutlined, LinkOutlined } from '@ant-design/icons';
 import apiClient from '@/api/client';
+// import { useAuthStore } from '@/store/authStore';
 
 const COLUMNS = [
   { key: 'new',         label: 'New',         color: '#6366f1' },
@@ -32,6 +33,9 @@ interface Ticket {
 
 export default function TicketKanbanTab() {
   const queryClient = useQueryClient();
+  const [listSelectorOpen, setListSelectorOpen] = useState(false);
+  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
+  const [selectedListId, setSelectedListId] = useState<string>('');
   const [createModal, setCreateModal] = useState(false);
   const [form] = Form.useForm();
   const [dragging, setDragging] = useState<string | null>(null);
@@ -40,11 +44,28 @@ export default function TicketKanbanTab() {
   const { data: tickets = [], isLoading } = useQuery<Ticket[]>({
     queryKey: ['tickets-kanban'],
     queryFn: async () => {
+      console.log('🔍 Kanban: Fetching tickets...');
       const res = await apiClient.get('/service-management/tickets');
       const d = res.data;
-      return Array.isArray(d) ? d : (d?.data ?? []);
+      console.log('🔍 Kanban: API response:', d);
+      const tickets = d.data || [];
+      console.log('🔍 Kanban: Tickets parsed:', tickets);
+      
+      return tickets;
     },
-    staleTime: 30 * 1000,
+  });
+
+  const { data: trelloLists = [] } = useQuery({
+    queryKey: ['trello-lists'],
+    queryFn: async () => {
+      try {
+        const res = await apiClient.get('/service-management/integrations/trello/lists');
+        return res.data;
+      } catch {
+        return [];
+      }
+    },
+    staleTime: 10 * 60 * 1000,
   });
 
   const moveMutation = useMutation({
@@ -66,7 +87,8 @@ export default function TicketKanbanTab() {
   });
 
   const pushTrelloMutation = useMutation({
-    mutationFn: (id: string) => apiClient.post(`/service-management/tickets/${id}/push-trello`),
+    mutationFn: ({ ticketId, listId }: { ticketId: string; listId: string }) => 
+      apiClient.post(`/service-management/tickets/${ticketId}/push-trello`, { listId }),
     onSuccess: (res) => {
       if (res.data?.url) {
         message.success('Pushed to Trello');
@@ -197,8 +219,10 @@ export default function TicketKanbanTab() {
                             <Button
                               type="text" size="small" icon={<LinkOutlined />}
                               style={{ color: 'var(--app-text-muted)', padding: '0 4px', height: 20 }}
-                              onClick={() => pushTrelloMutation.mutate(ticket.id)}
-                              loading={pushTrelloMutation.isPending}
+                              onClick={() => {
+                                setSelectedTicketId(ticket.id);
+                                setListSelectorOpen(true);
+                              }}
                             />
                           </Tooltip>
                         )}
@@ -262,6 +286,41 @@ export default function TicketKanbanTab() {
             ]} />
           </Form.Item>
         </Form>
+      </Modal>
+      
+      {/* Trello List Selector Modal */}
+      <Modal
+        title="Select Trello List"
+        open={listSelectorOpen}
+        onCancel={() => {
+          setListSelectorOpen(false);
+          setSelectedTicketId(null);
+          setSelectedListId('');
+        }}
+        onOk={() => {
+          if (selectedTicketId && selectedListId) {
+            pushTrelloMutation.mutate({ ticketId: selectedTicketId, listId: selectedListId });
+            setListSelectorOpen(false);
+            setSelectedTicketId(null);
+            setSelectedListId('');
+          }
+        }}
+        okText="Push to Trello"
+        cancelText="Cancel"
+      >
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <div>Select which Trello list to push this ticket to:</div>
+          <Select
+            placeholder="Choose a list"
+            style={{ width: '100%' }}
+            value={selectedListId}
+            onChange={setSelectedListId}
+            options={trelloLists.map((list: any) => ({
+              label: list.name,
+              value: list.id,
+            }))}
+          />
+        </Space>
       </Modal>
     </div>
   );
