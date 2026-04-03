@@ -12,6 +12,9 @@ import { FieldServiceOrderEntity } from './entities/field-service-order.entity';
 import { ServiceContractEntity } from './entities/service-contract.entity';
 import { KnowledgeBaseArticleEntity } from './entities/knowledge-base-article.entity';
 import { TicketIntegrationEntity } from './entities/ticket-integration.entity';
+import { RoadmapCategoryEntity } from './entities/roadmap-category.entity';
+import { RoadmapItemEntity } from './entities/roadmap-item.entity';
+import { IntegrationRequestEntity } from './entities/integration-request.entity';
 
 @Module({
   imports: [
@@ -24,6 +27,9 @@ import { TicketIntegrationEntity } from './entities/ticket-integration.entity';
       ServiceContractEntity,
       KnowledgeBaseArticleEntity,
       TicketIntegrationEntity,
+      RoadmapCategoryEntity,
+      RoadmapItemEntity,
+      IntegrationRequestEntity,
     ]),
     SubscriptionsModule,
   ],

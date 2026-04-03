@@ -94,6 +94,9 @@ export class TaskEntity {
   actual_hours: number;
 
   @Column({ type: 'int', default: 0 })
+  score_points: number;
+
+  @Column({ type: 'int', default: 0 })
   progress_percentage: number;
 
   @Column({ type: 'jsonb', nullable: true })

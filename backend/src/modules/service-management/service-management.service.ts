@@ -9,6 +9,8 @@ import { FieldServiceOrderEntity, ServiceOrderStatus } from './entities/field-se
 import { ServiceContractEntity } from './entities/service-contract.entity';
 import { KnowledgeBaseArticleEntity } from './entities/knowledge-base-article.entity';
 import { TicketIntegrationEntity } from './entities/ticket-integration.entity';
+import { RoadmapCategoryEntity } from './entities/roadmap-category.entity';
+import { RoadmapItemEntity } from './entities/roadmap-item.entity';
 import type { CreateTicketDto, UpdateTicketDto, RateTicketDto } from './dto/create-ticket.dto';
 import type { CreateFieldServiceOrderDto, UpdateFieldServiceOrderDto } from './dto/create-field-service-order.dto';
 
@@ -33,6 +35,10 @@ export class ServiceManagementService {
     private knowledgeBaseRepository: Repository<KnowledgeBaseArticleEntity>,
     @InjectRepository(TicketIntegrationEntity)
     private integrationRepository: Repository<TicketIntegrationEntity>,
+    @InjectRepository(RoadmapCategoryEntity)
+    private roadmapCategoryRepository: Repository<RoadmapCategoryEntity>,
+    @InjectRepository(RoadmapItemEntity)
+    private roadmapItemRepository: Repository<RoadmapItemEntity>,
   ) {}
 
   async getIntegrationConfig(tenantId: string | null): Promise<TicketIntegrationEntity | null> {
@@ -78,20 +84,34 @@ export class ServiceManagementService {
 
   async createTicket(data: CreateTicketDto, tenantId: string | null): Promise<ServiceTicketEntity> {
     console.log('🔍 Backend: Creating ticket with tenantId:', tenantId);
-    const count = await this.ticketRepository.count(
+    let count = await this.ticketRepository.count(
       tenantId ? { where: { tenant_id: tenantId } } : undefined,
     );
-    const ticketNumber = `TK-${String(count + 1).padStart(5, '0')}`;
-    console.log('🔍 Backend: Generated ticket number:', ticketNumber);
-
-    const ticket = this.ticketRepository.create({
-      ...data,
-      ticket_number: ticketNumber,
-      tenant_id: tenantId,
-      status: TicketStatus.NEW,
-    });
-    console.log('🔍 Backend: Created ticket with tenant_id:', ticket.tenant_id);
-    return await this.ticketRepository.save(ticket);
+    
+    // Auto-retry to handle duplicate ticket_number constraints under concurrent creations
+    for (let attempts = 0; attempts < 10; attempts++) {
+      const ticketNumber = `TK-${String(count + 1 + attempts).padStart(5, '0')}`;
+      try {
+        const ticket = this.ticketRepository.create({
+          ...data,
+          ticket_number: ticketNumber,
+          tenant_id: tenantId,
+          status: TicketStatus.NEW,
+        });
+        const saved = await this.ticketRepository.save(ticket);
+        console.log('🔍 Backend: Created ticket with number:', ticketNumber);
+        return saved;
+      } catch (e: any) {
+        // 23505 is PostgreSQL unique violation constraint error
+        if (e.code === '23505') {
+          console.warn(`🔍 Backend: Ticket number ${ticketNumber} taken (or another unique conflict), retrying...`);
+          continue;
+        }
+        throw e;
+      }
+    }
+    
+    throw new Error('Failed to generate a unique ticket number after multiple attempts.');
   }
 
   async updateTicket(id: string, data: UpdateTicketDto, tenantId: string | null): Promise<ServiceTicketEntity> {
@@ -103,6 +123,10 @@ export class ServiceManagementService {
 
   async deleteTicket(id: string, tenantId: string): Promise<void> {
     const ticket = await this.findOneTicket(id, tenantId);
+    
+    // Unlink any roadmap items tracking this ticket
+    await this.roadmapItemRepository.update({ ticket_id: id }, { ticket_id: null });
+    
     await this.ticketRepository.remove(ticket);
   }
 
@@ -345,5 +369,59 @@ export class ServiceManagementService {
       })
       .orderBy('article.view_count', 'DESC')
       .getMany();
+  }
+
+  // Roadmap Management
+  async getRoadmap(tenantId: string | null): Promise<RoadmapCategoryEntity[]> {
+    const where: any = {};
+    if (tenantId) where.tenant_id = tenantId;
+    else where.tenant_id = IsNull();
+
+    return this.roadmapCategoryRepository.find({
+      where,
+      relations: ['items'],
+      order: {
+        sort_order: 'ASC',
+        created_at: 'ASC',
+      },
+    });
+  }
+
+  async createRoadmapCategory(data: any, tenantId: string | null): Promise<RoadmapCategoryEntity> {
+    const category = this.roadmapCategoryRepository.create({
+      ...data,
+      tenant_id: tenantId,
+    });
+    return this.roadmapCategoryRepository.save(category as any);
+  }
+
+  async createRoadmapItem(data: any, tenantId: string | null): Promise<RoadmapItemEntity> {
+    const item = this.roadmapItemRepository.create({
+      ...data,
+      tenant_id: tenantId,
+    });
+    return this.roadmapItemRepository.save(item as any);
+  }
+
+  async updateRoadmapItemTicketLink(id: string, ticketId: string, tenantId: string | null): Promise<void> {
+    const item = await this.roadmapItemRepository.findOne({ where: { id, tenant_id: tenantId ? tenantId : IsNull() } });
+    if (item) {
+      item.ticket_id = ticketId;
+      await this.roadmapItemRepository.save(item);
+    }
+  }
+
+  async deleteRoadmapCategory(id: string, tenantId: string | null): Promise<void> {
+    const category = await this.roadmapCategoryRepository.findOne({ where: { id, tenant_id: tenantId ? tenantId : IsNull() } });
+    if (category) {
+      await this.roadmapCategoryRepository.remove(category);
+    }
+  }
+
+  async deleteRoadmapItem(id: string, tenantId: string | null): Promise<void> {
+    const item = await this.roadmapItemRepository.findOne({ where: { id, tenant_id: tenantId ? tenantId : IsNull() } });
+    if (item) {
+      await this.roadmapItemRepository.remove(item);
+    }
   }
 }

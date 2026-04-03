@@ -20,6 +20,7 @@ import { PlanLimitKey } from '../subscriptions/subscription.constants';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TicketIntegrationEntity } from './entities/ticket-integration.entity';
+import { IntegrationRequestEntity, IntegrationRequestStatus } from './entities/integration-request.entity';
 import {
   CreateTicketDto,
   UpdateTicketDto,
@@ -41,6 +42,8 @@ export class ServiceManagementController {
     private readonly subscriptionsService: SubscriptionsService,
     @InjectRepository(TicketIntegrationEntity)
     private readonly integrationRepo: Repository<TicketIntegrationEntity>,
+    @InjectRepository(IntegrationRequestEntity)
+    private readonly integrationRequestRepo: Repository<IntegrationRequestEntity>,
   ) {}
 
   // Tickets
@@ -71,6 +74,11 @@ export class ServiceManagementController {
     @CurrentTenant() tenantId: string,
   ) {
     const ticket = await this.serviceManagementService.createTicket(data, tenantId);
+
+    // If this ticket was spawned from a roadmap item, automatically link it.
+    if (data.roadmap_item_id) {
+      await this.serviceManagementService.updateRoadmapItemTicketLink(data.roadmap_item_id, ticket.id, tenantId);
+    }
 
     // Send Slack notification for created ticket
     const config = await this.integrationRepo.findOne({
@@ -430,12 +438,30 @@ export class ServiceManagementController {
     const addedCount = Math.max(0, newCount - currentCount);
 
     if (addedCount > 0 || isNew) {
-      await this.subscriptionsService.assertWithinLimit(
-        tenantId,
-        PlanLimitKey.INTEGRATIONS,
-        currentCount,
-        addedCount || 0,
-      );
+      // Check if they have bypassed via a request for the specific ones they are trying to activate
+      let bypassCount = 0;
+      
+      const approvedRequests = await this.integrationRequestRepo.find({
+        where: { tenant_id: tenantId, status: IntegrationRequestStatus.APPROVED }
+      });
+      
+      if (body.slack_webhook_url && !config.slack_webhook_url && approvedRequests.some(r => r.integration_name === 'slack')) {
+        bypassCount++;
+      }
+      if (body.trello_api_key && !config.trello_api_key && approvedRequests.some(r => r.integration_name === 'trello')) {
+        bypassCount++;
+      }
+
+      const effectiveAddedCount = Math.max(0, addedCount - bypassCount);
+
+      if (effectiveAddedCount > 0) {
+        await this.subscriptionsService.assertWithinLimit(
+          tenantId,
+          PlanLimitKey.INTEGRATIONS,
+          currentCount,
+          effectiveAddedCount,
+        );
+      }
     }
 
     // Update fields
@@ -466,6 +492,50 @@ export class ServiceManagementController {
     }
 
     return updatedConfig;
+  }
+
+  // ── Integration Requests ──────────────────────────────────────────────────────────
+
+  @Get('integrations/requests')
+  async getIntegrationRequests(@CurrentTenant() tenantId: string) {
+    // If system admin (null tenant), get all requests. Else limit to tenant
+    const where = tenantId ? { tenant_id: tenantId } : {};
+    return this.integrationRequestRepo.find({ where, order: { created_at: 'DESC' } });
+  }
+
+  @Post('integrations/requests')
+  async requestIntegrationUnlock(@Body() body: { integration_name: string }, @CurrentTenant() tenantId: string) {
+    if (!tenantId) throw new Error('System Admin does not need to request integrations');
+    
+    // Check if pending/approved already exists
+    const existing = await this.integrationRequestRepo.findOne({
+      where: { tenant_id: tenantId, integration_name: body.integration_name }
+    });
+    if (existing) {
+      if (existing.status === IntegrationRequestStatus.REJECTED) {
+         existing.status = IntegrationRequestStatus.PENDING;
+         return this.integrationRequestRepo.save(existing);
+      }
+      return existing; 
+    }
+
+    const request = this.integrationRequestRepo.create({
+      tenant_id: tenantId,
+      integration_name: body.integration_name,
+      status: IntegrationRequestStatus.PENDING,
+    });
+    return this.integrationRequestRepo.save(request);
+  }
+
+  @Patch('integrations/requests/:id')
+  async updateIntegrationRequest(
+    @Param('id') id: string,
+    @Body() body: { status: IntegrationRequestStatus }
+  ) {
+    const request = await this.integrationRequestRepo.findOne({ where: { id } });
+    if (!request) throw new Error('Request not found');
+    request.status = body.status;
+    return this.integrationRequestRepo.save(request);
   }
 
   /** Count distinct active integrations (one per provider) */
@@ -639,5 +709,46 @@ export class ServiceManagementController {
       );
     }
     return ticket;
+  }
+
+  // ── Roadmap ──────────────────────────────────────────────────────────
+
+  @Get('roadmap')
+  async getRoadmap(@CurrentTenant() tenantId: string) {
+    return this.serviceManagementService.getRoadmap(tenantId);
+  }
+
+  @Post('roadmap/categories')
+  async createRoadmapCategory(
+    @Body() data: any,
+    @CurrentTenant() tenantId: string,
+  ) {
+    return this.serviceManagementService.createRoadmapCategory(data, tenantId);
+  }
+
+  @Post('roadmap/items')
+  async createRoadmapItem(
+    @Body() data: any,
+    @CurrentTenant() tenantId: string,
+  ) {
+    return this.serviceManagementService.createRoadmapItem(data, tenantId);
+  }
+
+  @Delete('roadmap/categories/:id')
+  async deleteRoadmapCategory(
+    @Param('id') id: string,
+    @CurrentTenant() tenantId: string,
+  ) {
+    await this.serviceManagementService.deleteRoadmapCategory(id, tenantId);
+    return { success: true };
+  }
+
+  @Delete('roadmap/items/:id')
+  async deleteRoadmapItem(
+    @Param('id') id: string,
+    @CurrentTenant() tenantId: string,
+  ) {
+    await this.serviceManagementService.deleteRoadmapItem(id, tenantId);
+    return { success: true };
   }
 }

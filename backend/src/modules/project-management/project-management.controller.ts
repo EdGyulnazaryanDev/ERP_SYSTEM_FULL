@@ -54,6 +54,16 @@ export class ProjectManagementController {
     return { message: 'Project deleted successfully' };
   }
 
+  @Post('projects/:id/ai-generate')
+  @RequirePermission('project', 'update')
+  async aiGenerateProjectPlan(
+    @Param('id') id: string,
+    @Body() body: { prompt: string },
+    @CurrentTenant() tenantId: string
+  ) {
+    return this.projectManagementService.generateAIPlan(id, body.prompt, tenantId);
+  }
+
   @Get('projects/:projectId/gantt')
   @RequirePermission('project', 'read')
   getGanttChartData(@Param('projectId') projectId: string, @CurrentTenant() tenantId: string) {

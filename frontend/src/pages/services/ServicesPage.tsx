@@ -14,7 +14,7 @@ export default function ServicesPage() {
   const items = [
     { key: 'kanban',       label: <span><AppstoreOutlined /> Kanban Board</span>,     children: <TicketKanbanTab /> },
     { key: 'requests',     label: <span><UnorderedListOutlined /> All Tickets</span>,  children: <ServiceRequestsTab /> },
-    ...(isSystemAdmin ? [{ key: 'roadmap', label: <span><RocketOutlined /> Roadmap</span>, children: <RoadmapTab /> }] : []),
+    { key: 'roadmap', label: <span><RocketOutlined /> Roadmap</span>, children: <RoadmapTab /> },
     { key: 'contracts',    label: <span><FileTextOutlined /> Contracts</span>,         children: <ServiceContractsTab /> },
     { key: 'integrations', label: <span><ApiOutlined /> Integrations</span>,           children: <IntegrationsTab /> },
   ];

@@ -102,9 +102,7 @@ export default function ProjectsPage() {
   if (config?.trello_api_key || config?.trello_list_id) {
     items.push({ key: 'kanban', label: 'Kanban Board', children: <TicketKanbanTab /> });
     items.push({ key: 'all-tickets', label: 'All Tickets', children: <ServiceRequestsTab /> });
-    if (isSystemAdmin) {
-      items.push({ key: 'roadmap', label: 'Roadmap', children: <RoadmapTab /> });
-    }
+    items.push({ key: 'roadmap', label: 'Roadmap', children: <RoadmapTab /> });
   }
 
   return (

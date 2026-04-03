@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, Form, Input, Switch, Button, message, Tag, Space, Alert, Row, Col, Select, Tabs } from 'antd';
 import IntegrationsManagementTab from './IntegrationsManagementTab';
 import { useAccessControl } from '@/hooks/useAccessControl';
-// import { usePlanLimits } from '@/hooks/usePlanLimits';
+import { usePlanLimits } from '@/hooks/usePlanLimits';
 import { 
   SlackOutlined, 
   LinkOutlined, 
@@ -21,9 +21,9 @@ import apiClient from '@/api/client';
 export default function IntegrationsTab() {
   const queryClient = useQueryClient();
   const { canPerform, user } = useAccessControl();
-  // const { get: getLimit } = usePlanLimits();
+  const { get: getLimit } = usePlanLimits();
   const canManageIntegrations = canPerform('integrations', 'edit');
-  // const integrationsLimit = getLimit('integrations') || 5;
+  const integrationsLimit = getLimit('integrations') || 2; // Default to 2 if free plan
   const isSystemAdmin = user?.isSystemAdmin === true;
 
   const { data: config } = useQuery({
@@ -65,7 +65,23 @@ export default function IntegrationsTab() {
     staleTime: 10 * 60 * 1000,
   });
 
-  // const [trelloLists, setTrelloLists] = useState<Array<{id: string, name: string}>>(initialTrelloLists);
+  const { data: tenantRequests = [] } = useQuery({
+    queryKey: ['integration-requests'],
+    queryFn: async () => {
+      const res = await apiClient.get('/service-management/integrations/requests');
+      return Array.isArray(res.data) ? res.data : [];
+    },
+    enabled: !isSystemAdmin,
+  });
+
+  const requestUnlockMutation = useMutation({
+    mutationFn: (integrationName: string) => apiClient.post('/service-management/integrations/requests', { integration_name: integrationName }),
+    onSuccess: () => {
+      message.success('Request sent to System Admin!');
+      queryClient.invalidateQueries({ queryKey: ['integration-requests'] });
+    },
+    onError: () => message.error('Failed to send request'),
+  });
 
   const saveMutation = useMutation({
     mutationFn: (data: any) => {
@@ -240,6 +256,56 @@ export default function IntegrationsTab() {
     return false;
   });
 
+  const activeIntegrationCount = [
+    config?.slack_webhook_url,
+    config?.trello_list_id,
+    config?.jira_domain,
+    config?.github_repo,
+    config?.stripe_secret_key,
+    config?.google_workspace_service_account,
+    config?.quickbooks_client_id
+  ].filter(Boolean).length;
+
+  const renderLimitAction = (key: string, isConfigured: boolean) => {
+    // System admin skips limit gating
+    if (isSystemAdmin) return null;
+
+    if (isConfigured) return null; // already using it, ignore gate
+    
+    // Check if they exceed
+    if (activeIntegrationCount >= integrationsLimit) {
+      // Check if unlocked via a request
+      const req = tenantRequests.find((r: any) => r.integration_name === key);
+      
+      if (req?.status === 'approved') return null; // Unlocked!
+
+      if (req?.status === 'pending') {
+        return <Alert showIcon type="warning" message="Unlock Request Pending Review by SAP." style={{marginBottom: 16}} />;
+      }
+      if (req?.status === 'rejected') {
+        return <Alert showIcon type="error" message="Unlock Request Rejected by SAP." style={{marginBottom: 16}} />;
+      }
+
+      return (
+        <Alert
+          showIcon
+          type="error"
+          message={`Feature locked. Your subscription limits you to ${integrationsLimit} active integrations.`}
+          action={<Button type="primary" danger onClick={() => requestUnlockMutation.mutate(key)} loading={requestUnlockMutation.isPending}>Request SAP Unlock</Button>}
+          style={{ marginBottom: 16 }}
+        />
+      );
+    }
+    return null;
+  };
+
+  const isLocked = (key: string, isConfigured: boolean) => {
+    if (isSystemAdmin || isConfigured) return false;
+    if (activeIntegrationCount < integrationsLimit) return false;
+    const req = tenantRequests.find((r: any) => r.integration_name === key);
+    return req?.status !== 'approved';
+  };
+
   const tabsItems = [
     {
       key: 'integrations',
@@ -313,6 +379,7 @@ export default function IntegrationsTab() {
                 message="Create an Incoming Webhook in your Slack workspace and paste the URL below."
                 description={<a href="https://api.slack.com/messaging/webhooks" target="_blank" rel="noreferrer">How to create a Slack webhook →</a>}
               />
+              {renderLimitAction('slack', !!config?.slack_webhook_url)}
               <Form
                 layout="vertical"
                 initialValues={formDefaults}
@@ -343,8 +410,8 @@ export default function IntegrationsTab() {
                   </div>
                 </div>
                 <Space>
-                  <Button type="primary" htmlType="submit" loading={saveMutation.isPending}>Save</Button>
-                  <Button onClick={() => testSlackMutation.mutate()} loading={testSlackMutation.isPending}>
+                  <Button type="primary" htmlType="submit" loading={saveMutation.isPending} disabled={isLocked('slack', !!config?.slack_webhook_url)}>Save</Button>
+                  <Button onClick={() => testSlackMutation.mutate()} loading={testSlackMutation.isPending} disabled={!config?.slack_webhook_url}>
                     Send Test Message
                   </Button>
                 </Space>
@@ -373,6 +440,7 @@ export default function IntegrationsTab() {
                   </span>
                 }
               />
+              {renderLimitAction('trello', !!config?.trello_list_id)}
               <Form
                 layout="vertical"
                 initialValues={config}
@@ -412,8 +480,8 @@ export default function IntegrationsTab() {
                   <span style={{ color: 'var(--app-text-muted)', fontSize: 13 }}>Auto-push new tickets to Trello</span>
                 </div>
                 <Space>
-                  <Button type="primary" htmlType="submit" loading={saveMutation.isPending}>Save Trello Config</Button>
-                  <Button onClick={() => testTrelloMutation.mutate()} loading={testTrelloMutation.isPending}>
+                  <Button type="primary" htmlType="submit" loading={saveMutation.isPending} disabled={isLocked('trello', !!config?.trello_list_id)}>Save Trello Config</Button>
+                  <Button onClick={() => testTrelloMutation.mutate()} loading={testTrelloMutation.isPending} disabled={!config?.trello_list_id}>
                     Test Connection
                   </Button>
                   <Button 

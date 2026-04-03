@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Card, Switch, message, Space, Alert, Row, Col, Tag } from 'antd';
+import { Card, Switch, message, Space, Alert, Row, Col, Tag, Table, Button } from 'antd';
 import { 
   ApiOutlined,
   SlackOutlined,
@@ -42,6 +42,24 @@ export default function IntegrationsManagementTab() {
       queryClient.invalidateQueries({ queryKey: ['platform-integrations'] });
     },
     onError: () => message.error('Failed to update integration'),
+  });
+
+  const { data: requests = [] } = useQuery({
+    queryKey: ['integration-requests'],
+    queryFn: async () => {
+      const res = await apiClient.get('/service-management/integrations/requests');
+      return Array.isArray(res.data) ? res.data : [];
+    },
+  });
+
+  const updateRequestMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      apiClient.patch(`/service-management/integrations/requests/${id}`, { status }),
+    onSuccess: () => {
+      message.success('Request updated');
+      queryClient.invalidateQueries({ queryKey: ['integration-requests'] });
+    },
+    onError: () => message.error('Failed to update request'),
   });
 
   const availableIntegrations: IntegrationConfig[] = [
@@ -145,6 +163,34 @@ export default function IntegrationsManagementTab() {
         message="Platform Integrations Management"
         description="Enable or disable integrations available to tenants. Only enabled integrations will be visible in tenant dashboards."
       />
+
+      <Card title="Pending Tenant Requests" style={CARD} headStyle={{ borderBottom: '1px solid rgba(134,166,197,0.1)', background: 'transparent' }}>
+        <Table
+          dataSource={requests}
+          rowKey="id"
+          size="small"
+          pagination={false}
+          columns={[
+            { title: 'Tenant ID', dataIndex: 'tenant_id', key: 'tenant_id', render: (v: string) => <span style={{fontSize: 12, color:'var(--app-text-muted)'}}>{v?.slice(0, 8)}...</span> },
+            { title: 'Requested Integration', dataIndex: 'integration_name', key: 'integration_name', render: (v: string) => <span style={{fontWeight:600}}>{v}</span> },
+            { 
+              title: 'Status', dataIndex: 'status', key: 'status', 
+              render: (v: string) => {
+                const colors: Record<string, string> = { pending: 'orange', approved: 'green', rejected: 'red' };
+                return <Tag color={colors[v] || 'default'}>{v.toUpperCase()}</Tag>;
+              } 
+            },
+            {
+              title: 'Actions', key: 'actions', render: (_, record: any) => (
+                <Space>
+                  <Button size="small" type="primary" disabled={record.status === 'approved'} onClick={() => updateRequestMutation.mutate({ id: record.id, status: 'approved' })}>Approve</Button>
+                  <Button size="small" danger disabled={record.status === 'rejected'} onClick={() => updateRequestMutation.mutate({ id: record.id, status: 'rejected' })}>Reject</Button>
+                </Space>
+              )
+            }
+          ]}
+        />
+      </Card>
 
       {categories.map(category => (
         <Card

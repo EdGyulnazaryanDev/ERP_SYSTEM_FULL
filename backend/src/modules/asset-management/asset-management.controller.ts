@@ -110,8 +110,11 @@ export class AssetManagementController {
   }
 
   @Get('assets')
-  getAssets(@CurrentTenant() tenantId: string) {
-    return this.assetManagementService.getAssets(tenantId);
+  async getAssets(@CurrentTenant() tenantId: string) {
+    console.log('🔍 Backend: Fetching assets for tenant:', tenantId);
+    const assets = await this.assetManagementService.getAssets(tenantId);
+    console.log('🔍 Backend: Assets found:', assets?.length || 0);
+    return assets;
   }
 
   @Get('assets/:id')

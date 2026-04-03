@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '@/api/client';
 import dayjs from 'dayjs';
 import { useAccessControl } from '@/hooks/useAccessControl';
+import ProjectDetailDrawer from './ProjectDetailDrawer';
 
 const STATUS_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
   planning:    { color: '#8fa3b8', bg: 'rgba(255,255,255,0.04)', label: 'Planning' },
@@ -44,6 +45,7 @@ export default function ProjectsTab() {
   const [editingRecord, setEditingRecord] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const canCreateProjects = canPerform('projects', 'create');
   const canEditProjects = canPerform('projects', 'edit');
   const canDeleteProjects = canPerform('projects', 'delete');
@@ -148,11 +150,16 @@ export default function ProjectsTab() {
         size="small"
         pagination={{ pageSize: 10, showTotal: (t, r) => `${r[0]}-${r[1]} of ${t}` }}
         rowClassName={(record: any) => {
-          if (record.status === 'completed') return 'row-completed';
-          if (record.status === 'cancelled') return 'row-cancelled';
-          return '';
+          if (record.status === 'completed') return 'row-completed cursor-pointer';
+          if (record.status === 'cancelled') return 'row-cancelled cursor-pointer';
+          return 'cursor-pointer';
         }}
+        onRow={(record) => ({
+          onClick: () => setActiveProjectId(record.id),
+        })}
       />
+
+      <ProjectDetailDrawer projectId={activeProjectId} onClose={() => setActiveProjectId(null)} />
 
       {(canCreateProjects || canEditProjects) && (
         <Modal title={editingRecord ? 'Edit Project' : 'New Project'} open={isModalVisible}
@@ -195,6 +202,8 @@ export default function ProjectsTab() {
       <style>{`
         .row-completed td { background: rgba(82,196,26,0.10) !important; }
         .row-cancelled td { background: rgba(255,77,79,0.10) !important; opacity: 0.82; }
+        .cursor-pointer td { cursor: pointer; }
+        .cursor-pointer:hover td { background: rgba(22, 119, 255, 0.08) !important; }
       `}</style>
     </div>
   );
