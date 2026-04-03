@@ -49,6 +49,7 @@ const ALL_LIMITS: { key: string; label: string }[] = [
   { key: 'categories', label: 'Max Categories' },
   { key: 'transactions_per_month', label: 'Transactions / Month' },
   { key: 'storage_gb', label: 'Storage (GB)' },
+  { key: 'integrations', label: 'Max Integrations' },
 ];
 
 interface PlanFormValues {

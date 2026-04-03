@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Card, Form, Input, Switch, Button, message, Tag, Space, Alert, Row, Col, Select, Tabs } from 'antd';
+import { Card, Form, Input, Switch, Button, message, Tag, Space, Alert, Row, Col, Select, Tabs, Typography } from 'antd';
 import IntegrationsManagementTab from './IntegrationsManagementTab';
 import { useAccessControl } from '@/hooks/useAccessControl';
 import { usePlanLimits } from '@/hooks/usePlanLimits';
@@ -14,16 +14,19 @@ import {
   GoogleOutlined,
   WindowsOutlined,
   TeamOutlined,
-  CloudOutlined
+  CloudOutlined,
+  StopOutlined
 } from '@ant-design/icons';
 import apiClient from '@/api/client';
+
+const { Title, Text } = Typography;
 
 export default function IntegrationsTab() {
   const queryClient = useQueryClient();
   const { canPerform, user } = useAccessControl();
   const { get: getLimit } = usePlanLimits();
   const canManageIntegrations = canPerform('integrations', 'edit');
-  const integrationsLimit = getLimit('integrations') || 2; // Default to 2 if free plan
+  const integrationsLimit = getLimit('integrations') || 1000;
   const isSystemAdmin = user?.isSystemAdmin === true;
 
   const { data: config } = useQuery({
@@ -280,18 +283,19 @@ export default function IntegrationsTab() {
       if (req?.status === 'approved') return null; // Unlocked!
 
       if (req?.status === 'pending') {
-        return <Alert showIcon type="warning" message="Unlock Request Pending Review by SAP." style={{marginBottom: 16}} />;
+        return <Alert showIcon type="warning" message="Unlock Request Pending Review by System Admin." style={{marginBottom: 16}} />;
       }
       if (req?.status === 'rejected') {
-        return <Alert showIcon type="error" message="Unlock Request Rejected by SAP." style={{marginBottom: 16}} />;
+        return <Alert showIcon type="error" message="Unlock Request Rejected by System Admin." style={{marginBottom: 16}} />;
       }
 
       return (
         <Alert
           showIcon
           type="error"
-          message={`Feature locked. Your subscription limits you to ${integrationsLimit} active integrations.`}
-          action={<Button type="primary" danger onClick={() => requestUnlockMutation.mutate(key)} loading={requestUnlockMutation.isPending}>Request SAP Unlock</Button>}
+          message={`Integration Limit Reached`}
+          description={`Your current plan allows ${integrationsLimit} active integrations. You have ${activeIntegrationCount}/${integrationsLimit} configured. Upgrade your plan or request an exception to activate more integrations.`}
+          action={<Button type="primary" danger onClick={() => requestUnlockMutation.mutate(key)} loading={requestUnlockMutation.isPending}>Request Exception</Button>}
           style={{ marginBottom: 16 }}
         />
       );
@@ -321,18 +325,21 @@ export default function IntegrationsTab() {
                 headStyle={HEAD}
               >
                 <Space direction="vertical" style={{ width: '100%' }} size="small">
-                  {filteredIntegrations.map((integration) => (
+                  {filteredIntegrations.map((integration) => {
+                    const locked = isLocked(integration.key, integration.configured);
+                    return (
                 <div
                   key={integration.key}
                   style={{
                     padding: '12px',
-                    border: `1px solid ${integration.configured ? '#52c41a' : 'rgba(134,166,197,0.12)'}`,
+                    border: `1px solid ${integration.configured ? '#52c41a' : locked ? '#ff4d4f' : 'rgba(134,166,197,0.12)'}`,
                     borderRadius: '8px',
-                    cursor: 'pointer',
-                    background: integration.configured ? 'rgba(82, 196, 26, 0.05)' : 'transparent',
-                    transition: 'all 0.3s ease'
+                    cursor: locked ? 'not-allowed' : 'pointer',
+                    background: integration.configured ? 'rgba(82, 196, 26, 0.05)' : locked ? 'rgba(255, 77, 79, 0.05)' : 'transparent',
+                    transition: 'all 0.3s ease',
+                    opacity: locked ? 0.6 : 1
                   }}
-                  onClick={() => setSelectedIntegration(integration.key)}
+                  onClick={() => !locked && setSelectedIntegration(integration.key)}
                 >
                   <Space>
                     {integration.icon}
@@ -347,9 +354,13 @@ export default function IntegrationsTab() {
                     {integration.configured && (
                       <Tag color={integration.color} icon={<CheckCircleOutlined />}>Connected</Tag>
                     )}
+                    {locked && (
+                      <Tag color="red" icon={<StopOutlined />}>Locked</Tag>
+                    )}
                   </Space>
                 </div>
-              ))}
+              );
+              })}
             </Space>
           </Card>
         </Col>
@@ -360,6 +371,27 @@ export default function IntegrationsTab() {
             const activeIntegration = filteredIntegrations.some(i => i.key === selectedIntegration)
               ? selectedIntegration
               : filteredIntegrations[0]?.key;
+
+            const activeIntegrationConfig = filteredIntegrations.find(i => i.key === activeIntegration);
+            const isIntegrationLocked = activeIntegrationConfig ? isLocked(activeIntegration, activeIntegrationConfig.configured) : false;
+
+            if (isIntegrationLocked) {
+              return (
+                <Card style={{ ...CARD, textAlign: 'center', padding: '60px 20px' }}>
+                  <StopOutlined style={{ fontSize: 48, color: '#ff4d4f', marginBottom: 16 }} />
+                  <Title level={4} style={{ color: '#ff4d4f', margin: '16px 0 8px' }}>Integration Locked</Title>
+                  <Text type="secondary">
+                    This integration is locked because you've reached your plan limit of {integrationsLimit} active integrations.
+                    You currently have {activeIntegrationCount}/{integrationsLimit} configured.
+                  </Text>
+                  <div style={{ marginTop: 24 }}>
+                    <Button type="primary" danger onClick={() => requestUnlockMutation.mutate(activeIntegration)} loading={requestUnlockMutation.isPending}>
+                      Request Exception
+                    </Button>
+                  </div>
+                </Card>
+              );
+            }
 
             return (
               <>
@@ -683,9 +715,31 @@ export default function IntegrationsTab() {
   }
 
   return (
-    <Tabs
-      defaultActiveKey="integrations"
-      items={tabsItems}
-    />
+    <div>
+      {/* Plan Status Banner for Tenant Admins */}
+      {!isSystemAdmin && (
+        <Alert
+          showIcon
+          type={activeIntegrationCount >= integrationsLimit ? "warning" : "success"}
+          message={`Integration Plan Status`}
+          description={
+            <span>
+              You have <strong>{activeIntegrationCount}/{integrationsLimit}</strong> active integrations configured.
+              {activeIntegrationCount >= integrationsLimit && (
+                <span style={{ marginLeft: 8 }}>
+                  You've reached your plan limit. <strong>Upgrade your plan</strong> or <strong>request exceptions</strong> to activate more integrations.
+                </span>
+              )}
+            </span>
+          }
+          style={{ marginBottom: 24, borderRadius: 8 }}
+        />
+      )}
+
+      <Tabs
+        defaultActiveKey="integrations"
+        items={tabsItems}
+      />
+    </div>
   );
 }
