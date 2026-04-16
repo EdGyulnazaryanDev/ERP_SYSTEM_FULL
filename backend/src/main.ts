@@ -43,6 +43,13 @@ bootstrap()
     console.log(`Server running on http://localhost:${PORT}`);
   })
   .catch((error) => {
-    console.error('Failed to start server:', error);
+    if (error.code === 'EADDRINUSE') {
+      console.error(
+        `Port ${error.port} is already in use. ` +
+        `Set a different port via the PORT environment variable or stop the process using that port.`,
+      );
+    } else {
+      console.error('Failed to start server:', error);
+    }
     process.exit(1);
   });

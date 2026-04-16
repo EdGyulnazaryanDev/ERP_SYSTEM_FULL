@@ -28,6 +28,7 @@ import {
   AuditOutlined,
   CreditCardOutlined,
   BarChartOutlined,
+  FileTextOutlined,
   DownOutlined,
   CrownOutlined,
   StopOutlined,
@@ -266,6 +267,12 @@ export default function MainLayout() {
       pageKey: 'bi',
       icon: <BarChartOutlined />,
       label: 'BI & Reports',
+    },
+    {
+      key: '/documents',
+      pageKey: 'documents',
+      icon: <FileTextOutlined />,
+      label: 'Documents',
     },
     {
       key: '/users',

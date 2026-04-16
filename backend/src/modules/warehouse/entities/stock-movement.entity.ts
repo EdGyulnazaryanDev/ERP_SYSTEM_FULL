@@ -79,7 +79,7 @@ export class StockMovementEntity {
 
   /** Manager who approved or rejected */
   @Column({ type: 'uuid', nullable: true })
-  approved_by: string;
+  approved_by: string | null;
 
   @Column({ type: 'timestamp', nullable: true })
   approved_at: Date;

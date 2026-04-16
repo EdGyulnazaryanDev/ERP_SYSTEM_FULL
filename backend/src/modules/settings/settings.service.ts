@@ -32,6 +32,7 @@ export const DEFAULT_PAGES = [
   { key: 'communication', name: 'Communication', path: '/communication', category: 'Collaboration', requiredFeature: PlanFeature.COMMUNICATION },
   { key: 'compliance', name: 'Compliance', path: '/compliance', category: 'Governance', requiredFeature: PlanFeature.COMPLIANCE },
   { key: 'bi', name: 'BI & Reports', path: '/bi', category: 'Analytics', requiredFeature: PlanFeature.REPORTS },
+  { key: 'documents', name: 'Documents', path: '/documents', category: 'Operations', requiredFeature: PlanFeature.DOCUMENTS },
   { key: 'users', name: 'Users', path: '/users', category: 'Administration', requiredFeature: PlanFeature.USERS },
   { key: 'modules', name: 'Modules', path: '/modules', category: 'Administration' },
   { key: 'rbac', name: 'RBAC', path: '/rbac', category: 'Administration', requiredFeature: PlanFeature.RBAC },

@@ -317,7 +317,7 @@ export class WarehouseService {
    * 6. TRANSFER → creates Shipment (two-leg transit model)
    * 7. Compliance audit log
    */
-  async approveMovement(id: string, approvedBy: string, tenantId: string) {
+  async approveMovement(id: string, approvedBy: string | null, tenantId: string) {
     const movement = await this.findOneMovement(id, tenantId);
 
     if (movement.status !== MovementStatus.PENDING_APPROVAL) {
@@ -445,7 +445,7 @@ export class WarehouseService {
       `Movement ${movement.movement_number} (${movement.movement_type}, qty ${qty}) approved and executed by ${approvedBy}. ` +
       `JE created: ${movement.journal_entry_created}. ` +
       `AP: ${movement.payable_id || 'none'}. AR: ${movement.receivable_id || 'none'}.`,
-      approvedBy,
+      approvedBy ?? undefined,
       tenantId,
       AuditSeverity.MEDIUM,
     );
@@ -461,7 +461,7 @@ export class WarehouseService {
    */
   async rejectMovement(
     id: string,
-    rejectedBy: string,
+    rejectedBy: string | null,
     reason: string,
     tenantId: string,
   ) {
@@ -494,7 +494,7 @@ export class WarehouseService {
     }
 
     movement.status = MovementStatus.REJECTED;
-    movement.approved_by = rejectedBy;
+    movement.approved_by = (rejectedBy ?? null) as string;
     movement.approved_at = new Date();
     movement.rejection_reason = reason || 'No reason provided';
     const saved = await this.movementRepo.save(movement);
@@ -504,7 +504,7 @@ export class WarehouseService {
       'stock_movement',
       saved.id,
       `Movement ${movement.movement_number} rejected by ${rejectedBy}. Reason: ${movement.rejection_reason}`,
-      rejectedBy,
+      rejectedBy ?? undefined,
       tenantId,
       AuditSeverity.MEDIUM,
     );
