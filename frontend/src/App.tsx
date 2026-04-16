@@ -56,6 +56,7 @@ const SubscriptionPage = lazy(() => import('@/pages/settings/SubscriptionPage'))
 const ProfilePage = lazy(() => import('@/pages/profile/ProfilePage'));
 const MyProfilePage = lazy(() => import('@/pages/profile/MyProfilePage'));
 const AdminServicesPage = lazy(() => import('@/pages/services/ServicesPage'));
+const DocumentsPage = lazy(() => import('@/pages/documents/DocumentsPage'));
 
 const PageLoader = () => (
   <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
@@ -157,6 +158,7 @@ function App() {
           <Route path="communication" element={guarded('communication', <CommunicationPage />)} />
           <Route path="compliance" element={guarded('compliance', <CompliancePage />)} />
           <Route path="bi" element={guarded('bi', <BiReportingPage />)} />
+          <Route path="documents" element={guarded('documents', <DocumentsPage />)} />
           <Route element={<TenantAdminRoute />}>
             <Route path="settings/subscription" element={<SubscriptionPage />} />
           </Route>

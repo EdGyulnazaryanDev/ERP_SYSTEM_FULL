@@ -153,7 +153,7 @@ export class WarehouseController {
     @CurrentTenant() tenantId: string,
     @CurrentUser() user: { id: string },
   ) {
-    return this.warehouseService.approveMovement(id, user?.id || 'system', tenantId);
+    return this.warehouseService.approveMovement(id, user?.id ?? null, tenantId);
   }
 
   /**
@@ -168,7 +168,7 @@ export class WarehouseController {
   ) {
     return this.warehouseService.rejectMovement(
       id,
-      user?.id || 'system',
+      user?.id ?? null,
       body?.reason || 'No reason provided',
       tenantId,
     );

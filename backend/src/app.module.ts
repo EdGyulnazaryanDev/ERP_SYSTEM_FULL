@@ -44,6 +44,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { TenantInterceptor } from './common/interceptors/tenant.interceptor';
+import { BrainsModule } from './brains/brains.module';
+import { DocumentsModule } from './modules/documents/documents.module';
 
 @Module({
   imports: [
@@ -106,6 +108,8 @@ import { TenantInterceptor } from './common/interceptors/tenant.interceptor';
     RedisModule,
     KafkaModule,
     MinioModule,
+    BrainsModule,
+    DocumentsModule,
   ],
   controllers: [AppController],
   providers: [

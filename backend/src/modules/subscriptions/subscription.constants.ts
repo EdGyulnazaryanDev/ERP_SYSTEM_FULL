@@ -45,6 +45,7 @@ export enum PlanFeature {
   COMPLIANCE = 'compliance',
   REPORTS = 'reports',
   SUPPLIERS = 'suppliers',
+  DOCUMENTS = 'documents',
 }
 
 export enum PlanLimitKey {
@@ -155,6 +156,7 @@ export const DEFAULT_PLAN_DEFINITIONS: DefaultPlanDefinition[] = [
       PlanFeature.REPORTS,
       PlanFeature.HR,
       PlanFeature.TRANSPORTATION,
+      PlanFeature.DOCUMENTS,
     ],
     limits: [
       { key: PlanLimitKey.USERS, value: 50 },
@@ -195,6 +197,7 @@ export const DEFAULT_PLAN_DEFINITIONS: DefaultPlanDefinition[] = [
       PlanFeature.COMPLIANCE,
       PlanFeature.REPORTS,
       PlanFeature.SUPPLIERS,
+      PlanFeature.DOCUMENTS,
     ],
     limits: [
       { key: PlanLimitKey.USERS, value: null },
