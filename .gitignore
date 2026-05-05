@@ -10,3 +10,5 @@
 .dev.vars*
 !.dev.vars.example
 odoo*
+node_modules
+docs
