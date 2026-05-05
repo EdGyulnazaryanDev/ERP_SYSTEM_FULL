@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(chmod +x *)",
+      "Bash(curl -s -X POST \"http://localhost:3100/api/auth/login\" -H \"Content-Type: application/json\" -d '{\"email\":\"admin@gmail.com\",\"password\":\"password\",\"actorType\":\"staff\"}')"
+    ]
+  }
+}

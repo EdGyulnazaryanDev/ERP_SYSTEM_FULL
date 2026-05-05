@@ -125,6 +125,17 @@ services:
       kafka:
         condition: service_healthy
 
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: erp_nginx_dev
+    restart: unless-stopped
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "${PORT_NGINX:-80}:80"
+    depends_on:
+      - backend
+
   frontend:
     build:
       context: ./frontend
@@ -132,14 +143,14 @@ services:
     container_name: erp_frontend_dev
     restart: unless-stopped
     environment:
-      VITE_API_URL: http://localhost:${PORT_BACKEND:-3100}/api
+      VITE_API_URL: http://localhost:${PORT_NGINX:-80}/api
       VITE_API_TARGET: http://backend:3000
     volumes:
       - ./frontend/src:/app/src
     ports:
       - "${PORT_FRONTEND_DEV:-5173}:5173"
     depends_on:
-      - backend
+      - nginx
 
 volumes:
   postgres_data:

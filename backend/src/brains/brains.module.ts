@@ -10,6 +10,9 @@ import { GlobalGoal } from './entities/global-goal.entity';
 import { SimulationRun } from './entities/simulation-run.entity';
 import { MacroSignal } from './entities/macro-signal.entity';
 import { CarbonLedger } from './entities/carbon-ledger.entity';
+import { BrainPlayExecution } from './entities/brain-play-execution.entity';
+import { BrainPlayStep } from './entities/brain-play-step.entity';
+import { BrainTriggerRule } from './entities/brain-trigger-rule.entity';
 
 @Module({
   imports: [
@@ -18,6 +21,9 @@ import { CarbonLedger } from './entities/carbon-ledger.entity';
       SimulationRun,
       MacroSignal,
       CarbonLedger,
+      BrainPlayExecution,
+      BrainPlayStep,
+      BrainTriggerRule,
     ]),
   ],
   providers: [
@@ -25,14 +31,14 @@ import { CarbonLedger } from './entities/carbon-ledger.entity';
     ForecasterService,
     OperatorService,
     SustainabilityService,
-    ControllerService
+    ControllerService,
   ],
   exports: [
     OrchestratorService,
     ForecasterService,
     OperatorService,
     SustainabilityService,
-    ControllerService
-  ]
+    ControllerService,
+  ],
 })
 export class BrainsModule {}
