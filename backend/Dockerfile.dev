@@ -1,13 +1,17 @@
 FROM node:24-alpine
 
-WORKDIR /app
+WORKDIR /workspace
 
-COPY package*.json ./
-RUN npm ci
+COPY package.json package-lock.json ./
+COPY packages/shared/ ./packages/shared/
+COPY backend/package.json ./backend/
 
-COPY . .
+RUN npm ci --workspace=backend
 
-# Copy bundled fonts into dist so they're available when nest compiles on start
+COPY backend/ ./backend/
+
+WORKDIR /workspace/backend
+
 RUN mkdir -p dist/assets/fonts && cp src/assets/fonts/*.ttf dist/assets/fonts/
 
 EXPOSE 3000
