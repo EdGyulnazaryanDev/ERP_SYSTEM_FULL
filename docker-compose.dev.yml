@@ -91,8 +91,8 @@ services:
 
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile.dev
+      context: .
+      dockerfile: backend/Dockerfile.dev
     container_name: erp_backend_dev
     restart: unless-stopped
     env_file:
@@ -114,7 +114,7 @@ services:
       MINIO_USE_SSL: "false"
       KAFKA_BROKER: kafka:9092
     volumes:
-      - ./backend/src:/app/src
+      - ./backend/src:/workspace/backend/src
     ports:
       - "${PORT_BACKEND:-3100}:3000"
     depends_on:

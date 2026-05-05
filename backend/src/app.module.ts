@@ -42,13 +42,45 @@ import { KafkaModule } from './infrastructure/kafka/kafka.module';
 import { MinioModule } from './infrastructure/minio/minio.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_INTERCEPTOR, APP_GUARD } from '@nestjs/core';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { TenantInterceptor } from './common/interceptors/tenant.interceptor';
 import { BrainsModule } from './brains/brains.module';
 import { DocumentsModule } from './modules/documents/documents.module';
+import { LoggerModule } from 'nestjs-pino';
 
 @Module({
   imports: [
+    LoggerModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        pinoHttp: {
+          level: config.get('LOG_LEVEL') ?? 'info',
+          transport:
+            config.get('NODE_ENV') !== 'production'
+              ? { target: 'pino-pretty', options: { colorize: true } }
+              : undefined,
+          customProps: () => ({ context: 'HTTP' }),
+          serializers: {
+            req(req: any) {
+              return { method: req.method, url: req.url };
+            },
+          },
+        },
+      }),
+    }),
+    ThrottlerModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        throttlers: [
+          {
+            name: 'global',
+            ttl: 60000,
+            limit: Number(config.get('THROTTLE_LIMIT') ?? 300),
+          },
+        ],
+      }),
+    }),
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: ['.env.local', '.env'],
@@ -66,8 +98,15 @@ import { DocumentsModule } from './modules/documents/documents.module';
         password: config.get('DB_PASSWORD') ?? config.get('POSTGRES_PASSWORD'),
         database: config.get('DB_NAME') ?? config.get('POSTGRES_DB'),
         autoLoadEntities: true,
-        synchronize: true,
+        synchronize: false,
         ssl: config.get('DB_SSL') === 'true' ? { rejectUnauthorized: false } : false,
+        extra: {
+          max: 20,
+          min: 5,
+          idleTimeoutMillis: 30000,
+          statement_timeout: 10000,
+          connectionTimeoutMillis: 3000,
+        },
       }),
     }),
     CoreModule,
@@ -117,6 +156,10 @@ import { DocumentsModule } from './modules/documents/documents.module';
     {
       provide: APP_INTERCEPTOR,
       useClass: TenantInterceptor,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
     },
   ],
 })
