@@ -64,7 +64,10 @@ import { SystemAdmin } from '../system-admin/entities/system-admin.entity';
       },
     }),
   ],
-  controllers: [AuthController, TestAuthController],
+  controllers: [
+    AuthController,
+    ...(process.env.NODE_ENV !== 'production' ? [TestAuthController] : []),
+  ],
   providers: [AuthService, JwtStrategy],
 })
 export class AuthModule {}
