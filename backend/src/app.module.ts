@@ -42,7 +42,8 @@ import { KafkaModule } from './infrastructure/kafka/kafka.module';
 import { MinioModule } from './infrastructure/minio/minio.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_INTERCEPTOR, APP_GUARD } from '@nestjs/core';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { TenantInterceptor } from './common/interceptors/tenant.interceptor';
 import { BrainsModule } from './brains/brains.module';
 import { DocumentsModule } from './modules/documents/documents.module';
@@ -66,6 +67,18 @@ import { LoggerModule } from 'nestjs-pino';
             },
           },
         },
+      }),
+    }),
+    ThrottlerModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        throttlers: [
+          {
+            name: 'global',
+            ttl: 60000,
+            limit: Number(config.get('THROTTLE_LIMIT') ?? 300),
+          },
+        ],
       }),
     }),
     ConfigModule.forRoot({
@@ -143,6 +156,10 @@ import { LoggerModule } from 'nestjs-pino';
     {
       provide: APP_INTERCEPTOR,
       useClass: TenantInterceptor,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
     },
   ],
 })
