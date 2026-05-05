@@ -46,9 +46,28 @@ import { APP_INTERCEPTOR } from '@nestjs/core';
 import { TenantInterceptor } from './common/interceptors/tenant.interceptor';
 import { BrainsModule } from './brains/brains.module';
 import { DocumentsModule } from './modules/documents/documents.module';
+import { LoggerModule } from 'nestjs-pino';
 
 @Module({
   imports: [
+    LoggerModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        pinoHttp: {
+          level: config.get('LOG_LEVEL') ?? 'info',
+          transport:
+            config.get('NODE_ENV') !== 'production'
+              ? { target: 'pino-pretty', options: { colorize: true } }
+              : undefined,
+          customProps: () => ({ context: 'HTTP' }),
+          serializers: {
+            req(req: any) {
+              return { method: req.method, url: req.url };
+            },
+          },
+        },
+      }),
+    }),
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: ['.env.local', '.env'],
