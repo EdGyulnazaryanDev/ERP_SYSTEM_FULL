@@ -2,21 +2,35 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { GlobalExceptionFilter } from './core/filters/global-exception.filter';
+import { Logger } from 'nestjs-pino';
+import helmet from 'helmet';
+import * as compression from 'compression';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bufferLogs: true });
 
-  // Enable CORS - Allow all origins in development
+  app.useLogger(app.get(Logger));
+
+  app.use(helmet());
+  app.use(compression());
+  app.use(require('express').json({ limit: '1mb' }));
+
+  const allowedOrigins = (process.env.CORS_ORIGINS ?? 'http://localhost:5173')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+
   app.enableCors({
-    origin: true, // Allow all origins in development
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`CORS: origin ${origin} not allowed`));
+      }
+    },
     credentials: true,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
-    allowedHeaders: [
-      'Content-Type',
-      'Authorization',
-      'Accept',
-      'X-Requested-With',
-    ],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With'],
     exposedHeaders: ['Content-Range', 'X-Content-Range'],
   });
 
@@ -29,27 +43,18 @@ async function bootstrap() {
   );
 
   app.setGlobalPrefix('api');
-
   app.useGlobalFilters(new GlobalExceptionFilter());
+  app.enableShutdownHooks();
 
   const PORT = process.env.PORT || 3000;
-  app.enableShutdownHooks();
   await app.listen(PORT);
 }
 
-bootstrap()
-  .then(() => {
-    const PORT = process.env.PORT || 3000;
-    console.log(`Server running on http://localhost:${PORT}`);
-  })
-  .catch((error) => {
-    if (error.code === 'EADDRINUSE') {
-      console.error(
-        `Port ${error.port} is already in use. ` +
-        `Set a different port via the PORT environment variable or stop the process using that port.`,
-      );
-    } else {
-      console.error('Failed to start server:', error);
-    }
-    process.exit(1);
-  });
+bootstrap().catch((error) => {
+  if (error?.code === 'EADDRINUSE') {
+    console.error(`Port ${error.port} is already in use.`);
+  } else {
+    console.error('Failed to start server:', error);
+  }
+  process.exit(1);
+});
